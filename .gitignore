@@ -1,0 +1,86 @@
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Compiled extensions / wheels --------------------------------------
+*.so
+*.dylib
+*.dll
+*.pyd
+build/
+dist/
+wheels/
+*.whl
+
+# --- Rust ---------------------------------------------------------------
+target/
+# Cargo.lock IS committed for binary crates; we ship a cdylib so omit it
+# (regenerated deterministically per maturin build).
+Cargo.lock
+# Rust analyzer / IDE leftovers.
+**/*.rs.bk
+
+# --- DuckDB / SQLite (database artifacts) ------------------------------
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# --- Raw genomics inputs (large; never commit) -------------------------
+# Top-level / bench-level / data-level ignores. Test fixtures under
+# tests/data/ are explicitly RE-INCLUDED below so the suite keeps working.
+*.fa
+*.fasta
+*.fai
+*.fna
+*.bam
+*.bai
+*.cram
+*.crai
+*.vcf
+*.vcf.gz
+*.bcf
+*.bed.gz
+
+# Genomics annotations: ignore everywhere except the curated test corpus.
+*.gff
+*.gff3
+*.gtf
+*.gff.gz
+*.gff3.gz
+*.gtf.gz
+
+# Re-include the small curated test fixtures so they stay versioned.
+!tests/
+!tests/data/
+!tests/data/*.gff3
+!tests/data/*.gtf
+
+# --- Bench / scratch artifacts -----------------------------------------
+bench/data/
+bench/out/
+*.log
+
+# --- Editor / OS --------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

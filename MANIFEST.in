@@ -1,0 +1,33 @@
+include pyproject.toml
+include README.md
+include LICENSE
+include MANIFEST.in
+
+# Rust crate (required for sdist → wheel rebuild on user's machine)
+include rust/Cargo.toml
+include rust/Cargo.lock
+recursive-include rust/src *.rs
+
+# Python source tree (also covered by [tool.maturin] python-source).
+recursive-include python/gffbase *.py
+recursive-include python/gffbase *.pyi
+
+# Tests + fixtures bundled so `pytest` works against an installed sdist.
+recursive-include tests *.py
+recursive-include tests/data *.gff3 *.gtf
+
+# Developer documentation (Phase reports + summaries).
+include PHASE3_PARSER_SUMMARY.md
+include PHASE4_INGESTION_SUMMARY.md
+include PHASE5_API_SUMMARY.md
+include PHASE6_BENCHMARK_REPORT.md
+include PHASE7_REMEDIATION_REPORT.md
+include PHASE8_PACKAGING_SUMMARY.md
+
+# Excludes — we never want compiled extensions / caches in the sdist.
+prune target
+prune **/__pycache__
+prune **/.pytest_cache
+prune **/.mypy_cache
+prune **/.ruff_cache
+global-exclude *.pyc *.so *.dylib *.dll

@@ -1,0 +1,127 @@
+"""Public parser entry points. Dispatches to the Rust extension when available,
+falls back to the pure-Python implementation otherwise. The two implementations
+are required by tests to produce identical output.
+"""
+
+from __future__ import annotations
+
+from typing import Iterator, Optional
+
+from gffbase.feature import ParsedFeature
+from gffbase._pyfallback import parser as _pyparser
+
+try:  # pragma: no cover - import availability is env-dependent
+    from gffbase import _native as _rust  # type: ignore[attr-defined]
+
+    _NATIVE = True
+except ImportError:
+    _rust = None
+    _NATIVE = False
+
+
+def native_available() -> bool:
+    """True if the compiled extension is importable."""
+    return _NATIVE
+
+
+class _Iterator:
+    """Adapter: wraps either the Rust iterator (yielding 11-tuples) or the
+    pure-Python iterator (yielding ParsedFeature) and always yields
+    ParsedFeature."""
+
+    __slots__ = ("_inner", "_native")
+
+    def __init__(self, inner, native: bool):
+        self._inner = inner
+        self._native = native
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> ParsedFeature:
+        item = next(self._inner)
+        if self._native:
+            return ParsedFeature.from_tuple(item)
+        return item
+
+    def dialect(self) -> dict:
+        return self._inner.dialect()
+
+    def directives(self) -> list:
+        return list(self._inner.directives())
+
+
+def _resolve_engine(engine: Optional[str]) -> str:
+    if engine is None or engine == "auto":
+        return "rust" if _NATIVE else "python"
+    if engine == "rust" and not _NATIVE:
+        raise RuntimeError(
+            "Rust extension not built. Run `maturin develop --release` or pass engine='python'."
+        )
+    if engine not in {"rust", "python"}:
+        raise ValueError(f"unknown engine '{engine}'")
+    return engine
+
+
+def parse_gff(
+    path: str,
+    *,
+    checklines: int = 10,
+    force_dialect_check: bool = False,
+    force_gff: bool = False,
+    engine: Optional[str] = "auto",
+) -> _Iterator:
+    """Parse a GFF3/GTF file (plain text or `.gz`). Returns an iterator of
+    `ParsedFeature` plus `.dialect()` and `.directives()` accessors.
+    """
+    eng = _resolve_engine(engine)
+    if eng == "rust":
+        it = _rust.parse_file(  # type: ignore[union-attr]
+            path,
+            checklines=checklines,
+            force_dialect_check=force_dialect_check,
+            force_gff=force_gff,
+        )
+        return _Iterator(it, native=True)
+    it = _pyparser.parse_file(
+        path,
+        checklines=checklines,
+        force_dialect_check=force_dialect_check,
+        force_gff=force_gff,
+    )
+    return _Iterator(it, native=False)
+
+
+def parse_bytes(
+    data: bytes,
+    *,
+    checklines: int = 10,
+    force_dialect_check: bool = False,
+    force_gff: bool = False,
+    engine: Optional[str] = "auto",
+) -> _Iterator:
+    eng = _resolve_engine(engine)
+    if eng == "rust":
+        it = _rust.parse_bytes(  # type: ignore[union-attr]
+            data,
+            checklines=checklines,
+            force_dialect_check=force_dialect_check,
+            force_gff=force_gff,
+        )
+        return _Iterator(it, native=True)
+    it = _pyparser.parse_bytes(
+        data,
+        checklines=checklines,
+        force_dialect_check=force_dialect_check,
+        force_gff=force_gff,
+    )
+    return _Iterator(it, native=False)
+
+
+def detect_dialect(
+    path: str, *, checklines: int = 10, engine: Optional[str] = "auto"
+) -> dict:
+    eng = _resolve_engine(engine)
+    if eng == "rust":
+        return _rust.detect_dialect(path, checklines=checklines)  # type: ignore[union-attr]
+    return _pyparser.detect_dialect(path, checklines=checklines)

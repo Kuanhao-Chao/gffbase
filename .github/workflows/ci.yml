@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "release/*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancel superseded runs of the same branch / PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pretty Cargo + Rust output in the GitHub UI.
+  CARGO_TERM_COLOR: always
+  PYTHONUNBUFFERED: "1"
+  # Phase 8: env var honored library-wide by `_build_rtree`. The `btree`
+  # matrix cells set this to "1" so every test runs against the multi-column
+  # B-tree fallback path; the `rtree` cells leave it unset.
+  GFFBASE_TEST_DISABLE_RTREE: ""
+
+jobs:
+  # ------------------------------------------------------------------------
+  # Lint job — fast, single cell. Runs ruff against the Python sources.
+  # ------------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --upgrade pip ruff
+      - run: ruff check python/gffbase tests bench
+
+  # ------------------------------------------------------------------------
+  # Test matrix — exhaustive over the *routing* axis (rtree vs btree).
+  #   3 OS × 3 Python × 2 spatial paths = 18 cells.
+  #   Excludes trim Windows down to the 3.9 cells (Windows 3.11 / 3.13
+  #   provide no additional Rust- or DuckDB-specific signal beyond 3.9).
+  # ------------------------------------------------------------------------
+  test:
+    name: Test ${{ matrix.os }} • py${{ matrix.python-version }} • ${{ matrix.spatial }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.9", "3.11", "3.13"]
+        spatial: [rtree, btree]
+        exclude:
+          - os: windows-latest
+            python-version: "3.11"
+          - os: windows-latest
+            python-version: "3.13"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Cache Cargo registry & target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> rust/target
+          shared-key: ${{ matrix.os }}-cargo
+
+      - name: Install build deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install maturin
+
+      - name: Build extension (maturin develop --release)
+        shell: bash
+        run: maturin develop --release --manifest-path rust/Cargo.toml
+
+      - name: Install runtime + test deps
+        shell: bash
+        run: pip install -e .[test]
+
+      - name: Rust unit tests (cargo test --lib)
+        shell: bash
+        working-directory: rust
+        run: cargo test --lib --release
+
+      - name: Run pytest — R-tree path
+        if: matrix.spatial == 'rtree'
+        shell: bash
+        env:
+          GFFBASE_TEST_DISABLE_RTREE: ""
+        run: pytest -q
+
+      - name: Run pytest — B-tree fallback path
+        if: matrix.spatial == 'btree'
+        shell: bash
+        env:
+          GFFBASE_TEST_DISABLE_RTREE: "1"
+        run: pytest -q
+
+      - name: Smoke-test pip install . (PyPI build path)
+        # Only on the ubuntu-3.11-rtree cell — running this on every cell
+        # would triple CI wall time without adding signal.
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && matrix.spatial == 'rtree'
+        shell: bash
+        run: |
+          python -m venv /tmp/_install_smoke
+          source /tmp/_install_smoke/bin/activate
+          pip install --upgrade pip
+          pip install .
+          python -c "from gffbase import create_db, FeatureDB, Feature, GFFWriter, DataIterator; print('gffbase imported OK')"
+          deactivate
+
+  # ------------------------------------------------------------------------
+  # Sdist build smoke test — confirms `python -m build --sdist` produces a
+  # tarball that contains the Rust crate (so PyPI users can rebuild).
+  # ------------------------------------------------------------------------
+  sdist:
+    name: Sdist smoke
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install --upgrade pip build
+      - run: python -m build --sdist
+      - name: Verify sdist contains Rust + Python sources
+        run: |
+          tarball=$(ls dist/*.tar.gz | head -1)
+          echo "Inspecting $tarball"
+          tar -tzf "$tarball" | tee /tmp/sdist.list
+          for needle in rust/Cargo.toml rust/src/lib.rs python/gffbase/interface.py tests/data/simple.gff3; do
+            if ! grep -q "$needle" /tmp/sdist.list; then
+              echo "::error ::sdist missing $needle"
+              exit 1
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
