@@ -1,0 +1,96 @@
+# GENCODE / Ensembl GTF Cookbook
+
+GENCODE and Ensembl ship full mammalian annotations as gzipped GTF.
+Their hierarchy is gene → transcript → exon / CDS / UTR /
+start_codon / stop_codon — three levels deep, with several million
+features per annotation and ~100 features per gene on average.
+
+This cookbook covers the four most common tasks downstream pipelines
+need.
+
+## 1. Ingest
+
+```python
+from gffbase import create_db
+
+db = create_db(
+    "gencode.v45.basic.annotation.gtf.gz",
+    "gencode.duckdb",
+    force=True,
+)
+print(f"{db.count_features_of_type():,} features")    # ~2.18 M
+print(db.fmt)                                          # 'gtf'
+```
+
+GTF input is auto-detected; `disable_infer_genes` and
+`disable_infer_transcripts` default to `False` so missing parent rows
+are synthesized by a single set-based `GROUP BY` (Phase 4 § 3.2).
+
+## 2. Walk a single gene's hierarchy
+
+```python
+gene = db["ENSG00000139618"]                # BRCA2
+print(gene.featuretype, gene.start, gene.end)
+
+for tx in db.children(gene, level=1, featuretype="transcript"):
+    n_exons = sum(1 for _ in db.children(tx, level=1, featuretype="exon"))
+    print(f"  {tx.id}  {tx.start}-{tx.end}  ({n_exons} exons)")
+
+# All descendants (exons + CDSs + UTRs) in one shot
+for f in db.children(gene, level=None):
+    pass
+```
+
+`children(level=1)` is a closure-cache point lookup; `children(level=None)`
+returns the full descendant set. The dispatcher (Phase 7) auto-routes
+between the materialized closure and a recursive CTE.
+
+## 3. Filter by attribute (e.g. all protein-coding genes)
+
+GENCODE attributes are stored in a normalized long-form table indexed on
+`(key, value)`. Attribute filtering is therefore an indexed query, not a
+JSON scan:
+
+```python
+rows = db.execute("""
+    SELECT f.id, f.seqid, f.start, f."end"
+    FROM features f
+    JOIN attributes a ON a.feature_id = f.id
+    WHERE f.featuretype = 'gene'
+      AND a.key = 'gene_type'
+      AND a.value = 'protein_coding'
+""").fetchall()
+print(f"{len(rows):,} protein-coding genes")
+```
+
+## 4. BED12 export for genome-browser tracks
+
+```python
+with open("gencode.bed", "w") as fout:
+    for tx in db.features_of_type("transcript", limit="chr1"):
+        fout.write(db.bed12(tx, name_field="transcript_id") + "\n")
+```
+
+## 5. Bulk extraction into PyArrow (the ML path)
+
+For ML pipelines that need exons for many transcripts at once, prefer
+the vectorized API — see
+[`machine_learning_workflows.md`](machine_learning_workflows.md) for the
+full pattern:
+
+```python
+gene_ids = [r[0] for r in db.execute(
+    "SELECT id FROM features WHERE featuretype='gene' LIMIT 50000"
+).fetchall()]
+table = db.children_batched(gene_ids, featuretype="exon", format="arrow")
+print(table.num_rows, "exons,", len(table.column_names), "columns")
+```
+
+## Performance notes (real GENCODE v45 numbers)
+
+| Task | Wall | Source |
+|---|---|---|
+| Full ingest (2.0 M lines) | ~226 s | `PERFORMANCE_COMPARISON.md` §2 |
+| `children(g, level=1)` (single gene) | <1 ms | Phase 7 closure cache |
+| 50 000 × `children_batched()` | 1.16 s | `PERFORMANCE_COMPARISON.md` §4b |
+| Random `region(seqid:start-end)` | ~0.7 ms | R-tree path |
