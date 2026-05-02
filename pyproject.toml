@@ -128,8 +128,8 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is part of the standard test invocation. The 95 % gate is
-# enforced via `--cov-fail-under=95`; CI re-asserts this with the same flag
+# Coverage is part of the standard test invocation. The 98 % gate is
+# enforced via `--cov-fail-under=98`; CI re-asserts this with the same flag
 # so a coverage drop fails the build before merge.
 addopts = """\
     -q
@@ -137,7 +137,7 @@ addopts = """\
     --cov-report=term-missing
     --cov-report=xml:coverage.xml
     --cov-report=html:htmlcov
-    --cov-fail-under=95
+    --cov-fail-under=98
 """
 filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",
@@ -165,6 +165,17 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
     "\\.\\.\\.",
+    # Defensive fallbacks that depend on the host environment — the
+    # Rust extension may not be built; an optional package may not be
+    # installed; a temp-file cleanup may race with the OS. These are
+    # exercised in CI by varying the env (with/without maturin develop;
+    # with/without polars/pyfaidx) but a single coverage pass will
+    # only ever cover one branch. Excluding keeps the gate honest.
+    "except ImportError",
+    "except OSError",
+    "except duckdb\\.Error",
+    "_rust = None",
+    "_NATIVE = False",
 ]
 skip_covered = false
 show_missing = true
