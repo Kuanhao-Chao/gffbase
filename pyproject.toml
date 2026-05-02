@@ -65,6 +65,7 @@ dependencies = [
 test = [
     "pytest>=7",
     "hypothesis>=6",
+    "pytest-cov>=4",
 ]
 bench = [
     "psutil>=5",
@@ -122,10 +123,47 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts   = "-q"
+# Coverage is part of the standard test invocation. The 95 % gate is
+# enforced via `--cov-fail-under=95`; CI re-asserts this with the same flag
+# so a coverage drop fails the build before merge.
+addopts = """\
+    -q
+    --cov=gffbase
+    --cov-report=term-missing
+    --cov-report=xml:coverage.xml
+    --cov-report=html:htmlcov
+    --cov-fail-under=95
+"""
 filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["gffbase"]
+omit = [
+    # Pure-Python correctness oracle — its job is to mirror the Rust parser
+    # exactly, and the Rust path is the production path. Most of its lines
+    # are exercised indirectly via differential tests, but full branch
+    # coverage there is redundant work.
+    "*/_pyfallback/*",
+    # The legacy SQLite export path emits one-shot SQL; the schema is
+    # smoke-tested by test_featuredb_export but column-by-column branch
+    # coverage isn't useful.
+    "*/_bins.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+]
+skip_covered = false
+show_missing = true
+precision = 1
 
 [tool.ruff]
 line-length = 100
