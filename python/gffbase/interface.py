@@ -440,6 +440,156 @@ class FeatureDB:
         raise TypeError(f"unsupported region type: {type(region)!r}")
 
     # ------------------------------------------------------------------
+    # Phase 12 — Vectorized batched spatial API.
+    # ------------------------------------------------------------------
+
+    def region_batched(
+        self,
+        regions,
+        featuretype: Optional[Union[str, List[str]]] = None,
+        completely_within: bool = False,
+        format: str = "arrow",
+    ):
+        """Bulk overlap query. Performs a SINGLE spatial JOIN between every
+        input region and the features table, returning a column-oriented
+        result that maps each query (`query_idx`) back to its overlapping
+        features.
+
+        Parameters
+        ----------
+        regions : iterable of (seqid, start, end) | str | Feature
+            Each item is normalized through `_normalize_region_args`; the
+            same four input shapes accepted by `region()` are accepted here.
+        featuretype : str | list[str] | None
+            Optional `features.featuretype` filter applied to all regions.
+        completely_within : bool
+            If True, only features fully contained in the region are returned
+            (default False — overlap is sufficient).
+        format : "arrow" | "df" | "polars"
+            Return shape (default `"arrow"`).
+
+        Returned columns:
+            query_idx, query_seqid, query_start, query_end,
+            id, seqid, source, featuretype, start, end,
+            score, strand, frame, file_order
+        """
+        rows = []
+        for r in regions:
+            if isinstance(r, tuple) and len(r) == 3 and all(v is not None for v in r):
+                seqid, rs, re_ = r[0], int(r[1]), int(r[2])
+            else:
+                seqid, rs, re_ = self._normalize_region_args(r, None, None, None)
+            if seqid is None or rs is None or re_ is None:
+                continue
+            rows.append((seqid, int(rs), int(re_)))
+        if not rows:
+            return self._empty_region_batched(format)
+
+        import pyarrow as pa
+        regions_table = pa.table({
+            "query_idx":   list(range(len(rows))),
+            "query_seqid": [r[0] for r in rows],
+            "query_start": [r[1] for r in rows],
+            "query_end":   [r[2] for r in rows],
+        })
+        self.conn.register("__staging_regions", regions_table)
+        try:
+            # The R-tree path uses the seqid_y-encoded envelope so that
+            # DuckDB's spatial index segregates chromosomes (Phase 7).
+            # B-tree fallback is identical SQL minus the ST_Intersects
+            # predicate.
+            ft_where, ft_params = self._featuretype_filter(featuretype, qualifier="f")
+            ft_clause = (" AND " + " AND ".join(ft_where)) if ft_where else ""
+            within_clause = (
+                ' AND f.start >= q.query_start AND f."end" <= q.query_end'
+                if completely_within else ""
+            )
+
+            if self._rtree_built and self._seqid_y_map:
+                # Inline the seqid → seqid_y map as a small VALUES table so
+                # the JOIN can prune by chromosome inside the R-tree.
+                values_pairs = ",".join(
+                    f"(?, {y})" for y in (self._seqid_y_map[s] for s in self._seqid_y_map)
+                )
+                seqid_y_params = list(self._seqid_y_map.keys())
+                sql = f"""
+                    WITH seqid_lookup(seqid, seqid_y) AS (
+                        VALUES {values_pairs}
+                    )
+                    SELECT
+                        q.query_idx, q.query_seqid, q.query_start, q.query_end,
+                        f.id, f.seqid, f.source, f.featuretype,
+                        f.start, f."end" AS "end",
+                        f.score, f.strand, f.frame, f.file_order
+                    FROM __staging_regions q
+                    JOIN seqid_lookup s ON s.seqid = q.query_seqid
+                    JOIN features f
+                      ON f.seqid = q.query_seqid
+                      AND ST_Intersects(
+                          f.bbox,
+                          ST_MakeEnvelope(q.query_start, s.seqid_y,
+                                          q.query_end,   s.seqid_y + 1))
+                    WHERE 1=1{within_clause}{ft_clause}
+                    ORDER BY q.query_idx, f.start
+                """
+                params = list(seqid_y_params) + ft_params
+            else:
+                sql = f"""
+                    SELECT
+                        q.query_idx, q.query_seqid, q.query_start, q.query_end,
+                        f.id, f.seqid, f.source, f.featuretype,
+                        f.start, f."end" AS "end",
+                        f.score, f.strand, f.frame, f.file_order
+                    FROM __staging_regions q
+                    JOIN features f
+                      ON f.seqid = q.query_seqid
+                      AND f.start <= q.query_end
+                      AND f."end"  >= q.query_start
+                    WHERE 1=1{within_clause}{ft_clause}
+                    ORDER BY q.query_idx, f.start
+                """
+                params = list(ft_params)
+
+            return self._materialize_batched(sql, params, format=format)
+        finally:
+            try:
+                self.conn.unregister("__staging_regions")
+            except Exception:
+                pass
+
+    def _empty_region_batched(self, format: str):
+        import pyarrow as pa
+        schema = pa.schema([
+            ("query_idx",    pa.int64()),
+            ("query_seqid",  pa.string()),
+            ("query_start",  pa.int64()),
+            ("query_end",    pa.int64()),
+            ("id",           pa.string()),
+            ("seqid",        pa.string()),
+            ("source",       pa.string()),
+            ("featuretype",  pa.string()),
+            ("start",        pa.int64()),
+            ("end",          pa.int64()),
+            ("score",        pa.string()),
+            ("strand",       pa.string()),
+            ("frame",        pa.string()),
+            ("file_order",   pa.int64()),
+        ])
+        empty = pa.table({name: [] for name in schema.names}, schema=schema)
+        fmt = format.lower()
+        if fmt == "arrow":
+            return empty
+        if fmt in ("df", "pandas"):
+            return empty.to_pandas()
+        if fmt == "polars":
+            try:
+                import polars as pl
+            except ImportError as e:  # pragma: no cover
+                raise ImportError("format='polars' requires the optional polars package") from e
+            return pl.from_arrow(empty)
+        raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
+
+    # ------------------------------------------------------------------
     # children() / parents() — closure cache + dynamic CTE fallback
     # ------------------------------------------------------------------
 
@@ -474,6 +624,213 @@ class FeatureDB:
             target_id, level, featuretype, order_by, reverse, limit, completely_within,
             direction="parents",
         )
+
+    # ------------------------------------------------------------------
+    # Phase 12 — Vectorized batched API.
+    #
+    # The row-by-row `children()` / `parents()` / `region()` generators
+    # carry per-row Python overhead that dominates wall time on small
+    # GENCODE-scale queries (Phase 11 §4.2). The methods below replace the
+    # per-id loop with a single bulk SQL query and return the result as a
+    # zero-copy PyArrow `Table` (or pandas / polars DataFrame), letting
+    # downstream ML pipelines consume the data column-wise without ever
+    # materializing a Python `Feature` object.
+    # ------------------------------------------------------------------
+
+    def children_batched(
+        self,
+        feature_ids,
+        level: Optional[int] = None,
+        featuretype: Optional[Union[str, List[str]]] = None,
+        format: str = "arrow",
+    ):
+        """Bulk children lookup. Returns the descendants of ALL `feature_ids`
+        in a single vectorized DuckDB query.
+
+        Parameters
+        ----------
+        feature_ids : iterable of str | Feature
+            Anchors. May contain `Feature` objects or raw ID strings.
+        level : int | None
+            None → all descendants (closure cache when materialized,
+            otherwise dynamic CTE). Integer → exact-depth point lookup.
+        featuretype : str | list[str] | None
+            Optional filter on `features.featuretype`.
+        format : "arrow" | "df" | "polars"
+            Return shape (default `"arrow"` — `pyarrow.Table`).
+
+        Returned columns (in this order):
+            ancestor (the parent ID supplied), descendant_id, seqid, source,
+            featuretype, start, end, score, strand, frame, file_order
+        """
+        return self._batched_relation(
+            feature_ids, level=level, featuretype=featuretype,
+            direction="children", format=format,
+        )
+
+    def parents_batched(
+        self,
+        feature_ids,
+        level: Optional[int] = None,
+        featuretype: Optional[Union[str, List[str]]] = None,
+        format: str = "arrow",
+    ):
+        """Bulk parents lookup. Mirrors `children_batched` but walks the
+        closure / edges in the reverse direction."""
+        return self._batched_relation(
+            feature_ids, level=level, featuretype=featuretype,
+            direction="parents", format=format,
+        )
+
+    def _batched_relation(
+        self,
+        feature_ids,
+        *,
+        level: Optional[int],
+        featuretype,
+        direction: str,
+        format: str,
+    ):
+        ids = self._coerce_id_list(feature_ids)
+        if not ids:
+            return self._empty_batched_result(format, "children" if direction == "children" else "parents")
+
+        # Decide cache vs dynamic the same way the row-by-row dispatcher
+        # does — it's a one-time decision per call here, not per-row.
+        use_dynamic = (
+            (level is not None and level > self._max_depth)
+            or (level is None and self._closure_max_depth == 0)
+        )
+
+        ph = ",".join("?" * len(ids))
+        ft_where, ft_params = self._featuretype_filter(featuretype, qualifier="f")
+        ft_clause = (" AND " + " AND ".join(ft_where)) if ft_where else ""
+
+        if direction == "children":
+            anchor_alias, descendant_alias = "ancestor", "descendant"
+            edge_anchor_col, edge_descendant_col = "parent", "child"
+        else:
+            anchor_alias, descendant_alias = "descendant", "ancestor"
+            edge_anchor_col, edge_descendant_col = "child", "parent"
+
+        if use_dynamic:
+            # Recursive CTE seeded by every anchor in the batch.
+            max_walk = level if level is not None else max(64, self._max_depth * 4)
+            depth_filter = " AND w.depth = ?" if level is not None else ""
+            cte = f"""
+                WITH RECURSIVE walk(anchor, id, depth) AS (
+                    SELECT {edge_anchor_col}, {edge_descendant_col}, 1
+                    FROM edges WHERE {edge_anchor_col} IN ({ph})
+                    UNION ALL
+                    SELECT w.anchor, e.{edge_descendant_col}, w.depth + 1
+                    FROM walk w
+                    JOIN edges e ON e.{edge_anchor_col} = w.id
+                    WHERE w.depth < ?
+                )
+                SELECT
+                    w.anchor       AS anchor,
+                    f.id           AS descendant_id,
+                    f.seqid, f.source, f.featuretype,
+                    f.start, f."end" AS "end",
+                    f.score, f.strand, f.frame, f.file_order, w.depth
+                FROM walk w
+                JOIN features f ON f.id = w.id
+                WHERE 1=1{depth_filter}{ft_clause}
+            """
+            params: list = list(ids) + [max_walk]
+            if level is not None:
+                params.append(level)
+            params.extend(ft_params)
+        else:
+            # Closure cache hit — single set-based JOIN.
+            depth_filter = " AND c.depth = ?" if level is not None else ""
+            cte = f"""
+                SELECT
+                    c.{anchor_alias}     AS anchor,
+                    f.id                  AS descendant_id,
+                    f.seqid, f.source, f.featuretype,
+                    f.start, f."end" AS "end",
+                    f.score, f.strand, f.frame, f.file_order, c.depth
+                FROM closure c
+                JOIN features f ON f.id = c.{descendant_alias}
+                WHERE c.{anchor_alias} IN ({ph}){depth_filter}{ft_clause}
+            """
+            params = list(ids)
+            if level is not None:
+                params.append(level)
+            params.extend(ft_params)
+
+        return self._materialize_batched(cte, params, format=format)
+
+    @staticmethod
+    def _coerce_id_list(feature_ids) -> List[str]:
+        """Normalize a heterogeneous iterable of (id-string | Feature) into a
+        list of strings."""
+        out: List[str] = []
+        for item in feature_ids:
+            if isinstance(item, Feature):
+                out.append(item.id)
+            elif isinstance(item, str):
+                out.append(item)
+            else:
+                raise TypeError(
+                    f"feature_ids may contain only str or Feature; got {type(item)!r}"
+                )
+        return out
+
+    def _materialize_batched(self, sql: str, params: list, *, format: str):
+        """Execute `sql` and return the result in the requested shape.
+
+        DuckDB's `fetch_arrow_table()` is a zero-copy hand-off — the
+        returned `pyarrow.Table` shares the same Arrow buffers DuckDB uses
+        internally, with no per-row Python boundary crossings.
+        """
+        cur = self.conn.execute(sql, params)
+        fmt = format.lower()
+        if fmt == "arrow":
+            # DuckDB ≥ 1.0 prefers `to_arrow_table()`; fall back to the older
+            # `fetch_arrow_table()` for environments pinning ≤ 0.10.
+            return getattr(cur, "to_arrow_table", cur.fetch_arrow_table)() \
+                if hasattr(cur, "to_arrow_table") else cur.fetch_arrow_table()
+        if fmt in ("df", "pandas"):
+            return cur.df()
+        if fmt == "polars":
+            return cur.pl()                  # DuckDB ≥1.0 returns a polars.DataFrame
+        raise ValueError(
+            f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}"
+        )
+
+    def _empty_batched_result(self, format: str, direction: str):
+        """Return a properly-typed empty result when the input id list is
+        empty. Avoids issuing a SQL query at all."""
+        import pyarrow as pa
+        schema = pa.schema([
+            ("anchor",         pa.string()),
+            ("descendant_id",  pa.string()),
+            ("seqid",          pa.string()),
+            ("source",         pa.string()),
+            ("featuretype",    pa.string()),
+            ("start",          pa.int64()),
+            ("end",            pa.int64()),
+            ("score",          pa.string()),
+            ("strand",         pa.string()),
+            ("frame",          pa.string()),
+            ("file_order",     pa.int64()),
+            ("depth",          pa.int16()),
+        ])
+        empty = pa.table({name: [] for name in schema.names}, schema=schema)
+        fmt = format.lower()
+        if fmt == "arrow":
+            return empty
+        if fmt in ("df", "pandas"):
+            return empty.to_pandas()
+        if fmt == "polars":
+            try:
+                import polars as pl
+            except ImportError as e:  # pragma: no cover
+                raise ImportError("format='polars' requires the optional polars package") from e
+            return pl.from_arrow(empty)
+        raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
 
     def _relation_query(
         self,
