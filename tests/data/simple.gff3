@@ -1,0 +1,7 @@
+##gff-version 3
+##sequence-region chr1 1 2000
+chr1	source1	gene	100	500	.	+	.	ID=gene1;Name=alpha;Note=hello%20world
+chr1	source1	mRNA	100	500	.	+	.	ID=mrna1;Parent=gene1
+chr1	source1	exon	100	200	.	+	.	ID=exon1;Parent=mrna1
+chr1	source1	exon	300	500	.	+	.	ID=exon2;Parent=mrna1
+chr2	source1	gene	1000	1500	0.97	-	.	ID=gene2;Parent=ancestorA,ancestorB

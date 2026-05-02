@@ -1,0 +1,9 @@
+##gff-version 3
+chr1	src	gene	100	1000	.	+	.	ID=g1;Name=geneA
+chr1	src	mRNA	100	1000	.	+	.	ID=t1;Parent=g1
+chr1	src	exon	100	200	.	+	.	ID=e1;Parent=t1
+chr1	src	exon	500	600	.	+	.	ID=e2;Parent=t1
+chr1	src	CDS	120	200	.	+	0	ID=c1;Parent=t1
+chr1	src	CDS	500	580	.	+	2	ID=c2;Parent=t1
+chr1	src	mRNA	100	1000	.	+	.	ID=t2;Parent=g1
+chr1	src	exon	100	300	.	+	.	ID=e3;Parent=t2

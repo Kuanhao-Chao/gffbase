@@ -1,0 +1,136 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "gffbase"
+version = "0.1.0"
+description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "GFFBase contributors" },
+]
+# Bundle the license text in the wheel + sdist so PyPI displays it.
+license-files = ["LICENSE"]
+keywords = [
+    "gff",
+    "gff3",
+    "gtf",
+    "gencode",
+    "bioinformatics",
+    "genomics",
+    "annotation",
+    "duckdb",
+    "rust",
+    "pyo3",
+    "parser",
+    "feature-database",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+# Runtime dependencies. DuckDB and PyArrow are required: the storage engine
+# is DuckDB and the Rust→Python→DuckDB hand-off goes through PyArrow.
+dependencies = [
+    "duckdb>=1.0",
+    "pyarrow>=14",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "hypothesis>=6",
+]
+bench = [
+    "psutil>=5",
+    "gffutils>=0.13",        # legacy reference for differential correctness
+]
+dev = [
+    "pytest>=7",
+    "hypothesis>=6",
+    "psutil>=5",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "maturin>=1.5,<2.0",
+]
+docs = [
+    "sphinx>=7",
+    "myst-parser>=2",
+]
+
+[project.urls]
+Homepage      = "https://github.com/your-org/gffbase"
+Source        = "https://github.com/your-org/gffbase"
+Issues        = "https://github.com/your-org/gffbase/issues"
+Documentation = "https://github.com/your-org/gffbase#readme"
+Changelog     = "https://github.com/your-org/gffbase/releases"
+
+# ---------------------------------------------------------------------------
+# Build backend (maturin) — pip install . must Just Work end-to-end:
+# pip downloads maturin per the [build-system] table, maturin invokes cargo,
+# cargo builds gffbase._native via PyO3, the wheel is installed alongside
+# the python/gffbase/ source tree.
+# ---------------------------------------------------------------------------
+[tool.maturin]
+manifest-path  = "rust/Cargo.toml"
+module-name    = "gffbase._native"
+python-source  = "python"
+features       = ["pyo3/extension-module"]
+strip          = true
+# Build an abi3 wheel so a single artifact works for CPython 3.9–3.13.
+bindings       = "pyo3"
+# Maturin's sdist builder uses its own include rules (it does NOT honor
+# MANIFEST.in). Bundle the test fixtures + LICENSE so users can rebuild
+# from sdist and run the suite.
+include = [
+    { path = "LICENSE", format = "sdist" },
+    { path = "MANIFEST.in", format = "sdist" },
+    { path = "tests/**/*.py", format = "sdist" },
+    { path = "tests/data/*", format = "sdist" },
+    { path = "PHASE3_PARSER_SUMMARY.md", format = "sdist" },
+    { path = "PHASE4_INGESTION_SUMMARY.md", format = "sdist" },
+    { path = "PHASE5_API_SUMMARY.md", format = "sdist" },
+    { path = "PHASE6_BENCHMARK_REPORT.md", format = "sdist" },
+    { path = "PHASE7_REMEDIATION_REPORT.md", format = "sdist" },
+    { path = "PHASE8_PACKAGING_SUMMARY.md", format = "sdist" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning:duckdb.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]

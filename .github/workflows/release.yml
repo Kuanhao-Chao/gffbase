@@ -1,0 +1,144 @@
+name: Release wheels & PyPI publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+# Concurrency: never race two release tags against each other.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ------------------------------------------------------------------------
+  # Linux wheels — manylinux via maturin-action's Docker image.
+  # abi3-py39 means a single wheel per arch covers CPython 3.9-3.13.
+  # ------------------------------------------------------------------------
+  linux:
+    name: Linux ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist --manifest-path rust/Cargo.toml
+          rust-toolchain: stable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist/*.whl
+
+  # ------------------------------------------------------------------------
+  # macOS wheels — both Intel and Apple Silicon. macos-13 = x86_64 runner;
+  # macos-latest = aarch64 (M-series).
+  # ------------------------------------------------------------------------
+  macos:
+    name: macOS ${{ matrix.target }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-13
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --manifest-path rust/Cargo.toml
+          rust-toolchain: stable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist/*.whl
+
+  # ------------------------------------------------------------------------
+  # Windows wheel — single arch (x86_64) for now.
+  # ------------------------------------------------------------------------
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-pc-windows-msvc
+          args: --release --out dist --manifest-path rust/Cargo.toml
+          rust-toolchain: stable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows
+          path: dist/*.whl
+
+  # ------------------------------------------------------------------------
+  # Source distribution — a fallback for users on archs we don't ship a
+  # wheel for. They'll get a tarball that maturin can rebuild locally.
+  # ------------------------------------------------------------------------
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path rust/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # ------------------------------------------------------------------------
+  # Publish — gathers all artifacts and uploads to PyPI via OIDC.
+  #
+  # PyPI trusted-publisher setup (one-time, on PyPI's web UI):
+  #   Project → Publishing → Add a new publisher
+  #     Owner:        your-org
+  #     Repository:   gffbase
+  #     Workflow:     release.yml
+  #     Environment:  pypi
+  # No API token is stored in repo secrets.
+  # ------------------------------------------------------------------------
+  publish:
+    name: Publish to PyPI
+    needs: [linux, macos, windows, sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/gffbase
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -la dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          # If the env-pinned PyPI URL ever needs to be overridden (TestPyPI,
+          # mirror), uncomment and set repository-url: …
+          # repository-url: https://test.pypi.org/legacy/
