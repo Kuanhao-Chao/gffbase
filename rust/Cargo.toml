@@ -2,7 +2,10 @@
 name = "gffbase-core"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.71"
+# Minimum rustc — kept loose because our `Cargo.lock` pins compatible
+# transitive versions for older toolchains. PyO3 0.22.x recommends 1.71+
+# for unpinned deps, but we ship a working `Cargo.lock` for 1.69 too.
+rust-version = "1.69"
 description = "Rust core for GFFBase: high-performance GFF3/GTF parser exposed to Python via PyO3."
 readme = "../README.md"
 license = "MIT"

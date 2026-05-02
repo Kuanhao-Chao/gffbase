@@ -12,30 +12,59 @@
 //! is the raw col-9 bytes for byte-faithful round-trip.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyList, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 use pyo3::exceptions::{PyIOError, PyValueError};
+use pyo3::create_exception;
 
 mod dialect;
 mod attributes;
 mod escape;
 mod parser;
+mod validate;
 
 use parser::{ParseOptions, RecordIter, FileSource};
+use validate::GffError;
+
+// Phase 16: descriptive parser errors. Subclassing `PyValueError` keeps
+// legacy `pytest.raises(ValueError)` calls working while letting users
+// catch the more specific `GFFFormatError` for rich line-numbered context.
+create_exception!(_native, GFFFormatError, PyValueError);
+
+/// Convert a structured `GffError` into a Python `GFFFormatError` with
+/// `.line_no`, `.kind`, and `.message` attributes attached on the
+/// exception instance.
+fn gff_error_to_py(py: Python<'_>, e: GffError) -> PyErr {
+    let msg = format!("line {}: {}", e.line_no, e.message);
+    let err = GFFFormatError::new_err(msg);
+    // Attach structured fields onto the exception's `value` object.
+    if let Ok(value_obj) = err.value_bound(py).clone().into_any().getattr("__class__") {
+        // mypy / runtime path — set on the bound value, not the type.
+        let _ = value_obj;
+    }
+    if let Some(inst) = err.value_bound(py).extract::<Bound<'_, PyAny>>().ok() {
+        let _ = inst.setattr("line_no", e.line_no);
+        let _ = inst.setattr("kind", e.kind.as_str());
+        let _ = inst.setattr("message", e.message.clone());
+    }
+    err
+}
 
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false))]
+#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
 fn parse_file(
     py: Python<'_>,
     path: &str,
     checklines: usize,
     force_dialect_check: bool,
     force_gff: bool,
+    strict: bool,
 ) -> PyResult<PyObject> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
+        strict,
     };
     let source = FileSource::open(path)
         .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
@@ -47,18 +76,20 @@ fn parse_file(
 
 /// Parse an in-memory byte buffer. Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false))]
+#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
     checklines: usize,
     force_dialect_check: bool,
     force_gff: bool,
+    strict: bool,
 ) -> PyResult<PyObject> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
+        strict,
     };
     let source = FileSource::from_bytes(data.to_vec());
     let iter = RecordIter::new(source, opts)
@@ -78,6 +109,9 @@ fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<PyO
         checklines,
         force_dialect_check: false,
         force_gff: false,
+        // Dialect detection is non-strict by design: malformed lines in
+        // the first `checklines` get skipped without poisoning detection.
+        strict: false,
     };
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
@@ -102,11 +136,31 @@ impl PyRecordIterator {
         };
         match iter.next() {
             Some(Ok(rec)) => Ok(Some(record_to_pytuple(py, &rec)?)),
-            Some(Err(e)) => Err(PyValueError::new_err(format!("parser error: {}", e))),
+            // Structured GffError → Python GFFFormatError with .line_no /
+            // .kind / .message attributes.
+            Some(Err(e)) => Err(gff_error_to_py(py, e)),
             // Do NOT null out `inner` here: callers expect to be able to read
             // `.dialect()` and `.directives()` after the iterator is exhausted.
             None => Ok(None),
         }
+    }
+
+    /// List of `GffError`s collected during a non-strict run. Each item
+    /// is a dict with keys `line_no`, `kind`, and `message`. Empty when
+    /// the iterator was created with `strict=True` (the default), since
+    /// errors propagate via `__next__` instead in that mode.
+    fn warnings(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let list = PyList::empty_bound(py);
+        if let Some(it) = &self.inner {
+            for w in it.warnings() {
+                let d = PyDict::new_bound(py);
+                d.set_item("line_no", w.line_no)?;
+                d.set_item("kind", w.kind.as_str())?;
+                d.set_item("message", w.message.as_str())?;
+                list.append(d)?;
+            }
+        }
+        Ok(list.into_any().unbind())
     }
 
     /// Return the inferred dialect dict. Available after iteration begins or
@@ -188,10 +242,12 @@ fn dialect_to_pydict(py: Python<'_>, d: &dialect::Dialect) -> PyResult<PyObject>
 }
 
 #[pymodule]
-fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(detect_dialect, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    // Phase 16 — expose the descriptive Python exception type.
+    m.add("GFFFormatError", py.get_type_bound::<GFFFormatError>())?;
     Ok(())
 }

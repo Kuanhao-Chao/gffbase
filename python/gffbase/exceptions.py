@@ -7,6 +7,28 @@ Same names, same constructors, same attributes. Downstream code that catches
 from __future__ import annotations
 
 
+class GFFFormatError(ValueError):
+    """Raised when a GFF3 line violates the spec.
+
+    Inherits from ``ValueError`` so legacy code that catches
+    ``ValueError`` keeps working — but the dedicated subclass carries
+    structured fields ``line_no``, ``kind``, and ``message`` that point
+    callers straight to the offender in the input.
+
+    Phase 16: when the Rust extension is loaded, the canonical class is
+    ``gffbase._native.GFFFormatError`` (a PyO3 ``create_exception!``
+    type). At import time, ``gffbase.__init__`` rebinds the public name
+    to whichever class is actually live so ``isinstance`` and
+    ``except`` clauses keep working regardless of which path raised.
+    """
+
+    def __init__(self, message: str = "", *, line_no: int = 0, kind: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.line_no = line_no
+        self.kind = kind
+
+
 class FeatureNotFoundError(Exception):
     """Raised by ``FeatureDB.__getitem__`` when the requested ID is absent."""
 
