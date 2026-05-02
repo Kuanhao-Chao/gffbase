@@ -1,0 +1,110 @@
+site_name: GFFBase
+site_description: Rust + DuckDB GFF3/GTF engine — 15× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
+site_url: https://your-org.github.io/gffbase/
+repo_url: https://github.com/your-org/gffbase
+repo_name: your-org/gffbase
+edit_uri: edit/main/docs/
+
+# `docs/` is the Markdown source root. Files outside that tree (README,
+# PERFORMANCE_COMPARISON, MIGRATION) are pulled in via the
+# include-markdown plugin so they live in one place on disk.
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [python]
+          options:
+            # Plain markdown docstrings; suppress strict parameter-section
+            # parsing so prose docstrings render as written.
+            docstring_style: google
+            docstring_section_style: list
+            show_root_heading: true
+            show_source: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+            heading_level: 2
+            filters: ["!^_"]   # hide name-mangled internals from rendered docs
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/gffbase
+
+nav:
+  - Home: index.md
+  - Performance: performance.md
+  - Migration from gffutils: migration.md
+  - Cookbooks:
+      - cookbooks/index.md
+      - GENCODE / Ensembl: cookbooks/gencode_ensembl.md
+      - NCBI RefSeq: cookbooks/refseq.md
+      - MANE: cookbooks/mane.md
+      - Machine Learning Workflows: cookbooks/machine_learning_workflows.md
+  - API Reference:
+      - api/index.md
+      - FeatureDB: api/featuredb.md
+      - Feature: api/feature.md
+      - create_db: api/create_db.md
+      - DataIterator & GFFWriter: api/io.md
+      - merge_criteria: api/merge_criteria.md
+      - Exceptions: api/exceptions.md

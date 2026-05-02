@@ -1,84 +1,140 @@
 # GFFBase
 
-A modernized, high-performance successor to [`gffutils`](https://github.com/daler/gffutils). Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in Python API.
+**A Rust + DuckDB GFF3/GTF engine that's 15× faster to ingest GENCODE
+than legacy `gffutils` and 36× faster at bulk ML queries.**
 
-> Status: **Phase 7 — rebrand + routing remediation.** All 77 tests pass on the new namespace. See `PHASE7_REMEDIATION_REPORT.md` for performance changes.
+[![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
+[![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-317%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-95.4%25-brightgreen.svg)](#testing)
 
-## Highlights
+GFFBase is a drop-in successor to
+[`gffutils`](https://github.com/daler/gffutils): a Rust+PyO3 parser
+feeds a DuckDB columnar storage engine through a zero-copy PyArrow
+hand-off, with a smart query router that picks an R-tree / B-tree
+spatial index and a closure-cache / dynamic-CTE relational dispatcher
+based on the corpus's true hierarchy depth. The full legacy
+`FeatureDB` / `Feature` / `create_db` / `DataIterator` / `GFFWriter`
+API is preserved.
 
-- **Rust+PyO3 parser** with SIMD line/tab splitting, lazy URL-unescaping, and zero-copy hand-off to DuckDB via PyArrow.
-- **DuckDB columnar storage** with a 7-table schema, set-based GTF gene/transcript synthesis (one `GROUP BY` per pass), recursive-CTE transitive closure, and per-seqid-banded R-tree spatial index.
-- **Smart query routing**: `region()` picks R-tree vs. multi-column B-tree based on what's available; `children()` picks the materialized closure cache vs. a dynamic recursive CTE based on the corpus's true hierarchy depth.
-- **Drop-in legacy API**: `FeatureDB`, `Feature`, `create_db`, `DataIterator`, `GFFWriter`, the full `merge_criteria` + `interfeatures` + `bed12` toolchain, plus a SQLite-compat `execute()` escape hatch and a `export_sqlite()` writer.
-- **GENCODE-scale**: ingests the full human v45 basic GTF (~2.0 M lines) in 74 s in-memory / 227 s disk-backed, using ~1.1 GB peak RSS — **15.8× to 48× faster than legacy gffutils** (3582 s).
+---
 
-## Layout
+## ⚡ Killer features
 
-```
-gffbase/
-├── pyproject.toml                # maturin build config
-├── rust/                         # Rust extension (PyO3) — gffbase._native
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs                # PyO3 entrypoint
-│       ├── parser.rs             # streaming GFF3/GTF parser
-│       ├── attributes.rs         # column-9 state machine
-│       ├── dialect.rs            # dialect detection
-│       └── escape.rs             # GFF3 percent-encoding
-├── python/
-│   └── gffbase/
-│       ├── __init__.py           # public surface
-│       ├── feature.py            # Feature + ParsedFeature
-│       ├── interface.py          # FeatureDB
-│       ├── ingest.py             # Rust→Arrow→DuckDB pipeline
-│       ├── schema.py             # DDL + set-based SQL constants
-│       ├── parser.py             # native/python dispatcher
-│       ├── create_db.py          # legacy create_db() shim
-│       ├── iterators.py          # DataIterator
-│       ├── gffwriter.py          # GFFWriter
-│       ├── merge_criteria.py
-│       ├── helpers.py
-│       ├── sqlite_export.py      # legacy SQLite export
-│       ├── exceptions.py
-│       └── _pyfallback/          # pure-Python correctness oracle parser
-├── tests/                        # pytest suite (77 tests)
-├── bench/                        # GENCODE benchmark harness
-└── docs/
-```
+| Workload | gffbase | legacy gffutils | **Speedup** |
+|---|---|---|---|
+| GENCODE v45 full ingest (2.0 M lines) | **226 s** | 3 582 s (60 min) | **15.87×** |
+| Spatial overlap (5 000 random regions) | **852 qps** | 164 qps | **5.20×** |
+| Spatial query p50 latency | **0.72 ms** | 6.01 ms | **8.35×** lower |
+| **Bulk ML `children_batched` (50 000 transcripts)** | **1.16 s** | 42.55 s | **🚀 36.68×** |
+| 5 000-id batched lookup | 0.479 s | 5.81 s | 12.12× |
+| Differential correctness | ✅ identical | — | (50 k features) |
 
-## Building
+Numbers reproduced in [`PERFORMANCE_COMPARISON.md`](PERFORMANCE_COMPARISON.md).
+
+The 36.68× win at bulk ML scale is the core reason this library exists
+— see [Machine Learning Workflows
+Cookbook](docs/cookbooks/machine_learning_workflows.md).
+
+## 🚀 Quick start
 
 ```bash
-pip install maturin
-cd /path/to/gffbase
-maturin develop --release        # installs gffbase._native into the active venv
+pip install gffbase
 ```
-
-## Running tests
-
-```bash
-pip install -e .[test]
-pytest                           # 77 / 77
-```
-
-## Quick start
 
 ```python
 from gffbase import create_db
 
-db = create_db("annotations.gff3", ":memory:")
-for f in db.children("ENSG00000123456", level=None, featuretype="exon"):
+# 1. Ingest a GTF/GFF3 in seconds (auto-detects format).
+db = create_db("gencode.v45.basic.annotation.gtf.gz",
+               "gencode.duckdb", force=True)
+
+# 2. Walk a single gene's hierarchy.
+for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):
+    print(tx.id, tx.start, tx.end)
+
+# 3. Spatial overlap query — uses per-seqid R-tree under the hood.
+for f in db.region("chr17:43044295-43125483", featuretype="exon"):
     print(f)
 ```
 
-See `PHASE5_API_SUMMARY.md` for the full method-by-method legacy compatibility checklist.
+### The killer ML pattern — vectorized PyArrow extraction
 
-## Benchmarking
+```python
+# Pull every exon for 50 000 transcripts in a single call.
+# Returns a zero-copy pyarrow.Table — no Python `Feature` objects ever
+# constructed. 1.16 s wall on GENCODE v45 (vs 42.55 s for legacy).
+exons = db.children_batched(
+    transcript_ids,                # 50 000 IDs
+    featuretype="exon",
+    format="arrow",
+)
 
-```bash
-cd /path/to/gffbase
-python bench/benchmark.py --skip-legacy-full --reuse-db \
-    --n-region 10000 --n-children 2000 --diff-lines 50000
+# Hand off directly to Hugging Face datasets, PyTorch, polars, …
+import torch
+starts = torch.from_numpy(exons.column("start").to_numpy())
 ```
 
-Numbers from Phase 6 + Phase 7 are summarized in `PHASE6_BENCHMARK_REPORT.md` and `PHASE7_REMEDIATION_REPORT.md`.
+## ✨ What's inside
+
+- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
+  GTF semicolon-in-quotes safe, gzipped input transparent.
+- **DuckDB columnar storage** — 7-table schema, set-based GTF
+  gene/transcript synthesis, recursive-CTE transitive closure,
+  per-seqid-banded R-tree spatial index.
+- **Smart routing** — `region()` auto-picks R-tree vs B-tree;
+  `children()` auto-picks closure cache vs dynamic CTE.
+- **Vectorized batched API** — `children_batched`, `parents_batched`,
+  `region_batched` return `pyarrow.Table` / `pandas.DataFrame` /
+  `polars.DataFrame` for direct ML pipeline hand-off.
+- **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
+  `DataIterator`, `GFFWriter`, `merge_criteria`, `interfeatures`,
+  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`.
+- **abi3 wheels** — single binary per arch covers CPython 3.9–3.13.
+
+## 📚 Documentation
+
+Full site (rendered with MkDocs Material): see
+[`docs/`](docs/) or build it locally:
+
+```bash
+pip install -e .[docs]
+mkdocs serve            # http://localhost:8000
+```
+
+Quick links:
+
+- [Performance comparison](PERFORMANCE_COMPARISON.md) — head-to-head numbers + root-cause analysis
+- [Migration guide for `gffutils` users](MIGRATION.md) — drop-in compat + the one OLAP gotcha
+- [Cookbooks](docs/cookbooks/) — GENCODE/Ensembl, RefSeq, MANE, ML workflows
+- [API reference](docs/api/) — every public method with signature + docstring
+
+## 🧪 Testing
+
+```bash
+pip install -e .[test]
+pytest                  # 317 passed, ~95.4% line + branch coverage
+```
+
+CI runs the full matrix on Linux + macOS + Windows, both R-tree and
+B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+
+## 📦 Installation from source
+
+```bash
+# Build the Rust extension into the active venv:
+pip install maturin
+maturin develop --release
+```
+
+Requires Rust ≥ 1.71.
+
+## 🪪 License
+
+MIT. See [`LICENSE`](LICENSE).
+
+---
+
+**Citation:** if GFFBase helps your research, please cite the project at
+the [Releases page](https://github.com/your-org/gffbase/releases).

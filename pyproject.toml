@@ -81,15 +81,19 @@ dev = [
     "maturin>=1.5,<2.0",
 ]
 docs = [
-    "sphinx>=7",
-    "myst-parser>=2",
+    # MkDocs site (themed with Material; API ref via mkdocstrings).
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+    "mkdocs-include-markdown-plugin>=6.2",
+    "pymdown-extensions>=10.7",
 ]
 
 [project.urls]
 Homepage      = "https://github.com/your-org/gffbase"
 Source        = "https://github.com/your-org/gffbase"
 Issues        = "https://github.com/your-org/gffbase/issues"
-Documentation = "https://github.com/your-org/gffbase#readme"
+Documentation = "https://your-org.github.io/gffbase/"
 Changelog     = "https://github.com/your-org/gffbase/releases"
 
 # ---------------------------------------------------------------------------
