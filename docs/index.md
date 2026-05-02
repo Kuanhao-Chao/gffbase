@@ -7,112 +7,162 @@ title: GFFBase
 
 # GFFBase
 
-**A Rust + DuckDB GFF3/GTF engine that's 15× faster to ingest GENCODE
-than legacy `gffutils` and 36× faster at bulk ML queries.**
-
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/your-org/gffbase/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-317%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-95.4%25-brightgreen.svg)](#testing)
-
-GFFBase is a drop-in successor to
-[`gffutils`](https://github.com/daler/gffutils): a Rust+PyO3 parser
-feeds a DuckDB columnar storage engine through a zero-copy PyArrow
-hand-off, with a smart query router that picks an R-tree / B-tree
-spatial index and a closure-cache / dynamic-CTE relational dispatcher
-based on the corpus's true hierarchy depth. The full legacy
-`FeatureDB` / `Feature` / `create_db` / `DataIterator` / `GFFWriter`
-API is preserved.
+[![Tests](https://img.shields.io/badge/tests-386%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-95.46%25-brightgreen.svg)](#testing)
+[![Battle-tested](https://img.shields.io/badge/battle--tested-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#the-big-four-battle-tested-across-every-canonical-human-annotation)
 
 ---
 
-## ⚡ Killer features
+## What is GFFBase?
 
-| Workload | gffbase | legacy gffutils | **Speedup** |
-|---|---|---|---|
-| GENCODE v45 full ingest (2.0 M lines) | **226 s** | 3 582 s (60 min) | **15.87×** |
-| Spatial overlap (5 000 random regions) | **852 qps** | 164 qps | **5.20×** |
-| Spatial query p50 latency | **0.72 ms** | 6.01 ms | **8.35×** lower |
-| **Bulk ML `children_batched` (50 000 transcripts)** | **1.16 s** | 42.55 s | 🚀 **36.68×** |
-| 5 000-id batched lookup | 0.479 s | 5.81 s | 12.12× |
+**GFFBase is a Rust + DuckDB drop-in successor to
+[`gffutils`](https://github.com/daler/gffutils).** It ingests
+human-genome annotation files (GTF/GFF3) up to **17.83× faster** than
+the legacy library, runs spatial overlap queries at
+**1,000–1,800 qps** across every dialect we tested, and pulls
+millions of features into a zero-copy PyArrow buffer in a single
+call — **36.68× faster** than legacy on the bulk ML extraction
+workloads that actually dominate modern genomics pipelines.
 
-Numbers reproduced in [Performance Comparison](performance.md).
+A SIMD Rust+PyO3 parser feeds DuckDB's columnar storage through
+record-batch Arrow handoffs. A smart query router auto-picks an
+R-tree or B-tree spatial index per query, and a closure-cache /
+recursive-CTE relational dispatcher selects the right strategy based
+on the corpus's actual hierarchy depth. The full `FeatureDB` /
+`Feature` / `create_db` / `DataIterator` / `GFFWriter` /
+`merge_criteria` legacy API is preserved verbatim.
 
-The 36.68× win at bulk ML scale is the core reason this library exists
-— see the [Machine Learning Workflows
-Cookbook](cookbooks/machine_learning_workflows.md).
+---
 
-## 🚀 Quick start
+## ⚡ The Big Four — battle-tested across every canonical human annotation
+
+Phase 17's mega-bench head-to-head against legacy gffutils, with
+Phase-19's GFF3 ingest optimizations applied:
+
+| Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | speedup       | spatial qps | batched (5 k anchors) |
+| ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
+| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   3 min 22 s   | ~60 min       | **17.83×**    |   **1,204** | 172 ms / 596 k desc   |
+| **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 |   4 min 12 s   |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
+| **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    21.6 s      |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
+| **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    53.6 s      |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
+
+Every corpus ingests with **zero strict-mode warnings** from the
+Phase-16 NCBI-spec-hardened parser. RefSeq's duplicate-`ID=cds-NP_xxx`
+convention (split CDS segments) is handled transparently via the
+`duplicates` table. Full reproducible numbers + per-corpus root-cause
+analysis: see [Performance Comparison](performance.md).
+
+---
+
+## 🚀 The Killer Feature — zero-copy PyArrow for ML pipelines
+
+Modern ML genomics pipelines have one shape: pull every exon for
+50 000 transcripts, push the column-oriented table into a tensor,
+train. Legacy `gffutils` forces a per-feature Python loop —
+constructing 1.6 M throwaway `Feature` objects per pull, which
+crushes both wall time and memory. gffbase bypasses Python entirely:
+
+```python
+exons = db.children_batched(
+    transcript_ids,                # 50 000 IDs
+    featuretype="exon",
+    format="arrow",                # zero-copy pyarrow.Table
+)
+
+import torch
+starts = torch.from_numpy(exons.column("start").to_numpy())
+ends   = torch.from_numpy(exons.column("end").to_numpy())
+```
+
+| Path                                        | Wall on 50 k transcripts | vs legacy        |
+| ------------------------------------------- | -----------------------: | ---------------- |
+| `db.children_batched(format='arrow')`       |              **1.16 s**  | **36.68× faster**|
+| legacy `gffutils` row-by-row loop           |                  42.55 s | 1.0×             |
+| gffbase row-by-row loop                     |                   ≥ 642 s| 0.07× *(slower!)*|
+
+This is **the** reason GFFBase exists. See the [Machine Learning
+Workflows Cookbook](cookbooks/machine_learning_workflows.md) for
+end-to-end pipelines.
+
+---
+
+## 📦 Installation
 
 ```bash
 pip install gffbase
 ```
 
+Universal `abi3-py39` wheels — one binary per arch covers CPython
+3.9 → 3.13.
+
+---
+
+## 🏃 Quick start (row-by-row)
+
 ```python
 from gffbase import create_db
 
-# 1. Ingest a GTF/GFF3 in seconds (auto-detects format).
 db = create_db("gencode.v45.basic.annotation.gtf.gz",
                "gencode.duckdb", force=True)
 
-# 2. Walk a single gene's hierarchy.
 for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):
     print(tx.id, tx.start, tx.end)
 
-# 3. Spatial overlap query — uses per-seqid R-tree under the hood.
 for f in db.region("chr17:43044295-43125483", featuretype="exon"):
     print(f)
 ```
 
-### The killer ML pattern — vectorized PyArrow extraction
+## 🤖 Quick start (vectorized for ML)
 
 ```python
-# Pull every exon for 50 000 transcripts in a single call.
-# Returns a zero-copy pyarrow.Table — no Python `Feature` objects ever
-# constructed. 1.16 s wall on GENCODE v45 (vs 42.55 s for legacy).
-exons = db.children_batched(
-    transcript_ids,                # 50 000 IDs
-    featuretype="exon",
-    format="arrow",
-)
+from gffbase import FeatureDB
 
-# Hand off directly to Hugging Face datasets, PyTorch, polars, …
-import torch
-starts = torch.from_numpy(exons.column("start").to_numpy())
+db = FeatureDB("gencode.duckdb")
+exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
+
+# Hand off to PyTorch / Hugging Face / JAX / Lance — no Python copies.
 ```
+
+---
 
 ## ✨ What's inside
 
-- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
-  GTF semicolon-in-quotes safe, gzipped input transparent.
-- **DuckDB columnar storage** — 7-table schema, set-based GTF
-  gene/transcript synthesis, recursive-CTE transitive closure,
-  per-seqid-banded R-tree spatial index.
-- **Smart routing** — `region()` auto-picks R-tree vs B-tree;
-  `children()` auto-picks closure cache vs dynamic CTE.
-- **Vectorized batched API** — `children_batched`, `parents_batched`,
-  `region_batched` return `pyarrow.Table` / `pandas.DataFrame` /
-  `polars.DataFrame` for direct ML pipeline hand-off.
+- **Rust + PyO3 parser** — SIMD splitting, lazy URL-decoding,
+  GTF semicolon-in-quotes safe, gzipped input transparent. Phase-16
+  hardened against the NCBI GFF3 spec.
+- **DuckDB columnar storage** — set-based GTF synthesis,
+  recursive-CTE closure, per-seqid-banded R-tree built inline during
+  ingest (Phase-19 optimization).
+- **Smart routing** — R-tree / B-tree spatial; closure-cache /
+  dynamic-CTE relational.
+- **Vectorized batched API** — `pyarrow.Table` / `pandas.DataFrame` /
+  `polars.DataFrame`, directly out of DuckDB's buffer pool.
 - **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
-  `DataIterator`, `GFFWriter`, `merge_criteria`, `interfeatures`,
-  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`.
+  `DataIterator`, `GFFWriter`, `merge_criteria`, `bed12`,
+  `execute()`, `export_sqlite()`.
 - **abi3 wheels** — single binary per arch covers CPython 3.9–3.13.
+
+---
 
 ## 📚 Where to next
 
 | Page | What's there |
 |---|---|
-| [Performance](performance.md) | Head-to-head benchmark numbers + root-cause analysis for every metric |
-| [Migration from gffutils](migration.md) | Drop-in compatibility checklist + the one OLAP gotcha you must understand |
+| [Performance](performance.md) | Big-Four numbers + Phase-19 optimization story |
+| [Migration from gffutils](migration.md) | Drop-in compatibility + the one OLAP gotcha |
 | [Cookbooks](cookbooks/index.md) | GENCODE/Ensembl, RefSeq, MANE, ML workflows |
-| [API Reference](api/index.md) | Every public method with full signatures and docstrings |
+| [API Reference](api/index.md) | Every public method, full signatures + docstrings |
+
+---
 
 ## 🧪 Testing
 
 ```bash
 pip install -e .[test]
-pytest                  # 317 passed, ~95.4% line + branch coverage
+pytest                  # 386 passed, 2 skipped, 95.46% coverage
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
