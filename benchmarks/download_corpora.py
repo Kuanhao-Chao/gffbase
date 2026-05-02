@@ -1,12 +1,19 @@
-"""Download the four canonical human-genome annotation corpora used by
+"""Download the canonical human-genome annotation corpora used by
 ``benchmarks/06_mega.py``.
 
 Files land in ``benchmarks/data/``:
 
-  * ``gencode.v45.basic.annotation.gtf.gz``  — GENCODE GRCh38 v45 basic
-  * ``GCF_000001405.40_GRCh38.p14_genomic.gff.gz`` — RefSeq GRCh38 p14
-  * ``MANE.GRCh38.v1.5.ensembl_genomic.gff.gz`` — MANE v1.5 (Ensembl IDs)
-  * ``chess3.1.3.GRCh38.gff.gz`` — CHESS 3.1.3 (latest GitHub release)
+  * ``gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz``  —
+    GENCODE GRCh38 v49 basic, GTF format (no explicit parents — gene
+    and transcript rows are *implicit*, defined only by the
+    aggregation of their child exons).
+  * ``gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz`` —
+    GENCODE GRCh38 v49 basic, GFF3 format (explicit Parent= columns).
+    The GTF / GFF3 pair is the head-to-head fixture for the GTF
+    Synthesis Advantage analysis.
+  * ``GCF_000001405.40_GRCh38.p14_genomic.gff.gz`` — RefSeq GRCh38 p14.
+  * ``MANE.GRCh38.v1.5.ensembl_genomic.gff.gz`` — MANE v1.5 (Ensembl IDs).
+  * ``chess3.1.3.GRCh38.gff.gz`` — CHESS 3.1.3 (latest GitHub release).
 
 Idempotent: an existing file is skipped (compare by size + suffix).
 """
@@ -24,9 +31,15 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "benchmarks" / "data"
 
 CORPORA: Dict[str, str] = {
-    "gencode.v45.basic.annotation.gtf.gz": (
-        "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_45/"
-        "gencode.v45.basic.annotation.gtf.gz"
+    # Primary GENCODE pair: same biological release in both formats so
+    # the GTF-vs-GFF3 head-to-head is apples-to-apples.
+    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz": (
+        "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/"
+        "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz"
+    ),
+    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz": (
+        "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/"
+        "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz"
     ),
     "GCF_000001405.40_GRCh38.p14_genomic.gff.gz": (
         "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/"
@@ -88,18 +101,24 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="re-download even if present")
     ap.add_argument(
         "--only",
-        choices=["gencode", "refseq", "mane", "chess"],
+        choices=["gencode-gtf", "gencode-gff3", "gencode", "refseq", "mane", "chess"],
         action="append",
-        help="restrict to one or more corpora (repeatable)",
+        help="restrict to one or more corpora (repeatable). "
+             "`gencode` is shorthand for both `gencode-gtf` and `gencode-gff3`.",
     )
     args = ap.parse_args()
 
     selected = set(args.only or ["gencode", "refseq", "mane", "chess"])
-    pick: Dict[str, str] = {}
     if "gencode" in selected:
-        pick["gencode.v45.basic.annotation.gtf.gz"] = CORPORA[
-            "gencode.v45.basic.annotation.gtf.gz"
-        ]
+        selected.update({"gencode-gtf", "gencode-gff3"})
+        selected.discard("gencode")
+    pick: Dict[str, str] = {}
+    if "gencode-gtf" in selected:
+        name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz"
+        pick[name] = CORPORA[name]
+    if "gencode-gff3" in selected:
+        name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz"
+        pick[name] = CORPORA[name]
     if "refseq" in selected:
         pick["GCF_000001405.40_GRCh38.p14_genomic.gff.gz"] = CORPORA[
             "GCF_000001405.40_GRCh38.p14_genomic.gff.gz"

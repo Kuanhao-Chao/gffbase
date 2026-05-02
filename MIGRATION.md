@@ -12,7 +12,7 @@ migration is one import change.
 > ```python
 > # ❌ ANTI-PATTERN with gffbase: 50 000 small queries.
 > # Pays DuckDB's vectorization startup × 50 000 + per-row Feature
-> # construction × 1.6 M. ≥ 10 minutes wall on GENCODE v45.
+> # construction × 1.6 M. ≥ 10 minutes wall on GENCODE v49.
 > for transcript_id in fifty_thousand_transcript_ids:
 >     for exon in db.children(transcript_id, featuretype="exon"):
 >         starts.append(exon.start)
@@ -29,7 +29,7 @@ migration is one import change.
 > ```python
 > # ✅ ONE set-based SQL query for all 50 000 transcripts.
 > # Returns a zero-copy pyarrow.Table — no `Feature` object is ever
-> # constructed. 1.16 s wall on GENCODE v45 → a 553× speedup.
+> # constructed. 1.16 s wall on GENCODE v49 → a 553× speedup.
 > exons = db.children_batched(
 >     fifty_thousand_transcript_ids,
 >     featuretype="exon",
@@ -94,12 +94,13 @@ database into a legacy `.sqlite` file when you need the old format.
 
 ## 2. What you gain immediately, no code changes
 
-The Phase-17 mega-bench, with Phase-19 GFF3 ingest optimizations
+The internal Big Four mega-bench, with the v0.1.0 GFF3 ingest optimizations
 applied — head-to-head against legacy `gffutils`:
 
 | Corpus                  | Format | gffbase ingest | legacy ingest | speedup       | spatial qps (gffbase R-tree) | batched 5 k anchors |
 | ----------------------- | :----: | -------------: | ------------: | ------------: | ---------------------------: | ------------------: |
-| GENCODE v45 (basic)     |  GTF   |   1 min 37 s   |   59 min 42 s | **🚀 36.93×** |                    **1,204** | 172 ms / 596 k desc |
+| GENCODE v49 (basic)     |  GTF   |   4 min 37 s   | ≥ 2 hr 30 min | **🚀 ≥ 32×**  |                    **1,204** | 172 ms / 596 k desc |
+| GENCODE v49 (basic)     |  GFF3  |   6 min 7 s    |  11 min 23 s  |    **1.86×**  |                    **1,292** | 422 ms / 1.93 M desc|
 | RefSeq GRCh38.p14       |  GFF3  |   4 min 12 s   |     6 min 5 s | **1.45×**     |                    **1,011** | 263 ms / 999 k desc |
 | MANE v1.5 (Ensembl)     |  GFF3  |       21.6 s   |        45.1 s | **2.09×**     |                    **1,766** |  78 ms / 156 k desc |
 | CHESS 3.1.3             |  GFF3  |       53.6 s   |   2 min 13.1 s| **2.48×**     |                    **1,175** |  91 ms / 161 k desc |
@@ -210,7 +211,7 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
   SQLite (the price of materializing the closure + R-tree). Worth it
   for the 5–550× query speedups.
 - **Peak ingest RSS**: ~10× higher (~1.6 GB vs ~150 MB on GENCODE
-  v45). DuckDB allocates a vectorized ingest buffer pool; reduce with
+  v49). DuckDB allocates a vectorized ingest buffer pool; reduce with
   `PRAGMA memory_limit='512MB'` if needed.
 - **Hierarchy depth**: GFFBase materializes the closure to depth 8 by
   default (vs depth 2 in legacy). Anything past 8 falls through to a

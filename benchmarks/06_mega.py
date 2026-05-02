@@ -44,10 +44,16 @@ DATA = ROOT / "benchmarks" / "data"
 
 CORPORA: List[Dict] = [
     {
-        "name":   "GENCODE v45",
-        "key":    "gencode",
-        "input":  DATA / "gencode.v45.basic.annotation.gtf.gz",
+        "name":   "GENCODE v49 (GTF)",
+        "key":    "gencode-gtf",
+        "input":  DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
         "fmt":    "gtf",
+    },
+    {
+        "name":   "GENCODE v49 (GFF3)",
+        "key":    "gencode-gff3",
+        "input":  DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+        "fmt":    "gff3",
     },
     {
         "name":   "RefSeq GRCh38.p14",

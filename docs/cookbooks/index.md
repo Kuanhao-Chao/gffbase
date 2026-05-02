@@ -1,8 +1,9 @@
 # Cookbooks
 
 Concrete, runnable recipes for the most common real-world annotation
-workflows. Every snippet has been validated against the GENCODE v45 basic
-test corpus shipped in `bench/data/`.
+workflows. Every snippet has been validated against the GENCODE v49
+basic-annotation test corpus fetched by
+`benchmarks/download_corpora.py`.
 
 | Cookbook | Topic |
 |---|---|

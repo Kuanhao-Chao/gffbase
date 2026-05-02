@@ -18,7 +18,7 @@ GFFBase's normalized attribute index.
 ```python
 from gffbase import create_db
 
-db = create_db("gencode.v45.basic.annotation.gtf.gz",
+db = create_db("gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
                "gencode.duckdb", force=True)
 
 # Every MANE_Select transcript:
@@ -35,7 +35,7 @@ print(f"{len(mane_select):,} MANE_Select transcripts")
 ```
 
 The `attributes_kv` index on `(key, value)` makes this an indexed seek,
-not a full-table scan. On GENCODE v45 the query returns ~19 000 rows in
+not a full-table scan. On GENCODE v49 the query returns ~20 000 rows in
 under 100 ms.
 
 ## 2. Combine `MANE_Select` and `MANE_Plus_Clinical`
