@@ -5,7 +5,7 @@ are required by tests to produce identical output.
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Iterator, List, Optional
 
 from gffbase.feature import ParsedFeature
 from gffbase._pyfallback import parser as _pyparser
@@ -27,7 +27,12 @@ def native_available() -> bool:
 class _Iterator:
     """Adapter: wraps either the Rust iterator (yielding 11-tuples) or the
     pure-Python iterator (yielding ParsedFeature) and always yields
-    ParsedFeature."""
+    ParsedFeature.
+
+    Phase 16: also exposes ``.warnings`` — a list of structured-error
+    dicts (``line_no``, ``kind``, ``message``) collected when the
+    iterator was created with ``strict=False``.
+    """
 
     __slots__ = ("_inner", "_native")
 
@@ -50,6 +55,18 @@ class _Iterator:
     def directives(self) -> list:
         return list(self._inner.directives())
 
+    @property
+    def warnings(self) -> List[dict]:
+        """Errors that were demoted to warnings during a non-strict run.
+
+        Each item is a dict with keys ``line_no``, ``kind``, and
+        ``message``. Empty for strict runs (errors raise instead).
+        """
+        if hasattr(self._inner, "warnings"):
+            w = self._inner.warnings
+            return list(w() if callable(w) else w)
+        return []
+
 
 def _resolve_engine(engine: Optional[str]) -> str:
     if engine is None or engine == "auto":
@@ -69,10 +86,20 @@ def parse_gff(
     checklines: int = 10,
     force_dialect_check: bool = False,
     force_gff: bool = False,
+    strict: bool = True,
     engine: Optional[str] = "auto",
 ) -> _Iterator:
-    """Parse a GFF3/GTF file (plain text or `.gz`). Returns an iterator of
-    `ParsedFeature` plus `.dialect()` and `.directives()` accessors.
+    """Parse a GFF3/GTF file (plain text or ``.gz``).
+
+    Returns an iterator of ``ParsedFeature`` plus ``.dialect()``,
+    ``.directives()``, and (Phase 16) ``.warnings`` accessors.
+
+    Parameters
+    ----------
+    strict : bool
+        When True (default), the iterator raises ``GFFFormatError`` on
+        the first malformed line. When False, malformed lines are
+        skipped silently and recorded in ``iterator.warnings``.
     """
     eng = _resolve_engine(engine)
     if eng == "rust":
@@ -81,6 +108,7 @@ def parse_gff(
             checklines=checklines,
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
+            strict=strict,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_file(
@@ -88,6 +116,7 @@ def parse_gff(
         checklines=checklines,
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
+        strict=strict,
     )
     return _Iterator(it, native=False)
 
@@ -98,6 +127,7 @@ def parse_bytes(
     checklines: int = 10,
     force_dialect_check: bool = False,
     force_gff: bool = False,
+    strict: bool = True,
     engine: Optional[str] = "auto",
 ) -> _Iterator:
     eng = _resolve_engine(engine)
@@ -107,6 +137,7 @@ def parse_bytes(
             checklines=checklines,
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
+            strict=strict,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_bytes(
@@ -114,6 +145,7 @@ def parse_bytes(
         checklines=checklines,
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
+        strict=strict,
     )
     return _Iterator(it, native=False)
 

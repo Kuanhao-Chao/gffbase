@@ -10,7 +10,17 @@ from gffbase.exceptions import (
     DuplicateIDError,
     EmptyInputError,
     FeatureNotFoundError,
+    GFFFormatError as _PyGFFFormatError,
 )
+
+# Phase 16: prefer the Rust-defined exception class when the extension
+# is loaded — that's the type Rust will actually raise. Fall back to
+# the pure-Python definition otherwise. Both inherit from `ValueError`
+# so legacy `pytest.raises(ValueError)` callers keep working.
+try:  # pragma: no cover — import-time branch
+    from gffbase._native import GFFFormatError  # type: ignore[attr-defined]
+except ImportError:
+    GFFFormatError = _PyGFFFormatError  # type: ignore[assignment]
 from gffbase.feature import Feature, ParsedFeature
 from gffbase.parser import parse_gff, parse_bytes, detect_dialect, native_available
 from gffbase import ingest
@@ -34,6 +44,7 @@ __all__ = [
     "DuplicateIDError",
     "AttributeStringError",
     "EmptyInputError",
+    "GFFFormatError",
     "merge_criteria",
     # gffbase extras
     "ParsedFeature",

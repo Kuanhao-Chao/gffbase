@@ -14,6 +14,7 @@ use memchr::memchr;
 
 use crate::attributes::parse_attributes;
 use crate::dialect::{self, Dialect};
+use crate::validate::{validate_attributes_pairs, validate_fields, ErrorKind, GffError};
 
 #[derive(Debug, Clone)]
 pub struct Record {
@@ -34,6 +35,13 @@ pub struct ParseOptions {
     pub checklines: usize,
     pub force_dialect_check: bool,
     pub force_gff: bool,
+    /// When true (default), the iterator yields `Err(GffError)` on the
+    /// first malformed line and the caller is expected to surface it as
+    /// a Python `GFFFormatError`. When false, the iterator silently
+    /// drops malformed lines and pushes a `GffError` onto its
+    /// `warnings` vector — the caller can inspect them via
+    /// `RecordIter::warnings()`.
+    pub strict: bool,
 }
 
 /// A simple text source: either a Vec<u8> we own or a Read trait object.
@@ -71,6 +79,8 @@ pub struct RecordIter {
     directives: Vec<String>,
     fasta_reached: bool,
     line_no: usize,
+    strict: bool,
+    warnings: Vec<GffError>,
 }
 
 impl RecordIter {
@@ -90,9 +100,17 @@ impl RecordIter {
             directives: Vec::new(),
             fasta_reached: false,
             line_no: 0,
+            strict: opts.strict,
+            warnings: Vec::new(),
         };
         iter.peek_dialect(&opts);
         Ok(iter)
+    }
+
+    /// Errors collected when running with `strict=false`. Empty in
+    /// strict mode (errors propagate via `Iterator::next` instead).
+    pub fn warnings(&self) -> &[GffError] {
+        &self.warnings
     }
 
     pub fn dialect(&self) -> &Dialect {
@@ -141,6 +159,8 @@ impl RecordIter {
 
     /// Read the next non-comment, non-blank line as 9-or-more tab fields.
     /// Returns the raw fields plus the attributes blob (col 9 raw bytes).
+    /// Errors are structured `GffError` values carrying the offending
+    /// line number; `lib.rs` converts them to Python `GFFFormatError`s.
     #[allow(clippy::type_complexity)]
     fn next_raw_record(
         &mut self,
@@ -157,7 +177,7 @@ impl RecordIter {
             Vec<u8>, // blob
             Vec<String>, // extra
         ),
-        String,
+        GffError,
     >> {
         loop {
             if self.fasta_reached || self.pos >= self.buf.len() {
@@ -192,17 +212,46 @@ impl RecordIter {
             // Tab split.
             let fields = split_tabs(line);
             if fields.len() < 9 {
-                return Some(Err(format!(
-                    "line {}: expected at least 9 tab-separated fields, found {}",
+                return Some(Err(GffError::new(
                     cur_line_no,
-                    fields.len()
+                    ErrorKind::TooFewFields,
+                    format!(
+                        "expected at least 9 tab-separated fields, found {}",
+                        fields.len()
+                    ),
                 )));
             }
             let seqid = bytes_to_string(fields[0]);
             let source = bytes_to_string(fields[1]);
             let featuretype = bytes_to_string(fields[2]);
-            let start = parse_coord(fields[3]);
-            let end = parse_coord(fields[4]);
+            // Coordinate parsing distinguishes "valid `.` / empty"
+            // (yielding `None`) from "non-numeric trash" (a hard error).
+            let start = match parse_coord_strict(fields[3]) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Some(Err(GffError::new(
+                        cur_line_no,
+                        ErrorKind::InvalidCoordinate,
+                        format!(
+                            "start coordinate is not an integer: {:?}",
+                            std::str::from_utf8(fields[3]).unwrap_or("<non-utf8>")
+                        ),
+                    )));
+                }
+            };
+            let end = match parse_coord_strict(fields[4]) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Some(Err(GffError::new(
+                        cur_line_no,
+                        ErrorKind::InvalidCoordinate,
+                        format!(
+                            "end coordinate is not an integer: {:?}",
+                            std::str::from_utf8(fields[4]).unwrap_or("<non-utf8>")
+                        ),
+                    )));
+                }
+            };
             let score = bytes_to_string(fields[5]);
             let strand = bytes_to_string(fields[6]);
             let frame = bytes_to_string(fields[7]);
@@ -235,30 +284,75 @@ impl RecordIter {
 }
 
 impl Iterator for RecordIter {
-    type Item = Result<Record, String>;
+    type Item = Result<Record, GffError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let raw = match self.next_raw_record() {
-            Some(Ok(r)) => r,
-            Some(Err(e)) => return Some(Err(e)),
-            None => return None,
-        };
-        let (seqid, source, featuretype, start, end, score, strand, frame, blob, extra) = raw;
-        let blob_str = std::str::from_utf8(&blob).unwrap_or("");
-        let (pairs, _obs) = parse_attributes(blob_str);
-        Some(Ok(Record {
-            seqid,
-            source,
-            featuretype,
-            start,
-            end,
-            score,
-            strand,
-            frame,
-            attributes_blob: blob,
-            attributes_pairs: pairs,
-            extra,
-        }))
+        loop {
+            let line_no_for_err = self.line_no.saturating_add(1);
+            let raw = match self.next_raw_record() {
+                Some(Ok(r)) => r,
+                Some(Err(e)) => {
+                    if self.strict {
+                        return Some(Err(e));
+                    }
+                    self.warnings.push(e);
+                    // Try the next line.
+                    continue;
+                }
+                None => return None,
+            };
+            let (seqid, source, featuretype, start, end, score, strand, frame, blob, extra) = raw;
+
+            let is_gtf = matches!(self.dialect.fmt, crate::dialect::Format::Gtf);
+            if let Err(e) = validate_fields(
+                self.line_no,           // line we just consumed
+                &seqid,
+                &featuretype,
+                start,
+                end,
+                &score,
+                &strand,
+                &frame,
+                &blob,
+                is_gtf,
+            ) {
+                if self.strict {
+                    return Some(Err(e));
+                }
+                self.warnings.push(e);
+                continue;
+            }
+
+            let blob_str = std::str::from_utf8(&blob).unwrap_or("");
+            let (pairs, _obs) = parse_attributes(blob_str);
+            // Post-parse attribute structure check (handles both GFF3 and
+            // GTF correctly because it inspects what the parser produced).
+            if let Err(e) = validate_attributes_pairs(
+                self.line_no, pairs.len(), &blob, is_gtf,
+            ) {
+                if self.strict {
+                    return Some(Err(e));
+                }
+                self.warnings.push(e);
+                continue;
+            }
+            // Suppress unused-warning under release builds (line_no_for_err is a
+            // defensive snapshot — not used on the happy path).
+            let _ = line_no_for_err;
+            return Some(Ok(Record {
+                seqid,
+                source,
+                featuretype,
+                start,
+                end,
+                score,
+                strand,
+                frame,
+                attributes_blob: blob,
+                attributes_pairs: pairs,
+                extra,
+            }));
+        }
     }
 }
 
@@ -295,4 +389,16 @@ fn parse_coord(b: &[u8]) -> Option<i64> {
     }
     let s = std::str::from_utf8(b).ok()?;
     s.parse::<i64>().ok()
+}
+
+/// Like `parse_coord` but distinguishes "valid `.` / empty" from
+/// "non-numeric trash". Returns `Ok(None)` for `.` / empty, `Ok(Some(n))`
+/// for a real integer, and `Err(())` for anything else. The caller turns
+/// the `Err` into a structured `GffError`.
+fn parse_coord_strict(b: &[u8]) -> Result<Option<i64>, ()> {
+    if b == b"." || b.is_empty() {
+        return Ok(None);
+    }
+    let s = std::str::from_utf8(b).map_err(|_| ())?;
+    s.parse::<i64>().map(Some).map_err(|_| ())
 }
