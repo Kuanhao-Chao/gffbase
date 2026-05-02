@@ -86,7 +86,6 @@ CREATE TABLE IF NOT EXISTS duplicates (
 # `ingest.py::_build_rtree`.
 POST_LOAD_INDEXES = """
 CREATE INDEX IF NOT EXISTS features_type     ON features(featuretype);
-CREATE INDEX IF NOT EXISTS features_seqid    ON features(seqid);
 CREATE INDEX IF NOT EXISTS features_seqstart ON features(seqid, start, "end");
 CREATE INDEX IF NOT EXISTS attributes_kv     ON attributes(key, value);
 CREATE INDEX IF NOT EXISTS attributes_fid    ON attributes(feature_id);
@@ -95,6 +94,8 @@ CREATE INDEX IF NOT EXISTS edges_child       ON edges(child);
 CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor, depth);
 CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant, depth);
 """
+# Phase 19: dropped redundant `features_seqid` — every (seqid)
+# predicate is satisfied by the leading prefix of `features_seqstart`.
 
 
 # ---------------------------------------------------------------------------

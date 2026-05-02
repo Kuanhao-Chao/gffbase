@@ -1066,7 +1066,13 @@ class FeatureDB:
         from gffbase.ingest import _ArrowBatchBuilder
         from gffbase.feature import ParsedFeature
 
-        builder = _ArrowBatchBuilder()
+        # Phase 19: the builder needs the seqid_to_y dict so it can stamp
+        # seqid_y (and bbox, when the R-tree is live) inline. Reuse the map
+        # the FeatureDB already loaded from `seqid_map`.
+        builder = _ArrowBatchBuilder(
+            self._seqid_y_map,
+            has_spatial=bool(self._rtree_built),
+        )
         order = self.conn.execute(
             "SELECT COALESCE(MAX(file_order), 0) FROM features"
         ).fetchone()[0]
