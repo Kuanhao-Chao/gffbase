@@ -468,10 +468,9 @@ class FeatureDB:
         format : "arrow" | "df" | "polars"
             Return shape (default `"arrow"`).
 
-        Returned columns:
-            query_idx, query_seqid, query_start, query_end,
-            id, seqid, source, featuretype, start, end,
-            score, strand, frame, file_order
+        Result columns are query_idx, query_seqid, query_start,
+        query_end, id, seqid, source, featuretype, start, end, score,
+        strand, frame, file_order.
         """
         rows = []
         for r in regions:
@@ -659,9 +658,9 @@ class FeatureDB:
         format : "arrow" | "df" | "polars"
             Return shape (default `"arrow"` — `pyarrow.Table`).
 
-        Returned columns (in this order):
-            ancestor (the parent ID supplied), descendant_id, seqid, source,
-            featuretype, start, end, score, strand, frame, file_order
+        Result columns are anchor (the parent ID supplied),
+        descendant_id, seqid, source, featuretype, start, end, score,
+        strand, frame, file_order, depth.
         """
         return self._batched_relation(
             feature_ids, level=level, featuretype=featuretype,
