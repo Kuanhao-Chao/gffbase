@@ -13,7 +13,11 @@ env/
 .tox/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
+
+# --- MkDocs build output ------------------------------------------------
+site/
 
 # --- Compiled extensions / wheels --------------------------------------
 *.so
