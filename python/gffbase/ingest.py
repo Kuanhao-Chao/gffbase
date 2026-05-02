@@ -239,6 +239,13 @@ def from_file(
     it = _parser.parse_gff(path, engine=engine)
     builder = _ArrowBatchBuilder()
     autoinc: dict = {}
+    # NCBI RefSeq emits multiple GFF3 rows that share an `ID=cds-…` (a CDS
+    # is "split" across exon-segments). Our schema has `id` as a primary
+    # key, so we mimic gffutils' `merge_strategy="create_unique"`: track
+    # how many times we've seen each base id and append `__N` (N >= 2)
+    # when needed. The first occurrence keeps the bare id.
+    id_counts: dict = {}
+    duplicate_pairs: list = []  # (base_id, new_id)
     file_order = 0
     n_raw = 0
 
@@ -246,10 +253,32 @@ def from_file(
         file_order += 1
         n_raw += 1
         fid = _derive_id(feat, _dialect_fmt_safe(it), autoinc)
+        seen = id_counts.get(fid, 0)
+        if seen:
+            new_fid = f"{fid}__{seen + 1}"
+            duplicate_pairs.append((fid, new_fid))
+            id_counts[fid] = seen + 1
+            fid = new_fid
+        else:
+            id_counts[fid] = 1
         builder.append(fid, feat, file_order)
         if len(builder) >= batch_size:
             builder.flush_into(con)
     builder.flush_into(con)
+
+    # Record duplicate-id remappings (informational; the schema already has
+    # this table — Phase 5).
+    if duplicate_pairs:
+        dup_tbl = pa.table({
+            "original_id": [b for b, _ in duplicate_pairs],
+            "new_id":      [n for _, n in duplicate_pairs],
+        })
+        con.register("__staging_dups", dup_tbl)
+        con.execute(
+            "INSERT INTO duplicates (original_id, new_id) "
+            "SELECT original_id, new_id FROM __staging_dups"
+        )
+        con.unregister("__staging_dups")
 
     dialect = it.dialect()
     directives = list(it.directives())

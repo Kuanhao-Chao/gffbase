@@ -186,3 +186,31 @@ def test_force_overwrites(tmp_path, hier_path):
     con, _ = ingest.from_file(hier_path, dbfn=str(out), force=True)
     n = con.execute("SELECT COUNT(*) FROM features").fetchone()[0]
     assert n == 8
+
+
+def test_duplicate_ids_create_unique(tmp_path):
+    """RefSeq emits multiple GFF3 rows with the same ``ID=cds-…`` (the
+    segments of one CDS feature). The ingest pipeline must mirror
+    ``gffutils.merge_strategy='create_unique'``: the first row keeps
+    the bare id, subsequent rows are suffixed ``__2``, ``__3``, … and
+    the mapping is recorded in the ``duplicates`` table.
+    """
+    src = tmp_path / "dup.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\trs\tgene\t1\t1000\t.\t+\t.\tID=g1\n"
+        "chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\trs\tCDS\t100\t200\t.\t+\t0\tID=cds-x;Parent=t1\n"
+        "chr1\trs\tCDS\t300\t400\t.\t+\t0\tID=cds-x;Parent=t1\n"
+        "chr1\trs\tCDS\t500\t600\t.\t+\t0\tID=cds-x;Parent=t1\n"
+    )
+    con, _ = ingest.from_file(str(src))
+    ids = sorted(r[0] for r in con.execute(
+        "SELECT id FROM features WHERE featuretype = 'CDS' ORDER BY id"
+    ).fetchall())
+    # Three CDS rows: bare + __2 + __3.
+    assert ids == ["cds-x", "cds-x__2", "cds-x__3"]
+    dups = con.execute(
+        "SELECT original_id, new_id FROM duplicates ORDER BY new_id"
+    ).fetchall()
+    assert dups == [("cds-x", "cds-x__2"), ("cds-x", "cds-x__3")]
