@@ -75,6 +75,8 @@ Cargo.lock
 # --- Bench / scratch artifacts -----------------------------------------
 bench/data/
 bench/out/
+benchmarks/data/
+benchmarks/out/
 *.log
 
 # --- Planning docs (local working notes; not pushed) -------------------
