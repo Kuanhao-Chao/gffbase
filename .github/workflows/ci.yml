@@ -96,19 +96,33 @@ jobs:
         working-directory: rust
         run: cargo test --lib --release
 
-      - name: Run pytest — R-tree path
+      - name: Run pytest — R-tree path (≥95% coverage gate)
         if: matrix.spatial == 'rtree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: ""
+        # Inherits --cov-fail-under=95 from pyproject's addopts.
         run: pytest -q
 
-      - name: Run pytest — B-tree fallback path
+      - name: Run pytest — B-tree fallback path (≥93% coverage gate)
         if: matrix.spatial == 'btree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: "1"
-        run: pytest -q
+        # B-tree cells skip 3 R-tree-specific tests; the R-tree-only branches
+        # in interface.py / ingest.py are unreachable here. Lower threshold
+        # by ~2 points so this matrix axis still has a meaningful gate
+        # (catches regressions on the B-tree-reachable code).
+        run: pytest -q --cov-fail-under=93
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.spatial }}
+          path: |
+            coverage.xml
+            htmlcov/
 
       - name: Smoke-test pip install . (PyPI build path)
         # Only on the ubuntu-3.11-rtree cell — running this on every cell
