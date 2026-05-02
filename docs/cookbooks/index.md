@@ -23,4 +23,4 @@ db = FeatureDB("annotation.duckdb")
 The cookbooks assume `gffbase` is on the import path
 (`pip install gffbase` or `pip install -e .` from the repo root) and
 DuckDB's spatial extension is available (it auto-installs on first
-ingest; see Phase 7 R-tree work).
+ingest; see the per-seqid R-tree y-band design).

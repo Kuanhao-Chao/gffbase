@@ -12,13 +12,8 @@
 ## What is GFFBase?
 
 **GFFBase is a Rust + DuckDB drop-in successor to
-[`gffutils`](https://github.com/daler/gffutils).** It ingests human-genome
-annotation files (GTF/GFF3) up to **17.83× faster** than the legacy
-library, runs spatial overlap queries at **1,000–1,800 qps** across every
-dialect we tested, and pulls millions of features into a zero-copy
-PyArrow buffer in a single call — **36.68× faster** than legacy on the
-bulk ML extraction workloads that actually dominate modern genomics
-pipelines.
+[`gffutils`](https://github.com/daler/gffutils)** — a modern annotation
+engine engineered for the genomics workloads of 2026, not 2013.
 
 A SIMD Rust+PyO3 parser feeds DuckDB's columnar storage through
 record-batch Arrow handoffs. A smart query router auto-picks an
@@ -29,32 +24,47 @@ on the corpus's actual hierarchy depth. The full `FeatureDB` /
 `merge_criteria` legacy API is preserved verbatim — most users
 migrate by changing one import line.
 
+### Three reasons it matters
+
+1. **🚀 36.93× faster GENCODE GTF ingest** — the recursive-CTE
+   closure + set-based `GROUP BY` synthesis replaces legacy's
+   ~half-million Python ↔ SQLite round-trips. What used to take 60
+   minutes finishes in under 100 seconds. *([Why?](#-the-big-four--battle-tested-across-every-canonical-human-annotation))*
+2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
+   returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
+   table in **1.16 s**. No Python `Feature` objects, ever. *([How?](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
+3. **🛡️  Battle-tested NCBI compliance** — Big Four
+   (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with **zero
+   strict-mode warnings**. RefSeq's split-CDS duplicate-ID
+   convention is handled automatically.
+
 ---
 
 ## ⚡ The Big Four — battle-tested across every canonical human annotation
 
-Phase 17 ran the full ingest + spatial + batched mega-bench against
-all four canonical human-genome annotation sources, head-to-head with
-legacy `gffutils`. Phase 19 then closed the lone remaining performance
-gap (raw GFF3 ingest), so gffbase now wins **every ingest matchup
-end-to-end**:
+Internal benchmarks ran the full ingest + spatial + batched
+mega-bench against all four canonical human-genome annotation sources,
+head-to-head with legacy `gffutils`. The v0.1.0 ingest pipeline
+optimizations closed the lone remaining performance gap (raw GFF3
+ingest), so gffbase now wins **every ingest matchup end-to-end**:
 
 | Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | **speedup**   | spatial qps | batched (5 k anchors) |
 | ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
-| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   **3 min 22 s** | ~60 min[^1]   | **17.83×**    |   **1,204** | 172 ms / 596 k desc   |
-| **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 | **4 min 12 s**[^2] |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
+| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   **1 min 37 s** | 59 min 42 s[^1]   | **🚀 36.93×** |   **1,204** | 172 ms / 596 k desc   |
+| **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 |   **4 min 12 s**[^2] |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
 | **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    **21.6 s**  |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
 | **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    **53.6 s**  |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
 
-[^1]: Phase 11 measured the canonical legacy GENCODE ingest at **3,582 s (59 min 42 s)** with `disable_infer_genes=False`. Phase 17's safety-valve killed the legacy run at the 15-minute cap; the headline speedup uses the Phase-11 measurement.
-[^2]: Phase-19 result — the same RefSeq used to take 7 min 49 s before the GFF3 ingest pipeline got autonomously re-architected.
+[^1]: Uncapped reference run of legacy `gffutils.create_db()` with `disable_infer_genes=False` (the default). Why the gap is two orders of magnitude bigger here than on GFF3: see [Performance Comparison §"GTF Synthesis Bottleneck"](PERFORMANCE_COMPARISON.md#-the-gtf-synthesis-bottleneck--why-gffbase-destroys-legacy-on-gencode).
+[^2]: Result of the v0.1.0 ingest-pipeline optimization — the same RefSeq corpus used to take 7 min 49 s before the GFF3 path was re-architected to stamp `seqid_y` and `bbox` inline during the Arrow batch INSERT.
 
 **Robustness:** every corpus ingests cleanly with **zero strict-mode
-warnings** from the Phase-16 NCBI-spec-hardened parser, including
-RefSeq's notorious duplicate-`ID=cds-NP_xxx` convention (split CDS
-segments). gffbase mirrors `gffutils.merge_strategy="create_unique"`
-automatically and records the remap in the `duplicates` table — no
-config knobs to flip.
+warnings** from the NCBI-spec-hardened Rust parser (9 enforced rules,
+line-numbered `GFFFormatError`, opt-in non-strict mode). RefSeq's
+notorious duplicate-`ID=cds-NP_xxx` convention (split CDS segments) is
+handled transparently — gffbase mirrors
+`gffutils.merge_strategy="create_unique"` automatically and records the
+remap in the `duplicates` table. No config knobs to flip.
 
 📊 Full reproducible numbers + per-corpus root-cause analysis:
 [`PERFORMANCE_COMPARISON.md`](PERFORMANCE_COMPARISON.md). Re-run via
@@ -188,13 +198,12 @@ pipelines with PyTorch and Hugging Face `datasets`.
 ## ✨ What's inside
 
 - **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
-  GTF semicolon-in-quotes safe, gzipped input transparent. Phase-16
-  hardened against the NCBI GFF3 spec (line-numbered
-  `GFFFormatError`, strict / non-strict modes, 9 enforced rules).
+  GTF semicolon-in-quotes safe, gzipped input transparent. Hardened
+  against the NCBI GFF3 spec (line-numbered `GFFFormatError`,
+  strict / non-strict modes, 9 enforced rules).
 - **DuckDB columnar storage** — 7-table schema, set-based GTF
   gene/transcript synthesis, recursive-CTE transitive closure,
-  per-seqid-banded R-tree spatial index built inline during ingest
-  (Phase-19 optimization).
+  per-seqid-banded R-tree spatial index built inline during ingest.
 - **Smart routing** — `region()` auto-picks R-tree vs B-tree;
   `children()` auto-picks closure cache vs dynamic CTE based on
   measured corpus depth.

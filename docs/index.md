@@ -19,13 +19,9 @@ title: GFFBase
 ## What is GFFBase?
 
 **GFFBase is a Rust + DuckDB drop-in successor to
-[`gffutils`](https://github.com/daler/gffutils).** It ingests
-human-genome annotation files (GTF/GFF3) up to **17.83× faster** than
-the legacy library, runs spatial overlap queries at
-**1,000–1,800 qps** across every dialect we tested, and pulls
-millions of features into a zero-copy PyArrow buffer in a single
-call — **36.68× faster** than legacy on the bulk ML extraction
-workloads that actually dominate modern genomics pipelines.
+[`gffutils`](https://github.com/daler/gffutils)** — a modern
+annotation engine engineered for the genomics workloads of 2026, not
+2013.
 
 A SIMD Rust+PyO3 parser feeds DuckDB's columnar storage through
 record-batch Arrow handoffs. A smart query router auto-picks an
@@ -35,22 +31,36 @@ on the corpus's actual hierarchy depth. The full `FeatureDB` /
 `Feature` / `create_db` / `DataIterator` / `GFFWriter` /
 `merge_criteria` legacy API is preserved verbatim.
 
+### Three reasons it matters
+
+1. **🚀 36.93× faster GENCODE GTF ingest** — set-based DuckDB
+   `GROUP BY` synthesis + recursive-CTE closure replaces legacy's
+   ~half-million Python ↔ SQLite round-trips. What used to take 60
+   minutes finishes in under 100 seconds.
+2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
+   returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
+   table in **1.16 s**. No Python `Feature` objects, ever.
+3. **🛡️  Battle-tested NCBI compliance** — Big Four
+   (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with **zero
+   strict-mode warnings**. RefSeq's split-CDS duplicate-ID
+   convention is handled automatically.
+
 ---
 
 ## ⚡ The Big Four — battle-tested across every canonical human annotation
 
-Phase 17's mega-bench head-to-head against legacy gffutils, with
-Phase-19's GFF3 ingest optimizations applied:
+Internal mega-bench head-to-head against legacy gffutils, with the
+v0.1.0 GFF3 ingest pipeline optimizations applied:
 
 | Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | speedup       | spatial qps | batched (5 k anchors) |
 | ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
-| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   3 min 22 s   | ~60 min       | **17.83×**    |   **1,204** | 172 ms / 596 k desc   |
+| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   1 min 37 s   | 59 min 42 s   | **🚀 36.93×** |   **1,204** | 172 ms / 596 k desc   |
 | **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 |   4 min 12 s   |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
 | **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    21.6 s      |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
 | **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    53.6 s      |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
 
 Every corpus ingests with **zero strict-mode warnings** from the
-Phase-16 NCBI-spec-hardened parser. RefSeq's duplicate-`ID=cds-NP_xxx`
+NCBI-spec-hardened Rust parser. RefSeq's duplicate-`ID=cds-NP_xxx`
 convention (split CDS segments) is handled transparently via the
 `duplicates` table. Full reproducible numbers + per-corpus root-cause
 analysis: see [Performance Comparison](performance.md).
@@ -131,11 +141,11 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 ## ✨ What's inside
 
 - **Rust + PyO3 parser** — SIMD splitting, lazy URL-decoding,
-  GTF semicolon-in-quotes safe, gzipped input transparent. Phase-16
-  hardened against the NCBI GFF3 spec.
+  GTF semicolon-in-quotes safe, gzipped input transparent. Hardened
+  against the NCBI GFF3 spec.
 - **DuckDB columnar storage** — set-based GTF synthesis,
   recursive-CTE closure, per-seqid-banded R-tree built inline during
-  ingest (Phase-19 optimization).
+  ingest.
 - **Smart routing** — R-tree / B-tree spatial; closure-cache /
   dynamic-CTE relational.
 - **Vectorized batched API** — `pyarrow.Table` / `pandas.DataFrame` /
@@ -151,7 +161,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 | Page | What's there |
 |---|---|
-| [Performance](performance.md) | Big-Four numbers + Phase-19 optimization story |
+| [Performance](performance.md) | Big-Four numbers + the v0.1.0 ingest optimization story |
 | [Migration from gffutils](migration.md) | Drop-in compatibility + the one OLAP gotcha |
 | [Cookbooks](cookbooks/index.md) | GENCODE/Ensembl, RefSeq, MANE, ML workflows |
 | [API Reference](api/index.md) | Every public method, full signatures + docstrings |

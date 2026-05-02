@@ -24,7 +24,10 @@ print(db.fmt)                                          # 'gtf'
 
 GTF input is auto-detected; `disable_infer_genes` and
 `disable_infer_transcripts` default to `False` so missing parent rows
-are synthesized by a single set-based `GROUP BY` (Phase 4 § 3.2).
+are synthesized by a single set-based `GROUP BY` over the
+attribute-normalized `transcript_id` / `gene_id` columns. (See
+[Performance Comparison](../performance.md) — *"GTF Synthesis
+Bottleneck"* — for why this matters.)
 
 ## 2. Walk a single gene's hierarchy
 
@@ -42,7 +45,7 @@ for f in db.children(gene, level=None):
 ```
 
 `children(level=1)` is a closure-cache point lookup; `children(level=None)`
-returns the full descendant set. The dispatcher (Phase 7) auto-routes
+returns the full descendant set. The relational dispatcher auto-routes
 between the materialized closure and a recursive CTE.
 
 ## 3. Filter by attribute (e.g. all protein-coding genes)
@@ -90,7 +93,7 @@ print(table.num_rows, "exons,", len(table.column_names), "columns")
 
 | Task | Wall | Source |
 |---|---|---|
-| Full ingest (2.0 M lines) | ~226 s | `PERFORMANCE_COMPARISON.md` §2 |
-| `children(g, level=1)` (single gene) | <1 ms | Phase 7 closure cache |
+| Full ingest (2.0 M lines) | ~201 s | `PERFORMANCE_COMPARISON.md` §2 |
+| `children(g, level=1)` (single gene) | <1 ms | materialized closure cache |
 | 50 000 × `children_batched()` | 1.16 s | `PERFORMANCE_COMPARISON.md` §4b |
 | Random `region(seqid:start-end)` | ~0.7 ms | R-tree path |

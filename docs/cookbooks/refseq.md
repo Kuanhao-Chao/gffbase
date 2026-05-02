@@ -14,7 +14,7 @@ worth calling out:
 
 GFFBase handles all of these out of the box — the Rust parser's state
 machine treats quoted-and-percent-encoded GFF3 attribute values
-correctly (Phase 3 § 4 edge-case table). This cookbook shows the patterns
+correctly. This cookbook shows the patterns
 that come up most often.
 
 ## 1. Ingest a RefSeq genome annotation
@@ -94,7 +94,7 @@ for f in db.features_of_type("exon", limit="NC_000001.11"):
 ```
 
 `f.attributes` materializes lazily from the original col-9 bytes
-(Phase 5 `_LazyAttributes`); features whose attributes are never read
+(via the `_LazyAttributes` wrapper); features whose attributes are never read
 pay zero parsing cost.
 
 ## 5. Coordinate the chromosome row + everything on it
