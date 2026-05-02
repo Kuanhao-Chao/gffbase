@@ -437,10 +437,10 @@ class Feature:
 
     def sequence(self, fasta, use_strand: bool = True) -> str:
         """Extract sequence from a FASTA path or a pyfaidx-style mapping."""
-        if isinstance(fasta, str):
+        if isinstance(fasta, str):  # pragma: no cover - pyfaidx is optional
             try:
                 import pyfaidx  # type: ignore
-            except ImportError as e:  # pragma: no cover
+            except ImportError as e:
                 raise ImportError(
                     "Feature.sequence(path=...) requires the optional `pyfaidx` package"
                 ) from e
