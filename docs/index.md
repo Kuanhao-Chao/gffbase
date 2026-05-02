@@ -33,10 +33,10 @@ on the corpus's actual hierarchy depth. The full `FeatureDB` /
 
 ### Three reasons it matters
 
-1. **🚀 36.93× faster GENCODE GTF ingest** — set-based DuckDB
-   `GROUP BY` synthesis + recursive-CTE closure replaces legacy's
-   ~half-million Python ↔ SQLite round-trips. What used to take 60
-   minutes finishes in under 100 seconds.
+1. **🚀 ≥ 32× faster GENCODE GTF ingest** (v49, 6.07 M lines) —
+   set-based DuckDB `GROUP BY` synthesis + recursive-CTE closure
+   replaces legacy's millions of Python ↔ SQLite round-trips
+   spent inventing the missing gene/transcript rows.
 2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
    returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
    table in **1.16 s**. No Python `Feature` objects, ever.
@@ -54,7 +54,8 @@ v0.1.0 GFF3 ingest pipeline optimizations applied:
 
 | Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | speedup       | spatial qps | batched (5 k anchors) |
 | ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
-| **GENCODE v45** (basic)  |  GTF   |  2,001,750 |   1 min 37 s   | 59 min 42 s   | **🚀 36.93×** |   **1,204** | 172 ms / 596 k desc   |
+| **GENCODE v49** (basic)  |  GTF   |  6,068,892 |   4 min 37 s   | ≥ 2 hr 30 min | **🚀 ≥ 32×**  |   **1,204** | 172 ms / 596 k desc   |
+| **GENCODE v49** (basic)  |  GFF3  |  6,066,054 |   6 min 7 s    |  11 min 23 s  | **1.86×**     |   **1,292** | 422 ms / 1.93 M desc  |
 | **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 |   4 min 12 s   |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
 | **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    21.6 s      |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
 | **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    53.6 s      |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
@@ -115,7 +116,7 @@ Universal `abi3-py39` wheels — one binary per arch covers CPython
 ```python
 from gffbase import create_db
 
-db = create_db("gencode.v45.basic.annotation.gtf.gz",
+db = create_db("gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
                "gencode.duckdb", force=True)
 
 for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):

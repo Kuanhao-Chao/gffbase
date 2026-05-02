@@ -14,11 +14,11 @@ need.
 from gffbase import create_db
 
 db = create_db(
-    "gencode.v45.basic.annotation.gtf.gz",
+    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
     "gencode.duckdb",
     force=True,
 )
-print(f"{db.count_features_of_type():,} features")    # ~2.18 M
+print(f"{db.count_features_of_type():,} features")    # ~6.5 M (incl. synth parents)
 print(db.fmt)                                          # 'gtf'
 ```
 
@@ -89,11 +89,11 @@ table = db.children_batched(gene_ids, featuretype="exon", format="arrow")
 print(table.num_rows, "exons,", len(table.column_names), "columns")
 ```
 
-## Performance notes (real GENCODE v45 numbers)
+## Performance notes (real GENCODE v49 numbers)
 
 | Task | Wall | Source |
 |---|---|---|
-| Full ingest (2.0 M lines) | ~201 s | `PERFORMANCE_COMPARISON.md` §2 |
+| Full ingest (6.07 M lines) | ~277 s | `PERFORMANCE_COMPARISON.md` §0 |
 | `children(g, level=1)` (single gene) | <1 ms | materialized closure cache |
 | 50 000 × `children_batched()` | 1.16 s | `PERFORMANCE_COMPARISON.md` §4b |
 | Random `region(seqid:start-end)` | ~0.7 ms | R-tree path |
