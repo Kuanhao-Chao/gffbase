@@ -61,7 +61,13 @@ class IngestStats:
 class _ArrowBatchBuilder:
     """Accumulates parsed features into column-oriented Python lists, then
     produces PyArrow tables on flush. We deliberately keep the schema explicit
-    so DuckDB sees the right column types (no INFER passes)."""
+    so DuckDB sees the right column types (no INFER passes).
+
+    Phase 19: the builder also stamps each row's ``seqid_y`` value during
+    ``append()`` using a shared ``seqid_to_y`` dict (lazy band assignment in
+    encounter order). This eliminates two full-table ``UPDATE`` passes that
+    used to dominate ingest wall time on real GFF3 corpora.
+    """
 
     FEATURES_SCHEMA = pa.schema([
         ("id",              pa.string()),
@@ -77,6 +83,7 @@ class _ArrowBatchBuilder:
         ("extra_blob",      pa.binary()),
         ("file_order",      pa.int64()),
         ("is_synthetic",    pa.bool_()),
+        ("seqid_y",         pa.int64()),
     ])
 
     ATTRIBUTES_SCHEMA = pa.schema([
@@ -86,7 +93,11 @@ class _ArrowBatchBuilder:
         ("idx",        pa.int16()),
     ])
 
-    def __init__(self):
+    def __init__(self, seqid_to_y: dict, has_spatial: bool = False):
+        # Shared across all batches so seqid_y assignment is stable for the
+        # whole file. Caller owns the dict; we mutate it in place.
+        self._seqid_to_y = seqid_to_y
+        self._has_spatial = has_spatial
         self._reset()
 
     def _reset(self):
@@ -104,6 +115,7 @@ class _ArrowBatchBuilder:
         self.f_extra: list = []
         self.f_order: list = []
         self.f_synth: list = []
+        self.f_seqid_y: list = []
         # Attribute columns
         self.a_fid: list = []
         self.a_key: list = []
@@ -111,8 +123,16 @@ class _ArrowBatchBuilder:
         self.a_idx: list = []
 
     def append(self, feat_id: str, feat: ParsedFeature, file_order: int):
+        seqid = feat.seqid
+        # Lazy y-band assignment: each new seqid gets the next slot.
+        # `dict.get` + assignment is faster than `setdefault` here because
+        # we hit the cache path on >99 % of rows in real data.
+        y = self._seqid_to_y.get(seqid)
+        if y is None:
+            y = len(self._seqid_to_y) * SEQID_Y_BAND
+            self._seqid_to_y[seqid] = y
         self.f_id.append(feat_id)
-        self.f_seqid.append(feat.seqid)
+        self.f_seqid.append(seqid)
         self.f_source.append(feat.source)
         self.f_type.append(feat.featuretype)
         self.f_start.append(feat.start if feat.start is not None else 0)
@@ -124,6 +144,7 @@ class _ArrowBatchBuilder:
         self.f_extra.append(("\t".join(feat.extra)).encode("utf-8") if feat.extra else b"")
         self.f_order.append(file_order)
         self.f_synth.append(False)
+        self.f_seqid_y.append(y)
         for k, v, idx in feat.attributes_pairs:
             self.a_fid.append(feat_id)
             self.a_key.append(k)
@@ -148,6 +169,7 @@ class _ArrowBatchBuilder:
             "extra_blob": self.f_extra,
             "file_order": self.f_order,
             "is_synthetic": self.f_synth,
+            "seqid_y": self.f_seqid_y,
         }, schema=self.FEATURES_SCHEMA)
 
     def attributes_table(self) -> pa.Table:
@@ -163,19 +185,32 @@ class _ArrowBatchBuilder:
             return
         feats = self.features_table()
         attrs = self.attributes_table()
-        # Register and INSERT ... SELECT — DuckDB's fastest Arrow path.
-        # We enumerate columns explicitly because the `features` table now
-        # has a trailing `seqid_y` column populated post-load by the R-tree
-        # build pass; the Arrow batch only carries the original 13 columns.
+        # Register and INSERT ... SELECT — DuckDB's fastest Arrow path. When
+        # the spatial extension is loaded we ALSO compute `bbox` inline so
+        # the R-tree build at the end of ingest is a single CREATE INDEX
+        # (no UPDATE pass over the table).
         con.register("__staging_features", feats)
         con.register("__staging_attributes", attrs)
-        con.execute(
-            "INSERT INTO features ("
-            "id, seqid, source, featuretype, start, \"end\", "
-            "score, strand, frame, attributes_blob, extra_blob, "
-            "file_order, is_synthetic"
-            ") SELECT * FROM __staging_features"
-        )
+        if self._has_spatial:
+            con.execute(
+                "INSERT INTO features ("
+                "id, seqid, source, featuretype, start, \"end\", "
+                "score, strand, frame, attributes_blob, extra_blob, "
+                "file_order, is_synthetic, seqid_y, bbox"
+                ") SELECT id, seqid, source, featuretype, start, \"end\", "
+                "score, strand, frame, attributes_blob, extra_blob, "
+                "file_order, is_synthetic, seqid_y, "
+                "ST_MakeEnvelope(start, seqid_y, \"end\", seqid_y + 1) "
+                "FROM __staging_features"
+            )
+        else:
+            con.execute(
+                "INSERT INTO features ("
+                "id, seqid, source, featuretype, start, \"end\", "
+                "score, strand, frame, attributes_blob, extra_blob, "
+                "file_order, is_synthetic, seqid_y"
+                ") SELECT * FROM __staging_features"
+            )
         con.execute("INSERT INTO attributes SELECT * FROM __staging_attributes")
         con.unregister("__staging_features")
         con.unregister("__staging_attributes")
@@ -235,9 +270,23 @@ def from_file(
     _apply_pragmas(con)
     con.execute(DDL)
 
+    # Phase 19: load the spatial extension UPFRONT (was: lazy after bulk
+    # load). This lets us widen the `features` schema to include `bbox`
+    # and stamp the R-tree envelope inline during the Arrow batch INSERT,
+    # eliminating two full-table UPDATE passes that used to dominate
+    # ingest wall time.
+    has_spatial = (
+        build_rtree
+        and not _rtree_disabled_by_env()
+        and _try_load_spatial(con)
+    )
+    if has_spatial:
+        con.execute("ALTER TABLE features ADD COLUMN IF NOT EXISTS bbox GEOMETRY")
+
     # Drive the parser.
     it = _parser.parse_gff(path, engine=engine)
-    builder = _ArrowBatchBuilder()
+    seqid_to_y: dict = {}
+    builder = _ArrowBatchBuilder(seqid_to_y, has_spatial=has_spatial)
     autoinc: dict = {}
     # NCBI RefSeq emits multiple GFF3 rows that share an `ID=cds-…` (a CDS
     # is "split" across exon-segments). Our schema has `id` as a primary
@@ -248,11 +297,18 @@ def from_file(
     duplicate_pairs: list = []  # (base_id, new_id)
     file_order = 0
     n_raw = 0
+    # Resolve the dialect format ONCE — calling `it.dialect()` per record
+    # is a Rust↔Python boundary cost we shouldn't pay 5 M times. The
+    # parser commits to a dialect during the peek phase, so the value is
+    # stable from the first yielded record onward.
+    _fmt_cache: Optional[str] = None
 
     for feat in it:
         file_order += 1
         n_raw += 1
-        fid = _derive_id(feat, _dialect_fmt_safe(it), autoinc)
+        if _fmt_cache is None:
+            _fmt_cache = _dialect_fmt_safe(it)
+        fid = _derive_id(feat, _fmt_cache, autoinc)
         seen = id_counts.get(fid, 0)
         if seen:
             new_fid = f"{fid}__{seen + 1}"
@@ -301,6 +357,25 @@ def from_file(
         if not disable_infer_genes:
             n_synth_g = _synthesize_genes(con, gtf_subfeature)
         con.execute(EDGES_FROM_GTF)
+        # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
+        # them up in a single targeted UPDATE (touches only synthesized
+        # rows; ~4-9 % of features at GENCODE scale).
+        if has_spatial:
+            con.execute(
+                "UPDATE features "
+                "SET seqid_y = m.seqid_y, "
+                "    bbox = ST_MakeEnvelope("
+                "        features.start, m.seqid_y, "
+                "        features.\"end\", m.seqid_y + 1) "
+                "FROM seqid_map m "
+                "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
+            )
+        else:
+            con.execute(
+                "UPDATE features SET seqid_y = m.seqid_y "
+                "FROM seqid_map m "
+                "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
+            )
     else:
         con.execute(EDGES_FROM_PARENT)
 
@@ -310,10 +385,12 @@ def from_file(
     # Indexes — only after all data is materialized.
     con.execute(POST_LOAD_INDEXES)
 
-    # Optional R-tree on coordinates.
+    # Optional R-tree. Phase 19: when spatial is loaded, this is now a
+    # single CREATE INDEX over the bbox column we already populated
+    # inline during the Arrow batch INSERTs (no UPDATE pass).
     rtree_built = False
-    if build_rtree:
-        rtree_built = _build_rtree(con)
+    if has_spatial:
+        rtree_built = _finalize_rtree(con, seqid_to_y)
 
     # SQLite-compat views (must run after closure has been populated).
     con.execute(COMPAT_VIEWS_SQL)
@@ -416,59 +493,48 @@ def _synthesize_genes(con, subfeature: str) -> int:
 SEQID_Y_BAND = 1_000_000  # gap between adjacent seqids' y-bands.
 
 
-def _build_rtree(con: duckdb.DuckDBPyConnection) -> bool:
-    """Try to build a true R-tree index. Falls back to a multi-column B-tree
-    if the spatial extension is unavailable. Returns True iff R-tree was
-    actually built.
+def _rtree_disabled_by_env() -> bool:
+    """``GFFBASE_TEST_DISABLE_RTREE=1`` forces the B-tree fallback path
+    library-wide so the CI matrix can exercise it without test-code
+    changes."""
+    return os.environ.get(
+        "GFFBASE_TEST_DISABLE_RTREE", ""
+    ).lower() in ("1", "true", "yes")
 
-    Phase 7 fix: each distinct seqid is assigned its own y-band so the R-tree
-    split heuristics segregate chromosomes. Per-seqid envelopes look like
-    ``ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1)`` with seqid_y
-    values 1,000,000 apart — a single internal R-tree node cannot accidentally
-    union two seqids.
 
-    Phase 8 hook: ``GFFBASE_TEST_DISABLE_RTREE=1`` short-circuits the build so
-    the CI matrix can exercise the multi-column B-tree fallback path without
-    test-code changes. The env var is honored library-wide (not just by tests)
-    so debugging users on offline machines can switch identically.
-    """
-    if os.environ.get("GFFBASE_TEST_DISABLE_RTREE", "").lower() in ("1", "true", "yes"):
-        return False
+def _try_load_spatial(con: duckdb.DuckDBPyConnection) -> bool:
+    """Attempt to install + load the DuckDB spatial extension. Returns
+    True iff it's now usable on this connection."""
     try:
         con.execute("INSTALL spatial")
         con.execute("LOAD spatial")
+        return True
     except duckdb.Error:
         return False
+
+
+def _finalize_rtree(con: duckdb.DuckDBPyConnection, seqid_to_y: dict) -> bool:
+    """Persist the seqid_to_y dict into the `seqid_map` side table and
+    create the R-tree index over the (already-populated) `bbox` column.
+
+    Phase 19: this is the entire R-tree build — no UPDATE passes. The
+    `bbox` column was filled in inline by ``_ArrowBatchBuilder.flush_into``
+    using the per-row seqid_y stamped by the builder.
+    """
     try:
-        # 1. Build the seqid → y-band map. Sorted for determinism, gaps of
-        #    SEQID_Y_BAND so different chromosomes never share R-tree leaves.
-        rows = con.execute(
-            "SELECT DISTINCT seqid FROM features ORDER BY seqid"
-        ).fetchall()
-        # Bulk-load the side table.
-        seqid_rows = [(r[0], i * SEQID_Y_BAND) for i, r in enumerate(rows)]
-        con.execute("DELETE FROM seqid_map")
-        con.executemany("INSERT INTO seqid_map(seqid, seqid_y) VALUES (?, ?)", seqid_rows)
-
-        # 2. Stamp seqid_y on every feature row.
-        con.execute("""
-            UPDATE features
-            SET seqid_y = m.seqid_y
-            FROM seqid_map m
-            WHERE features.seqid = m.seqid
-        """)
-
-        # 3. Add the bbox geometry column and populate using the per-seqid band.
-        con.execute("""
-            ALTER TABLE features
-            ADD COLUMN IF NOT EXISTS bbox GEOMETRY
-        """)
-        con.execute("""
-            UPDATE features
-            SET bbox = ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1)
-            WHERE bbox IS NULL OR bbox IS NOT NULL  -- always re-stamp; cheap on small tables
-        """)
-        con.execute("CREATE INDEX IF NOT EXISTS features_rtree ON features USING RTREE (bbox)")
+        if seqid_to_y:
+            seqid_rows = list(seqid_to_y.items())
+            # Stable ordering (encounter order in the file) — preserves the
+            # invariant that the first seqid sees seqid_y == 0.
+            con.execute("DELETE FROM seqid_map")
+            con.executemany(
+                "INSERT INTO seqid_map(seqid, seqid_y) VALUES (?, ?)",
+                seqid_rows,
+            )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS features_rtree "
+            "ON features USING RTREE (bbox)"
+        )
         return True
     except duckdb.Error:
         return False

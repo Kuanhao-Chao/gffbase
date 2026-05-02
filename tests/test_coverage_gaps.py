@@ -22,7 +22,12 @@ from gffbase import (
     create_db,
 )
 from gffbase.feature import _LazyAttributes, _coord_to_int, feature_from_row
-from gffbase.ingest import _build_rtree, from_file
+from gffbase.ingest import (
+    _try_load_spatial,
+    _finalize_rtree,
+    _rtree_disabled_by_env,
+    from_file,
+)
 
 DATA = Path(__file__).parent / "data"
 
@@ -253,18 +258,22 @@ def test_synthesize_genes_noop_when_only_genes_disabled(tmp_path):
     assert stats.n_features_synthetic_genes == 0
 
 
-def test_build_rtree_honors_env_kill_switch(monkeypatch):
+def test_rtree_disabled_by_env_kill_switch(monkeypatch):
+    """``GFFBASE_TEST_DISABLE_RTREE=1`` short-circuits the R-tree path
+    library-wide so the CI matrix can test the B-tree fallback without
+    any test-code changes."""
     monkeypatch.setenv("GFFBASE_TEST_DISABLE_RTREE", "1")
-    con = duckdb.connect(":memory:")
-    from gffbase.schema import DDL
-    con.execute(DDL)
-    assert _build_rtree(con) is False
+    assert _rtree_disabled_by_env() is True
+    monkeypatch.setenv("GFFBASE_TEST_DISABLE_RTREE", "0")
+    assert _rtree_disabled_by_env() is False
+    monkeypatch.delenv("GFFBASE_TEST_DISABLE_RTREE", raising=False)
+    assert _rtree_disabled_by_env() is False
 
 
 class _ConnWrapper:
     """Thin proxy that lets us inject failures on specific SQL statements.
-    Mirrors the small subset of the DuckDBPyConnection surface used by
-    `_build_rtree`.
+    Mirrors the small subset of the DuckDBPyConnection surface used by the
+    spatial-extension helpers.
     """
     def __init__(self, real, fail_on: str):
         self._real = real
@@ -279,14 +288,24 @@ class _ConnWrapper:
         return self._real.executemany(*a, **kw)
 
 
-def test_build_rtree_handles_install_error(monkeypatch):
+def test_try_load_spatial_handles_install_error(monkeypatch):
     """Force `INSTALL spatial` to raise → graceful False return."""
     monkeypatch.delenv("GFFBASE_TEST_DISABLE_RTREE", raising=False)
     con = duckdb.connect(":memory:")
-    from gffbase.schema import DDL
-    con.execute(DDL)
     proxy = _ConnWrapper(con, fail_on="INSTALL spatial")
-    assert _build_rtree(proxy) is False
+    assert _try_load_spatial(proxy) is False
+
+
+def test_finalize_rtree_swallows_create_index_error():
+    """If the spatial extension is gone by the time we reach
+    `_finalize_rtree` (or any other DuckDB error fires), the helper
+    returns False rather than crashing the whole ingest."""
+    con = duckdb.connect(":memory:")
+    from gffbase.schema import DDL
+    con.execute(DDL)  # No `bbox` column, no spatial extension loaded.
+    # CREATE INDEX ... USING RTREE will fail because spatial isn't loaded
+    # AND the `bbox` column doesn't exist. Helper must return False.
+    assert _finalize_rtree(con, {"chr1": 0}) is False
 
 
 def test_ingest_no_directives_path(tmp_path):
