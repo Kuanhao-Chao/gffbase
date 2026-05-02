@@ -99,7 +99,7 @@ applied — head-to-head against legacy `gffutils`:
 
 | Corpus                  | Format | gffbase ingest | legacy ingest | speedup       | spatial qps (gffbase R-tree) | batched 5 k anchors |
 | ----------------------- | :----: | -------------: | ------------: | ------------: | ---------------------------: | ------------------: |
-| GENCODE v45 (basic)     |  GTF   |   3 min 22 s   |       ~60 min | **17.83×**    |                    **1,204** | 172 ms / 596 k desc |
+| GENCODE v45 (basic)     |  GTF   |   1 min 37 s   |   59 min 42 s | **🚀 36.93×** |                    **1,204** | 172 ms / 596 k desc |
 | RefSeq GRCh38.p14       |  GFF3  |   4 min 12 s   |     6 min 5 s | **1.45×**     |                    **1,011** | 263 ms / 999 k desc |
 | MANE v1.5 (Ensembl)     |  GFF3  |       21.6 s   |        45.1 s | **2.09×**     |                    **1,766** |  78 ms / 156 k desc |
 | CHESS 3.1.3             |  GFF3  |       53.6 s   |   2 min 13.1 s| **2.48×**     |                    **1,175** |  91 ms / 161 k desc |

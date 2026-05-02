@@ -7,7 +7,7 @@ docstrings via
 
 | Module | What's there |
 |---|---|
-| [`FeatureDB`](featuredb.md) | The query database. Includes the row-by-row legacy methods and the **vectorized** `children_batched`, `parents_batched`, `region_batched` introduced in Phase 12. |
+| [`FeatureDB`](featuredb.md) | The query database. Includes the row-by-row legacy methods and the **vectorized** `children_batched`, `parents_batched`, `region_batched` for bulk PyArrow extraction. |
 | [`Feature`](feature.md) | The user-facing record type. Backwards-compatible with `gffutils.Feature`. |
 | [`create_db`](create_db.md) | The ingestion entrypoint. |
 | [`DataIterator` & `GFFWriter`](io.md) | Streaming I/O. |
