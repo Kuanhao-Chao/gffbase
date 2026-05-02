@@ -69,6 +69,7 @@ test = [
 ]
 bench = [
     "psutil>=5",
+    "memory_profiler>=0.61",  # peak-RSS harness
     "gffutils>=0.13",        # legacy reference for differential correctness
 ]
 dev = [
