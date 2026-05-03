@@ -11,9 +11,11 @@
 
 ## What is GFFBase?
 
-**GFFBase is a Rust + DuckDB drop-in successor to
-[`gffutils`](https://github.com/daler/gffutils)** — a modern annotation
-engine engineered for the genomics workloads of 2026, not 2013.
+**GFFBase is a high-performance genomic-annotation engine combining a
+SIMD Rust parser, a DuckDB columnar backend, and a zero-copy PyArrow
+interface — purpose-built for whole-genome-scale ingest and bulk
+machine-learning feature extraction, while remaining a drop-in
+successor to [`gffutils`](https://github.com/daler/gffutils).**
 
 A SIMD Rust+PyO3 parser feeds DuckDB's columnar storage through
 record-batch Arrow handoffs. A smart query router auto-picks an
