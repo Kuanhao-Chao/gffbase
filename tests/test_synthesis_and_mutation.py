@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Synthesis (interfeatures, merge, create_introns, create_splice_sites,
 bed12, children_bp, iter_by_parent_childs) and mutation
 (update / delete / add_relation) coverage."""

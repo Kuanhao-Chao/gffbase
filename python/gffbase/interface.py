@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """``FeatureDB`` — drop-in successor to ``gffutils.FeatureDB``.
 
 Wraps a DuckDB connection produced by ``gffbase.ingest.from_file`` (or opened

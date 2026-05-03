@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Compatibility helpers."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Exception classes — verbatim port of legacy `gffutils.exceptions`.
 
 Same names, same constructors, same attributes. Downstream code that catches

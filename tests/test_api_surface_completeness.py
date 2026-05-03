@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Coverage-completing tests for small accessor / filter branches.
 
 These cover the remaining gaps in `feature.py` and `interface.py`

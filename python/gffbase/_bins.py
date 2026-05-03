@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """UCSC genomic binning. Used only for the legacy SQLite export path; the
 runtime query layer uses DuckDB's R-tree (or the seqstart B-tree fallback)
 and never touches `bin`. Port of the relevant logic from `gffutils/bins.py`.

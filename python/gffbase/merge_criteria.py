@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Merge predicates — pure functions consumed by ``FeatureDB.merge``.
 
 Signature: ``(acc: Feature, cur: Feature, components: list[Feature]) -> bool``.

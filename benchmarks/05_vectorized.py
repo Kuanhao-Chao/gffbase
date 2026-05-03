@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 13 — vectorized batched API benchmark vs legacy per-id loop.
 
 Drives `children_batched(format='arrow')` against `for id in ids:

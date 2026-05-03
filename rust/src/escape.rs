@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+// ---------------------------------------------------------------------------
 //! GFF3 percent-encoding. Fast-path: if no `%` byte appears, return the input
 //! borrowed; otherwise decode in place. Decoding errors fall back to the
 //! original byte (matches `urllib.parse.unquote` defensive behavior).

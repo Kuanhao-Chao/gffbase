@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 4 ingestion engine.
 
 Streams the Rust parser's output through PyArrow record batches into DuckDB,

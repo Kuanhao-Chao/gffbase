@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 12 — vectorized batched API tests.
 
 Covers `children_batched`, `parents_batched`, and `region_batched` in all

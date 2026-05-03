@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 17 — the "Big Four" mega-benchmark.
 
 Runs the same metrics across GENCODE, RefSeq, MANE, and CHESS:

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """``export_sqlite`` — write a legacy gffutils-format SQLite database from a
 gffbase DuckDB connection.
 

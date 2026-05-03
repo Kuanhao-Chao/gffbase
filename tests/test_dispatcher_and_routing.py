@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Explicit branch coverage for the smart dispatcher (cache vs dynamic CTE)
 and the spatial router (R-tree vs B-tree fallback)."""
 

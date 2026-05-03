@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Download the canonical human-genome annotation corpora used by
 ``benchmarks/06_mega.py``.
 
