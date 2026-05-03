@@ -10,8 +10,8 @@ title: GFFBase
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/your-org/gffbase/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-386%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-95.46%25-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
 [![Battle-tested](https://img.shields.io/badge/battle--tested-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#the-big-four-battle-tested-across-every-canonical-human-annotation)
 
 ---
@@ -162,6 +162,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 | Page | What's there |
 |---|---|
+| [Usage Gallery](usage_gallery.md) | Copy-pasteable snippets for every public API method |
 | [Performance](performance.md) | Big-Four numbers + the v0.1.0 ingest optimization story |
 | [Migration from gffutils](migration.md) | Drop-in compatibility + the one OLAP gotcha |
 | [Cookbooks](cookbooks/index.md) | GENCODE/Ensembl, RefSeq, MANE, ML workflows |
@@ -173,7 +174,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 ```bash
 pip install -e .[test]
-pytest                  # 386 passed, 2 skipped, 95.46% coverage
+pytest                  # 507 passed, 4 skipped, 98.01% coverage
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
