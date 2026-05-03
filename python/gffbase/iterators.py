@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """``DataIterator`` — legacy-compatible factory wrapping the new parser.
 
 Yields ``Feature`` objects (not raw ``ParsedFeature``) so downstream code

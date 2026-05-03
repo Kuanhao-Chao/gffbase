@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 2 — final tests targeting the specific uncovered branches identified
 in the per-module coverage report. Each test is deliberately scoped to a
 small set of lines so the diff is auditable.

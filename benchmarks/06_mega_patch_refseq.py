@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """One-shot patch: redo the RefSeq row of 06_mega.json after the
 RefSeq dedup fix landed in `python/gffbase/ingest.py` (NCBI emits
 multiple GFF3 rows that share an `ID=cds-…`; we now suffix duplicates

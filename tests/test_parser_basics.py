@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Basic correctness tests. Each one runs against both engines via the
 `engine` fixture in conftest.py.
 """

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 16 — NCBI GFF3 spec compliance torture tests.
 
 Each test feeds a hand-crafted malformed input to ``parse_bytes`` and

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """The Rust parser boundary — malformed and edge-case inputs."""
 
 from __future__ import annotations

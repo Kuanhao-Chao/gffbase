@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Pure-Python column-9 attribute parser. Shape mirrors the Rust implementation
 exactly: returns `(pairs, dialect_observation)` where `pairs` is a list of
 `(key, value, multivalue_index)`.

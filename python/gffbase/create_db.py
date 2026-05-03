@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """``create_db()`` — drop-in successor to ``gffutils.create_db``.
 
 Wraps ``gffbase.ingest.from_file`` with the legacy signature so downstream

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Relational query benchmark — children(level=None) over N random genes.
 
 gffbase's auto-routed dispatcher (closure cache for shallow hierarchies +

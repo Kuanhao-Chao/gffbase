@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Public parser entry points. Dispatches to the Rust extension when available,
 falls back to the pure-Python implementation otherwise. The two implementations
 are required by tests to produce identical output.

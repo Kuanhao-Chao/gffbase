@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+// ---------------------------------------------------------------------------
 //! Streaming GFF3/GTF record parser.
 //!
 //! Reads from a file (mmap'd plain text or gzip'd) or from an in-memory byte

@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Disk-footprint benchmark — gffbase .duckdb vs legacy .sqlite, decomposed
 by table where the engine exposes a stat view.
 """

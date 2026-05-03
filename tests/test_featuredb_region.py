@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 5 — `region()` smart routing tests.
 
 Both R-tree path and B-tree fallback must return identical results. The SQL

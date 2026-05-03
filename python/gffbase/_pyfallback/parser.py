@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Pure-Python streaming parser. Mirrors the Rust crate's behavior so it can
 serve as a correctness oracle and as a fallback when the native extension is
 unavailable.

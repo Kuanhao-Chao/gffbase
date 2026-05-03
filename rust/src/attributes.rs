@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+// ---------------------------------------------------------------------------
 //! Column-9 attribute parser. Hand-written state machine that handles:
 //!  - GFF3:   `key=val;key=val,val2`
 //!  - GTF:    `key "val"; key "val";`

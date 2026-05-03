@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Spatial query benchmark — gffbase R-tree vs legacy gffutils UCSC bin index.
 
 Generates N random region queries grounded in the actual feature span on each

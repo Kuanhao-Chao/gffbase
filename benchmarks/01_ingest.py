@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Head-to-head ingest: gffbase vs legacy gffutils on GENCODE v45.
 
 Each engine runs in a fresh subprocess so peak RSS measurements are clean.

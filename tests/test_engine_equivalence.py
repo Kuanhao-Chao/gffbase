@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Differential test: the Rust and Python engines must produce identical
 output for the same input. Skipped automatically if the Rust extension is
 not built.

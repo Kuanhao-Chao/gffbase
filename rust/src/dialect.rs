@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+// ---------------------------------------------------------------------------
 //! Dialect representation. Mirrors the `gffutils.constants.dialect` shape so
 //! Python code can consume it without translation.
 

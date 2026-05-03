@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """``GFFWriter`` — port of legacy ``gffutils.gffwriter.GFFWriter``."""
 
 from __future__ import annotations

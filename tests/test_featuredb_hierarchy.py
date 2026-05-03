@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 5 — hierarchy queries: closure cache + dynamic CTE fallback."""
 
 from __future__ import annotations

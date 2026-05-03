@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Shared benchmarking utilities.
 
 * `run_subprocess` — Popen + RSS sampler, returns merged dict.

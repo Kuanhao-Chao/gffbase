@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Helpers, dialect template, exceptions, and create_db kwargs."""
 
 from __future__ import annotations

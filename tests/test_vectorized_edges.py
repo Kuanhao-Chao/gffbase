@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Boundary tests for the vectorized API surface.
 
 * Empty input lists ⇒ empty PyArrow table with the documented schema.

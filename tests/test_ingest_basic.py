@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 4 integration: ingest GFF3 / GTF into DuckDB and verify the schema,
 the closure, and GTF synthesis. Runs against the auto-detected engine
 (prefers Rust if built; otherwise the pure-Python fallback).

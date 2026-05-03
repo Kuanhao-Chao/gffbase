@@ -1,3 +1,6 @@
+// ---------------------------------------------------------------------------
+// Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+// ---------------------------------------------------------------------------
 //! gffbase native core — PyO3 entry point.
 //!
 //! Exposes a single `parse_file(path, force_dialect_check=False, checklines=10)`

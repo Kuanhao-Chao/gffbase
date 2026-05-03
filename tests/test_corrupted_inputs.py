@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Exhaustive corruption suite — feeds the engine every flavor of
 malformed input we can dream up and verifies graceful failure.
 

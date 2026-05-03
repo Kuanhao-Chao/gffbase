@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Phase 5 — invariants from Phase 1 §3.9 (1-based inclusive coords,
 list-wrapped attrs, generator return types, dialect round-trip)."""
 

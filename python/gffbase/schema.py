@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """DDL for the gffbase DuckDB schema (Phase 2 §4.1) and post-load index/synthesis SQL.
 
 Centralized so the ingestion engine and tests share one source of truth.

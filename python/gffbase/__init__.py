@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """gffbase — modernized successor to gffutils.
 
 Phase 5: full drop-in public API surface (FeatureDB, Feature, create_db,

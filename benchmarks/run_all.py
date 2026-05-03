@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Orchestrator — runs all four benchmarks in order and aggregates their
 JSON outputs into `benchmarks/out/results.json`.
 

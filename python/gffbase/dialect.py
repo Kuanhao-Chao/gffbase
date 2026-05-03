@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------
+# Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# ---------------------------------------------------------------------------
 """Dialect template. Mirrors `gffutils.constants.dialect` so Phase 4's API
 layer can pass these dicts straight to backwards-compat consumers.
 """
