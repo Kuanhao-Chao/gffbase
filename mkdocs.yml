@@ -92,6 +92,7 @@ extra:
 
 nav:
   - Home: index.md
+  - Usage Gallery: usage_gallery.md
   - Performance: performance.md
   - Migration from gffutils: migration.md
   - Cookbooks:
