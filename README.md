@@ -3,8 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-386%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-95.46%25-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
 [![Battle-tested](https://img.shields.io/badge/battle--tested-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-the-big-four--battle-tested-across-every-canonical-human-annotation)
 
 ---
@@ -242,6 +242,7 @@ mkdocs serve            # http://localhost:8000
 
 | Page                                                                | What's there                                                              |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Usage Gallery](docs/usage_gallery.md)                              | Copy-pasteable snippets for every public API method                       |
 | [Performance comparison](PERFORMANCE_COMPARISON.md)                 | Big-Four head-to-head numbers + per-corpus root-cause analysis            |
 | [Migration guide for `gffutils` users](MIGRATION.md)                | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
 | [Cookbooks](docs/cookbooks/)                                        | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
@@ -253,7 +254,7 @@ mkdocs serve            # http://localhost:8000
 
 ```bash
 pip install -e .[test]
-pytest                  # 386 passed, 2 skipped, 95.46% coverage
+pytest                  # 507 passed, 4 skipped, 98.01% coverage
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
