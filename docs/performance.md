@@ -4,7 +4,7 @@ title: Performance Comparison
 
 ## v0.1.0 highlight — the GFF3 ingestion gap, reversed
 
-An earlier mega-bench surfaced an honest performance gap: while gffbase
+An earlier multi-corpus benchmark surfaced an honest performance gap: while gffbase
 crushed legacy gffutils on GTF ingest, it was **0.46×–0.87× *slower***
 on the three GFF3 corpora (RefSeq, MANE, CHESS), where
 legacy doesn't have to infer parent relationships and so its ingest
@@ -28,7 +28,7 @@ the project's internal architecture-audit notes.
 
 The detailed `PERFORMANCE_COMPARISON.md` content below was authored
 before this optimization landed and still reflects the older
-conservative numbers. Where the Big Four §0 table cites 1.15×–2.16×
+conservative numbers. Where the §0 headline table cites 1.15×–2.16×
 *legacy faster* on raw GFF3 ingest, the numbers above are the current
 state — gffbase is now faster than legacy on **every** ingest matchup.
 

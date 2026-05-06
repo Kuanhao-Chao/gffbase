@@ -94,8 +94,9 @@ database into a legacy `.sqlite` file when you need the old format.
 
 ## 2. What you gain immediately, no code changes
 
-The internal Big Four mega-bench, with the v0.1.0 GFF3 ingest optimizations
-applied — head-to-head against legacy `gffutils`:
+The comprehensive human-genome benchmark, with the v0.1.0 GFF3 ingest
+optimizations applied — head-to-head against legacy `gffutils` across
+GENCODE, RefSeq, MANE, and CHESS 3:
 
 | Corpus                  | Format | gffbase ingest | legacy ingest | speedup       | spatial qps (gffbase R-tree) | batched 5 k anchors |
 | ----------------------- | :----: | -------------: | ------------: | ------------: | ---------------------------: | ------------------: |
