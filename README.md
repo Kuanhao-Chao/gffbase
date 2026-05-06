@@ -1,8 +1,10 @@
 # GFFBase
 
-[![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
-[![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
+[![PyPI version](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/gffbase.svg)](https://pypi.org/project/gffbase/)
+[![Python versions](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-gffbase.khchao.com-blue.svg)](https://gffbase.khchao.com/)
 [![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen.svg)](#testing)
 [![Coverage](https://img.shields.io/badge/coverage-99.19%25-brightgreen.svg)](#testing)
 [![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus)
@@ -44,6 +46,80 @@ migrate by changing one import line.
 
 ---
 
+## 📦 Installation
+
+```bash
+pip install gffbase
+```
+
+Universal `abi3-py39` wheels — single binary per arch covers CPython
+3.9 → 3.13. No Rust toolchain required at install time.
+
+For source/dev installs (Rust ≥ 1.69 + maturin):
+
+```bash
+pip install -e .[dev]
+maturin develop --release
+```
+
+---
+
+## 🏃 Quick start — row-by-row (drop-in for `gffutils`)
+
+```python
+from gffbase import create_db
+
+# 1. Ingest a GTF/GFF3 in seconds (auto-detects format, gzipped OK).
+db = create_db("gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+               "gencode.duckdb", force=True)
+
+# 2. Walk a single gene's hierarchy.
+for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):
+    print(tx.id, tx.start, tx.end)
+
+# 3. Spatial overlap query — uses the per-seqid R-tree under the hood.
+for f in db.region("chr17:43044295-43125483", featuretype="exon"):
+    print(f)
+```
+
+If you're migrating from `gffutils`, change one line:
+
+```python
+import gffbase as gffutils    # one-line alias migration
+db = gffutils.create_db(...)  # everything else identical
+```
+
+(But please read the [Migration Guide](https://gffbase.khchao.com/migration/) first — it has
+**one** important note about ML loops.)
+
+---
+
+## 🤖 Quick start — vectorized for ML
+
+```python
+from gffbase import FeatureDB
+
+db = FeatureDB("gencode.duckdb")
+
+# Pull every exon for 50 000 transcripts — one set-based SQL query.
+exons = db.children_batched(
+    transcript_ids,                # iterable of 50 000 IDs
+    featuretype="exon",
+    format="arrow",                # "df" / "polars" also supported
+)
+# exons is a pyarrow.Table sharing memory with DuckDB. No copies.
+
+# Spatial: "for each ATAC-seq peak, find every overlapping CDS."
+peaks = [("chr1", 100_000, 110_000), ("chr1", 200_000, 210_000), ...]
+overlaps = db.region_batched(peaks, featuretype="CDS", format="arrow")
+```
+
+See the [Machine Learning Workflows
+Cookbook](https://gffbase.khchao.com/cookbooks/machine_learning_workflows/) for end-to-end
+pipelines with PyTorch and Hugging Face `datasets`.
+
+---
+
 ## ⚡ Comprehensive Human Genome Annotations — validated across every canonical corpus
 
 Validated head-to-head against legacy `gffutils` on the four canonical
@@ -60,7 +136,7 @@ its purest form:
 | **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    **21.6 s**  |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
 | **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    **53.6 s**  |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
 
-[^1]: Legacy `gffutils.create_db()` on GENCODE v49 GTF (6.07 M lines) hits the bench's safety-valve cap (75 min). The reported wall is a conservative 2× extrapolation — the canonical GENCODE v45 GTF (2.0 M lines, 3× smaller) ran uncapped at **3,582 s (59 min 42 s)** on the same hardware, so the v49 wall is well past 2 hours. See [Performance Comparison §"GTF Synthesis Advantage"](PERFORMANCE_COMPARISON.md#-the-gtf-synthesis-advantage--proven-by-a-same-release-head-to-head) for the formal cost model.
+[^1]: Legacy `gffutils.create_db()` on GENCODE v49 GTF (6.07 M lines) hits the bench's safety-valve cap (75 min). The reported wall is a conservative 2× extrapolation — the canonical GENCODE v45 GTF (2.0 M lines, 3× smaller) ran uncapped at **3,582 s (59 min 42 s)** on the same hardware, so the v49 wall is well past 2 hours. See [Performance Comparison §"GTF Synthesis Advantage"](https://gffbase.khchao.com/performance/#the-gtf-synthesis-advantage-proven-by-a-same-release-head-to-head) for the formal cost model.
 [^2]: Result of the v0.1.0 ingest-pipeline optimization — the same RefSeq corpus used to take 7 min 49 s before the GFF3 path was re-architected to stamp `seqid_y` and `bbox` inline during the Arrow batch INSERT.
 
 **The same biological release, ingested in two different formats, by
@@ -83,7 +159,7 @@ handled transparently — gffbase mirrors
 remap in the `duplicates` table. No config knobs to flip.
 
 📊 Full reproducible numbers + per-corpus root-cause analysis:
-[`PERFORMANCE_COMPARISON.md`](PERFORMANCE_COMPARISON.md). Re-run via
+[Performance Comparison](https://gffbase.khchao.com/performance/). Re-run via
 `python benchmarks/06_mega.py --legacy-timeout 900`.
 
 ---
@@ -137,80 +213,6 @@ zero-copy contract for spatial and parent workloads.
 
 ---
 
-## 📦 Installation
-
-```bash
-pip install gffbase
-```
-
-Universal `abi3-py39` wheels — single binary per arch covers CPython
-3.9 → 3.13. No Rust toolchain required at install time.
-
-For source/dev installs (Rust ≥ 1.69 + maturin):
-
-```bash
-pip install -e .[dev]
-maturin develop --release
-```
-
----
-
-## 🏃 Quick start — row-by-row (drop-in for `gffutils`)
-
-```python
-from gffbase import create_db
-
-# 1. Ingest a GTF/GFF3 in seconds (auto-detects format, gzipped OK).
-db = create_db("gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
-               "gencode.duckdb", force=True)
-
-# 2. Walk a single gene's hierarchy.
-for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):
-    print(tx.id, tx.start, tx.end)
-
-# 3. Spatial overlap query — uses the per-seqid R-tree under the hood.
-for f in db.region("chr17:43044295-43125483", featuretype="exon"):
-    print(f)
-```
-
-If you're migrating from `gffutils`, change one line:
-
-```python
-import gffbase as gffutils    # one-line alias migration
-db = gffutils.create_db(...)  # everything else identical
-```
-
-(But please read the [Migration Guide](MIGRATION.md) first — it has
-**one** important note about ML loops.)
-
----
-
-## 🤖 Quick start — vectorized for ML
-
-```python
-from gffbase import FeatureDB
-
-db = FeatureDB("gencode.duckdb")
-
-# Pull every exon for 50 000 transcripts — one set-based SQL query.
-exons = db.children_batched(
-    transcript_ids,                # iterable of 50 000 IDs
-    featuretype="exon",
-    format="arrow",                # "df" / "polars" also supported
-)
-# exons is a pyarrow.Table sharing memory with DuckDB. No copies.
-
-# Spatial: "for each ATAC-seq peak, find every overlapping CDS."
-peaks = [("chr1", 100_000, 110_000), ("chr1", 200_000, 210_000), ...]
-overlaps = db.region_batched(peaks, featuretype="CDS", format="arrow")
-```
-
-See the [Machine Learning Workflows
-Cookbook](docs/cookbooks/machine_learning_workflows.md) for end-to-end
-pipelines with PyTorch and Hugging Face `datasets`.
-
----
-
 ## ✨ What's inside
 
 - **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
@@ -235,20 +237,23 @@ pipelines with PyTorch and Hugging Face `datasets`.
 
 ## 📚 Documentation
 
-Full site (rendered with MkDocs Material) — build it locally:
+Full site rendered with MkDocs Material:
+**[https://gffbase.khchao.com/](https://gffbase.khchao.com/)**
+
+| Page                                                                                       | What's there                                                              |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [Usage Gallery](https://gffbase.khchao.com/usage_gallery/)                     | Copy-pasteable snippets for every public API method                       |
+| [Performance comparison](https://gffbase.khchao.com/performance/)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
+| [Migration guide for `gffutils` users](https://gffbase.khchao.com/migration/)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
+| [Cookbooks](https://gffbase.khchao.com/cookbooks/)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
+| [API reference](https://gffbase.khchao.com/api/)                               | Every public method, full signatures + docstrings                         |
+
+To build the docs locally:
 
 ```bash
 pip install -e .[docs]
 mkdocs serve            # http://localhost:8000
 ```
-
-| Page                                                                | What's there                                                              |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [Usage Gallery](docs/usage_gallery.md)                              | Copy-pasteable snippets for every public API method                       |
-| [Performance comparison](PERFORMANCE_COMPARISON.md)                 | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
-| [Migration guide for `gffutils` users](MIGRATION.md)                | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
-| [Cookbooks](docs/cookbooks/)                                        | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
-| [API reference](docs/api/)                                          | Every public method, full signatures + docstrings                         |
 
 ---
 
@@ -287,5 +292,27 @@ Apache License 2.0. See [`LICENSE`](LICENSE).
 
 ---
 
-**Citation:** if GFFBase helps your research, please cite the project at
-the [Releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
+## 📖 Citation
+
+If GFFBase contributes to your research, please cite it:
+
+```bibtex
+@software{chao_gffbase_2026,
+  author  = {Chao, Kuan-Hao},
+  title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
+             DuckDB-backed storage engine and zero-copy PyArrow interface},
+  year    = 2026,
+  version = {0.1.0},
+  url     = {https://github.com/Kuanhao-Chao/gffbase},
+}
+```
+
+Per-version DOIs and a `CITATION.cff` for GitHub's "Cite this
+repository" button are tracked on the
+[Releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
+
+---
+
+If GFFBase saves you a benchmark cycle or a pipeline rewrite, a ⭐ on
+[GitHub](https://github.com/Kuanhao-Chao/gffbase) is the easiest way
+to say so — and helps other genomics teams find the project.

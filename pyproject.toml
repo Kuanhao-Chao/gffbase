@@ -93,7 +93,7 @@ docs = [
 Homepage      = "https://github.com/Kuanhao-Chao/gffbase"
 Source        = "https://github.com/Kuanhao-Chao/gffbase"
 Issues        = "https://github.com/Kuanhao-Chao/gffbase/issues"
-Documentation = "https://kuanhao-chao.github.io/gffbase/"
+Documentation = "https://gffbase.khchao.com/"
 Changelog     = "https://github.com/Kuanhao-Chao/gffbase/releases"
 
 # ---------------------------------------------------------------------------
