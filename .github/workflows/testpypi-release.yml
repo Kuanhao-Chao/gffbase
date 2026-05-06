@@ -50,7 +50,9 @@ jobs:
           path: dist/*.whl
 
   # ------------------------------------------------------------------------
-  # macOS wheels — both Intel and Apple Silicon.
+  # macOS wheels — both Intel and Apple Silicon. GitHub deprecated the
+  # macos-13 (Intel) runner image, so x86_64 wheels are cross-compiled
+  # from the Apple Silicon runner via maturin-action's rustup target.
   # ------------------------------------------------------------------------
   macos:
     name: macOS ${{ matrix.target }}
@@ -58,7 +60,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-apple-darwin
-            runner: macos-13
+            runner: macos-latest
           - target: aarch64-apple-darwin
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
