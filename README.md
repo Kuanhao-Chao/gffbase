@@ -3,8 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-99.19%25-brightgreen.svg)](#testing)
 [![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus)
 
 ---
@@ -256,11 +256,28 @@ mkdocs serve            # http://localhost:8000
 
 ```bash
 pip install -e .[test]
-pytest                  # 507 passed, 4 skipped, 98.01% coverage
+pytest                  # 523 passed, 7 skipped, 99.19% coverage
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
 B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+
+---
+
+## 🤝 Contributing
+
+GFFBase welcomes pull requests, bug reports, and feature suggestions.
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide:
+
+- Rust + Python development setup (`maturin develop --release`)
+- Running the test suite + the 99 % coverage gate
+- Branch naming, Conventional Commits, the PR checklist
+
+The repo ships standard
+[issue templates](.github/ISSUE_TEMPLATE/) and a
+[PR template](.github/PULL_REQUEST_TEMPLATE.md) so new
+contributions land with the context maintainers need to triage them
+quickly.
 
 ---
 
@@ -271,4 +288,4 @@ Apache License 2.0. See [`LICENSE`](LICENSE).
 ---
 
 **Citation:** if GFFBase helps your research, please cite the project at
-the [Releases page](https://github.com/your-org/gffbase/releases).
+the [Releases page](https://github.com/Kuanhao-Chao/gffbase/releases).

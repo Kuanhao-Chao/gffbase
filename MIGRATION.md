@@ -246,5 +246,5 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
       identical.
 
 If anything breaks, please open an issue at
-<https://github.com/your-org/gffbase/issues> with a minimal
+<https://github.com/Kuanhao-Chao/gffbase/issues> with a minimal
 reproducer.

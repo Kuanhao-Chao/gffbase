@@ -1,8 +1,8 @@
 site_name: GFFBase
 site_description: Rust + DuckDB GFF3/GTF engine — 15× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
-site_url: https://your-org.github.io/gffbase/
-repo_url: https://github.com/your-org/gffbase
-repo_name: your-org/gffbase
+site_url: https://kuanhao-chao.github.io/gffbase/
+repo_url: https://github.com/Kuanhao-Chao/gffbase
+repo_name: Kuanhao-Chao/gffbase
 edit_uri: edit/main/docs/
 
 # `docs/` is the Markdown source root. Files outside that tree (README,
@@ -88,7 +88,7 @@ extra:
   generator: false
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-org/gffbase
+      link: https://github.com/Kuanhao-Chao/gffbase
 
 nav:
   - Home: index.md

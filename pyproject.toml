@@ -90,11 +90,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage      = "https://github.com/your-org/gffbase"
-Source        = "https://github.com/your-org/gffbase"
-Issues        = "https://github.com/your-org/gffbase/issues"
-Documentation = "https://your-org.github.io/gffbase/"
-Changelog     = "https://github.com/your-org/gffbase/releases"
+Homepage      = "https://github.com/Kuanhao-Chao/gffbase"
+Source        = "https://github.com/Kuanhao-Chao/gffbase"
+Issues        = "https://github.com/Kuanhao-Chao/gffbase/issues"
+Documentation = "https://kuanhao-chao.github.io/gffbase/"
+Changelog     = "https://github.com/Kuanhao-Chao/gffbase/releases"
 
 # ---------------------------------------------------------------------------
 # Build backend (maturin) — pip install . must Just Work end-to-end:

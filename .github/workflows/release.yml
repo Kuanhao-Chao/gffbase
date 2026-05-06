@@ -113,7 +113,7 @@ jobs:
   #
   # PyPI trusted-publisher setup (one-time, on PyPI's web UI):
   #   Project → Publishing → Add a new publisher
-  #     Owner:        your-org
+  #     Owner:        Kuanhao-Chao
   #     Repository:   gffbase
   #     Workflow:     release.yml
   #     Environment:  pypi
