@@ -1,0 +1,63 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+    # Skip the build for pushes that can't possibly affect the rendered
+    # site (e.g. test-only commits). Saves Actions minutes without
+    # breaking auto-sync of anything user-visible.
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'README.md'
+      - 'PERFORMANCE_COMPARISON.md'
+      - 'MIGRATION.md'
+      - 'python/gffbase/**'           # mkdocstrings reads docstrings here
+      - 'pyproject.toml'              # docs extras live here
+      - '.github/workflows/docs.yml'  # self-trigger on workflow edits
+  workflow_dispatch: {}
+
+# Never race two doc deploys against gh-pages.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+# mkdocs gh-deploy commits + pushes to the gh-pages branch.
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    name: Build & publish MkDocs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gh-deploy compares against the gh-pages branch's history;
+          # a shallow clone breaks that comparison.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # mkdocstrings imports the gffbase package to read docstrings;
+      # the package has a Rust extension, so cargo must be available
+      # at `pip install -e .` time. Without this, install would fall
+      # back to _pyfallback, but the native module is the production
+      # path and is what we want documented.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install gffbase + docs extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+
+      - name: Configure git author for gh-deploy
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy to gh-pages
+        run: mkdocs gh-deploy --force --clean --verbose

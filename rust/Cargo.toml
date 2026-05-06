@@ -10,8 +10,8 @@ description = "Rust core for GFFBase: high-performance GFF3/GTF parser exposed t
 readme = "../README.md"
 license = "Apache-2.0"
 authors = ["Kuan-Hao Chao <kuanhao.chao@gmail.com>"]
-repository = "https://github.com/your-org/gffbase"
-homepage = "https://github.com/your-org/gffbase"
+repository = "https://github.com/Kuanhao-Chao/gffbase"
+homepage = "https://github.com/Kuanhao-Chao/gffbase"
 keywords = ["gff", "gtf", "bioinformatics", "parser", "pyo3"]
 categories = ["science", "parser-implementations", "api-bindings"]
 

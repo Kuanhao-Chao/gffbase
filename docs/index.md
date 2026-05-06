@@ -9,9 +9,9 @@ title: GFFBase
 
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/your-org/gffbase/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/Kuanhao-Chao/gffbase/blob/main/LICENSE)
+[![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-99.19%25-brightgreen.svg)](#testing)
 [![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#comprehensive-human-genome-annotations-validated-across-every-canonical-corpus)
 
 ---
@@ -176,11 +176,19 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 ```bash
 pip install -e .[test]
-pytest                  # 507 passed, 4 skipped, 98.01% coverage
+pytest                  # 523 passed, 7 skipped, 99.19% coverage
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
 B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+
+## 🤝 Contributing
+
+Pull requests welcome. See
+[`CONTRIBUTING.md`](https://github.com/Kuanhao-Chao/gffbase/blob/main/CONTRIBUTING.md)
+for development setup (Rust ≥ 1.69, Python 3.9–3.13,
+`maturin develop --release`), the test-and-coverage gates, and the
+full PR checklist.
 
 ## 🪪 License
 
