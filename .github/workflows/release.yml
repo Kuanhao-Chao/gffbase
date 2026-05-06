@@ -2,7 +2,13 @@ name: Release wheels & PyPI publish
 
 on:
   push:
-    tags: ["v*"]
+    # Stable release tags only. Release-candidate tags (v*-rc.*) are
+    # routed to testpypi-release.yml for the TestPyPI dress rehearsal —
+    # without this exclusion, an RC tag would fire BOTH workflows and
+    # publish unvalidated wheels to PyPI production.
+    tags:
+      - 'v*'
+      - '!v*-rc.*'
   workflow_dispatch: {}
 
 # Concurrency: never race two release tags against each other.
