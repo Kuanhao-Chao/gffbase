@@ -1,16 +1,17 @@
 # GFFBase vs. Legacy `gffutils` — Performance Comparison
 
-This document is driven by the **Big Four** human-genome corpora
-(GENCODE, RefSeq, MANE, CHESS 3). Earlier sections (§1–§4b,
-GENCODE-only) are preserved as-is below the multi-corpus table
-because they explain the *architecture* in detail; the §0 table at
-the top is the canonical headline.
+This document is driven by a head-to-head benchmark across the
+**comprehensive set of canonical human-genome annotations** (GENCODE,
+RefSeq, MANE, CHESS 3). Earlier sections (§1–§4b, GENCODE-only) are
+preserved as-is below the multi-corpus table because they explain the
+*architecture* in detail; the §0 table at the top is the canonical
+headline.
 
 **Test environment:** macOS Darwin 25.3.0, Apple Silicon, Anaconda
 Python 3.13.5, DuckDB 1.5.2, PyArrow 19.0.0, gffutils 0.13, gffbase
 0.1.0. Wall times deterministic to ~10 % across reboots.
 
-**Provenance:** All Big-Four numbers come from
+**Provenance:** All comprehensive-human-genome numbers come from
 `benchmarks/out/06_mega.json`. The harness is
 `benchmarks/06_mega.py`; corpora are fetched by
 `benchmarks/download_corpora.py`. Legacy ingest carries a
@@ -22,7 +23,7 @@ quoted in §"GTF Synthesis Bottleneck" below.)
 
 ---
 
-## 0. Headline — The Big Four (with GENCODE v49 GTF / GFF3 head-to-head)
+## 0. Headline — Comprehensive Human Genome Annotations (with GENCODE v49 GTF / GFF3 head-to-head)
 
 GENCODE v49 ships in **both** GTF and GFF3 (same biological release,
 same features, different surface format). We benchmark both — the
@@ -102,7 +103,7 @@ choice.
 
 ## ⚙️ The GTF Synthesis Advantage — proven by a same-release head-to-head
 
-The Big Four table shows gffbase **≥ 32× faster** than legacy on
+The §0 headline table shows gffbase **≥ 32× faster** than legacy on
 GENCODE v49 GTF — but only **~1.5× faster** on the GFF3 version of
 **the same biological release**. Same genes. Same transcripts. Same
 exons. Different surface format. **That ≥ 20× spread is not noise.**
@@ -245,7 +246,7 @@ spatial-query and bulk-extraction workloads downstream.
 
 ---
 
-## 5. Big Four — per-corpus notes
+## 5. Comprehensive Human Genome Annotations — per-corpus notes
 
 ### 5.1 GENCODE v49 — the GTF flagship (and its GFF3 mirror)
 
@@ -684,7 +685,7 @@ true speedup is likely closer to 700–800×.
 ## 6. Reproducibility
 
 ```bash
-# Big Four mega-bench (recommended; all four corpora at once):
+# Comprehensive human-genome benchmark (recommended; all four corpora at once):
 cd /path/to/gffbase
 pip install -e .[bench]
 python benchmarks/download_corpora.py        # one-time, ~3 min, 113 MB total

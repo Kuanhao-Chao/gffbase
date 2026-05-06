@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [
-    { name = "GFFBase contributors" },
+    { name = "Kuan-Hao Chao", email = "kuanhao.chao@gmail.com" },
 ]
 # Bundle the license text in the wheel + sdist so PyPI displays it.
 license-files = ["LICENSE"]
@@ -33,7 +33,7 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
@@ -128,8 +128,8 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is part of the standard test invocation. The 98 % gate is
-# enforced via `--cov-fail-under=98`; CI re-asserts this with the same flag
+# Coverage is part of the standard test invocation. The 99 % gate is
+# enforced via `--cov-fail-under=99`; CI re-asserts this with the same flag
 # so a coverage drop fails the build before merge.
 addopts = """\
     -q
@@ -137,7 +137,7 @@ addopts = """\
     --cov-report=term-missing
     --cov-report=xml:coverage.xml
     --cov-report=html:htmlcov
-    --cov-fail-under=98
+    --cov-fail-under=99
 """
 filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",

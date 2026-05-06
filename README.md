@@ -2,10 +2,10 @@
 
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
 [![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
-[![Battle-tested](https://img.shields.io/badge/battle--tested-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-the-big-four--battle-tested-across-every-canonical-human-annotation)
+[![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus)
 
 ---
 
@@ -33,18 +33,18 @@ migrate by changing one import line.
    ~5 million correlated SQLite subqueries to *invent* the missing
    gene/transcript rows, while gffbase does the same work in two
    set-based DuckDB `GROUP BY` aggregations + one recursive CTE.
-   *([Proven by a same-release GTF/GFF3 head-to-head](#-the-big-four--battle-tested-across-every-canonical-human-annotation))*
+   *([Proven by a same-release GTF/GFF3 head-to-head](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus))*
 2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
    returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
    table in **1.16 s**. No Python `Feature` objects, ever. *([How?](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
-3. **🛡️  Battle-tested NCBI compliance** — Big Four
-   (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with **zero
-   strict-mode warnings**. RefSeq's split-CDS duplicate-ID
+3. **🛡️  Validated NCBI compliance** — all four canonical human-genome
+   annotations (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with
+   **zero strict-mode warnings**. RefSeq's split-CDS duplicate-ID
    convention is handled automatically.
 
 ---
 
-## ⚡ The Big Four — battle-tested across every canonical human annotation
+## ⚡ Comprehensive Human Genome Annotations — validated across every canonical corpus
 
 Validated head-to-head against legacy `gffutils` on the four canonical
 human-genome annotation sources, including the **GENCODE v49 GTF and
@@ -245,7 +245,7 @@ mkdocs serve            # http://localhost:8000
 | Page                                                                | What's there                                                              |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [Usage Gallery](docs/usage_gallery.md)                              | Copy-pasteable snippets for every public API method                       |
-| [Performance comparison](PERFORMANCE_COMPARISON.md)                 | Big-Four head-to-head numbers + per-corpus root-cause analysis            |
+| [Performance comparison](PERFORMANCE_COMPARISON.md)                 | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
 | [Migration guide for `gffutils` users](MIGRATION.md)                | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
 | [Cookbooks](docs/cookbooks/)                                        | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
 | [API reference](docs/api/)                                          | Every public method, full signatures + docstrings                         |
@@ -266,7 +266,7 @@ B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
 
 ## 🪪 License
 
-MIT. See [`LICENSE`](LICENSE).
+Apache License 2.0. See [`LICENSE`](LICENSE).
 
 ---
 

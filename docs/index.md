@@ -9,10 +9,10 @@ title: GFFBase
 
 [![PyPI](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/your-org/gffbase/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/your-org/gffbase/blob/main/LICENSE)
 [![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen.svg)](#testing)
 [![Coverage](https://img.shields.io/badge/coverage-98.01%25-brightgreen.svg)](#testing)
-[![Battle-tested](https://img.shields.io/badge/battle--tested-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#the-big-four-battle-tested-across-every-canonical-human-annotation)
+[![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#comprehensive-human-genome-annotations-validated-across-every-canonical-corpus)
 
 ---
 
@@ -41,17 +41,18 @@ on the corpus's actual hierarchy depth. The full `FeatureDB` /
 2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
    returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
    table in **1.16 s**. No Python `Feature` objects, ever.
-3. **🛡️  Battle-tested NCBI compliance** — Big Four
-   (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with **zero
-   strict-mode warnings**. RefSeq's split-CDS duplicate-ID
+3. **🛡️  Validated NCBI compliance** — all four canonical human-genome
+   annotations (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with
+   **zero strict-mode warnings**. RefSeq's split-CDS duplicate-ID
    convention is handled automatically.
 
 ---
 
-## ⚡ The Big Four — battle-tested across every canonical human annotation
+## ⚡ Comprehensive Human Genome Annotations — validated across every canonical corpus
 
-Internal mega-bench head-to-head against legacy gffutils, with the
-v0.1.0 GFF3 ingest pipeline optimizations applied:
+Head-to-head benchmark against legacy gffutils on the four canonical
+human-genome annotation sources, with the v0.1.0 GFF3 ingest pipeline
+optimizations applied:
 
 | Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | speedup       | spatial qps | batched (5 k anchors) |
 | ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
@@ -164,7 +165,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 | Page | What's there |
 |---|---|
 | [Usage Gallery](usage_gallery.md) | Copy-pasteable snippets for every public API method |
-| [Performance](performance.md) | Big-Four numbers + the v0.1.0 ingest optimization story |
+| [Performance](performance.md) | Head-to-head numbers across every canonical human-genome annotation + the v0.1.0 ingest optimization story |
 | [Migration from gffutils](migration.md) | Drop-in compatibility + the one OLAP gotcha |
 | [Cookbooks](cookbooks/index.md) | GENCODE/Ensembl, RefSeq, MANE, ML workflows |
 | [API Reference](api/index.md) | Every public method, full signatures + docstrings |
@@ -183,4 +184,4 @@ B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
 
 ## 🪪 License
 
-MIT.
+Apache License 2.0.

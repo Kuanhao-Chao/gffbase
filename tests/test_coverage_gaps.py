@@ -1,5 +1,18 @@
 # ---------------------------------------------------------------------------
 # Author: Kuan-Hao Chao <kuanhao.chao@gmail.com>
+# Copyright 2026 Kuan-Hao Chao
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # ---------------------------------------------------------------------------
 """Phase 2 — final tests targeting the specific uncovered branches identified
 in the per-module coverage report. Each test is deliberately scoped to a
@@ -508,3 +521,287 @@ def test_export_sqlite_force_overwrite_existing(tmp_path):
     export_sqlite(db.conn, str(out), force=True)
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 25 — final push to ≥99 % coverage. Each test below targets exactly
+# one residual uncovered line/branch identified in the per-module report.
+# ---------------------------------------------------------------------------
+
+
+def test_gffwriter_write_exon_children_with_real_child(tmp_path):
+    """`write_exon_children` line 90 fires only when the exon has at least
+    one child feature. Build a hierarchy where an exon parents a CDS so
+    the inner-loop body runs."""
+    src = tmp_path / "exon_with_child.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\trs\tgene\t1\t1000\t.\t+\t.\tID=g1\n"
+        "chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\trs\texon\t1\t500\t.\t+\t.\tID=ex1;Parent=t1\n"
+        # CDS parented to the EXON (unusual but valid hierarchy nesting).
+        "chr1\trs\tCDS\t100\t300\t.\t+\t0\tID=c1;Parent=ex1\n"
+    )
+    db = create_db(str(src), ":memory:")
+    out = tmp_path / "exon.gff3"
+    with GFFWriter(str(out)) as w:
+        w.write_exon_children(db, "ex1")
+    text = out.read_text()
+    # Both the exon AND its child CDS must appear → confirms the loop body ran.
+    assert "ex1" in text
+    assert "c1" in text
+
+
+def test_ingest_empty_flush_short_circuit(tmp_path):
+    """`ingest.flush_into` line 201 — early-return when the builder has no
+    rows. Trigger by ingesting a header-only GFF3 (no feature lines)."""
+    src = tmp_path / "headers_only.gff3"
+    src.write_text("##gff-version 3\n##source rs\n")
+    con, stats = from_file(str(src))
+    assert stats.n_features_raw == 0
+
+
+def test_ingest_mid_loop_batch_flush(tmp_path):
+    """`ingest.py` line 338 — mid-loop `flush_into` when the batch buffer
+    reaches `batch_size`. Force it with batch_size=2 over 5 features."""
+    src = tmp_path / "many.gff3"
+    lines = ["##gff-version 3\n"]
+    for i in range(5):
+        lines.append(
+            f"chr1\trs\tfeat\t{i*10+1}\t{i*10+5}\t.\t+\t.\tID=f{i}\n"
+        )
+    src.write_text("".join(lines))
+    con, stats = from_file(str(src), batch_size=2)
+    assert stats.n_features_raw == 5
+
+
+def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch):
+    """`ingest.py` line 459 — when `GFFUTILS2_THREADS` is set, the PRAGMA
+    threads SQL is issued."""
+    monkeypatch.setenv("GFFUTILS2_THREADS", "2")
+    src = tmp_path / "tiny.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n"
+    )
+    con, stats = from_file(str(src))
+    assert stats.n_features_raw == 1
+
+
+def test_finalize_rtree_with_empty_seqid_to_y_skips_seqid_map():
+    """`ingest.py` branch 541→550 — when `seqid_to_y` is empty, the
+    seqid_map population is skipped and we go straight to the
+    CREATE INDEX. Without the spatial extension this still returns False
+    (no R-tree index can be built), but the *empty-dict* branch is what
+    we're after, not a successful index build."""
+    con = duckdb.connect(":memory:")
+    from gffbase.schema import DDL
+    con.execute(DDL)
+    # Empty dict → goes through the (skipped) seqid_map block, then attempts
+    # CREATE INDEX, which fails without spatial. The early-skip branch is
+    # exercised regardless.
+    result = _finalize_rtree(con, {})
+    assert result is False
+
+
+def test_ingest_gff3_row_without_id_falls_through_loop(tmp_path):
+    """`ingest.py` branches 246→250 / 247→246 — GFF3 row whose attrs
+    don't contain `ID=` (only Parent=) must fall through `_derive_id`'s
+    inner loop without finding a match. Synthetic ID is then assigned."""
+    src = tmp_path / "no_id.gff3"
+    # First row has ID=g1; second row has Parent only — its derive_id
+    # runs `for k,v,_ in pairs` and never returns inside the loop.
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\trs\tgene\t1\t100\t.\t+\t.\tID=g1\n"
+        "chr1\trs\texon\t1\t100\t.\t+\t.\tParent=g1;biotype=protein_coding\n"
+    )
+    con, stats = from_file(str(src))
+    # The exon got synthesized as `exon_<n>` because no ID was found.
+    rows = con.execute(
+        "SELECT id FROM features WHERE featuretype = 'exon'"
+    ).fetchall()
+    assert any(r[0].startswith("exon_") for r in rows)
+
+
+def test_iterator_transform_returns_feature_replaces_original():
+    """`iterators.py` branch 79→81 (True path) — when transform returns a
+    non-None, non-False value, that value REPLACES the original feature."""
+    from gffbase import DataIterator
+    sentinel = Feature(
+        seqid="chrREPLACED", source=".", featuretype=".",
+        start=1, end=2, attributes={"ID": "replaced"},
+        dialect={"fmt": "gff3"},
+    )
+
+    def replace_with_sentinel(_feat):
+        return sentinel
+
+    it = DataIterator(
+        str(DATA / "hierarchy.gff3"),
+        transform=replace_with_sentinel,
+    )
+    feats = list(it)
+    assert all(f.seqid == "chrREPLACED" for f in feats)
+
+
+def test_iterator_transform_returns_none_keeps_original():
+    """`iterators.py` branch 79→81 (False path) — transform returning
+    `None` means "no opinion": keep the original feature unchanged."""
+    from gffbase import DataIterator
+
+    def no_op_transform(_feat):
+        return None
+
+    it = DataIterator(
+        str(DATA / "hierarchy.gff3"),
+        transform=no_op_transform,
+    )
+    feats = list(it)
+    # Original chr1 features are returned unmodified — the transform
+    # returning None must NOT replace them with a sentinel.
+    assert len(feats) > 0
+    assert all(f.seqid == "chr1" for f in feats)
+
+
+def test_region_string_with_trailing_colon_no_coords():
+    """`interface.py` line 447 — `region("chr1:")` (no `-` after the colon)
+    falls through the dash check and returns (chrom, None, None)."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    seqid, s, e = db._normalize_region_args("chr1:", None, None, None)
+    assert (seqid, s, e) == ("chr1", None, None)
+
+
+def test_region_batched_unregister_failure_is_swallowed():
+    """`interface.py` lines 572-573 — when `conn.unregister` raises during
+    cleanup, the exception is swallowed so the materialized result is
+    still returned to the caller."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    real = db.conn
+    fail_count = {"n": 0}
+
+    class _FlakyUnregisterProxy:
+        def __init__(self, inner):
+            self._inner = inner
+        def unregister(self, name):
+            if name == "__staging_regions":
+                fail_count["n"] += 1
+                raise RuntimeError("simulated unregister failure")
+            return self._inner.unregister(name)
+        def __getattr__(self, attr):
+            return getattr(self._inner, attr)
+
+    db.conn = _FlakyUnregisterProxy(real)
+    try:
+        out = db.region_batched([("chr1", 100, 200)], format="arrow")
+    finally:
+        db.conn = real
+    assert out is not None
+    assert fail_count["n"] >= 1
+
+
+def test_order_clause_qualified_length_branch():
+    """`interface.py` line 1047 — `order_by="length"` produces an
+    `(end - start)` expression in batched paths."""
+    out = FeatureDB._order_clause_qualified("length", reverse=False, qualifier="f")
+    assert "end" in out and "start" in out
+    assert out.endswith("ASC")
+
+
+def test_order_clause_qualified_custom_expression_branch():
+    """`interface.py` line 1054 — an order_by string outside the known
+    column set is passed through verbatim (escape hatch for power users)."""
+    out = FeatureDB._order_clause_qualified(
+        "f.seqid, f.start", reverse=True, qualifier="f"
+    )
+    assert "f.seqid, f.start" in out
+    assert out.endswith("DESC")
+
+
+def test_interfeatures_with_merge_attributes_true():
+    """`interface.py` branch at 1206 (`if merge_attributes`) — exercise
+    the True path so attribute-merging executes."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    feats = sorted(db.children("t1", featuretype="exon"),
+                   key=lambda f: f.start)
+    out = list(db.interfeatures(feats, merge_attributes=True))
+    assert all(f.featuretype == "interfeature" for f in out)
+
+
+def test_interfeatures_with_merge_attributes_false():
+    """`interface.py` branch 1206→1213 (False path) — when
+    `merge_attributes=False`, the per-attr accumulation block is
+    skipped entirely."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    feats = sorted(db.children("t1", featuretype="exon"),
+                   key=lambda f: f.start)
+    out = list(db.interfeatures(feats, merge_attributes=False))
+    # The yielded interfeature has no inherited attributes when merging
+    # is disabled — confirms the accumulator block was skipped.
+    assert all(f.featuretype == "interfeature" for f in out)
+    assert all(f.attributes == {} for f in out)
+
+
+def test_merge_yields_final_accumulator_block():
+    """`interface.py` branch 1251→exit — the merge loop's final flush
+    block (`if accum is not None: yield accum`) fires whenever the input
+    has at least one feature. With a non-empty list we MUST receive at
+    least one yielded merged Feature."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    exons = list(db.children("t1", featuretype="exon"))
+    assert len(exons) > 0
+    out = list(db.merge(exons))
+    assert len(out) >= 1
+
+
+def test_children_bp_skips_features_with_null_coords(monkeypatch):
+    """`interface.py` branch 1334→1333 — the `if k.start is not None and
+    k.end is not None:` guard. Inject a Feature with null start so the
+    skip path runs."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    null_feat = Feature(
+        seqid="chr1", source="x", featuretype="exon",
+        start=None, end=None, attributes={"ID": "null1"},
+        dialect={"fmt": "gff3"},
+    )
+    real_children = db.children
+    def fake_children(*a, **kw):
+        return [null_feat] + list(real_children(*a, **kw))
+    monkeypatch.setattr(db, "children", fake_children)
+    # `g1` has 3 exons: (100-200), (500-600), (100-300) → 101+101+201 = 403 bp.
+    # The injected null-start feature must be skipped (the branch we want),
+    # not crash with TypeError on (None - None + 1).
+    bp = db.children_bp("g1", child_featuretype="exon")
+    assert bp == 403
+
+
+# ---------------------------------------------------------------------------
+# Optional polars paths — skipped if polars isn't installed.
+# ---------------------------------------------------------------------------
+
+
+def test_format_polars_happy_path():
+    """`interface.py` line 813 — `format="polars"` non-empty path."""
+    pytest.importorskip("polars")
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    out = db.children_batched(["g1"], format="polars")
+    # `out` is a polars.DataFrame with at least the gene's descendants.
+    assert out.shape[0] > 0
+
+
+def test_format_polars_empty_batched_path():
+    """`interface.py` lines 843-847 — `format="polars"` empty input path."""
+    pl = pytest.importorskip("polars")
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    out = db.children_batched([], format="polars")
+    assert isinstance(out, pl.DataFrame)
+    assert out.shape[0] == 0
+
+
+def test_format_polars_empty_region_path():
+    """`interface.py` lines 600-604 — empty `region_batched(format='polars')`."""
+    pl = pytest.importorskip("polars")
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    out = db.region_batched([], format="polars")
+    assert isinstance(out, pl.DataFrame)
+    assert out.shape[0] == 0
