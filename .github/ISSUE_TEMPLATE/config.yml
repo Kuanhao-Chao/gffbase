@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / "How do I…?"
+    url: https://github.com/Kuanhao-Chao/gffbase/discussions
+    about: For usage questions and design conversations, please open a Discussion instead of an Issue.
+  - name: Migration help (from gffutils)
+    url: https://github.com/Kuanhao-Chao/gffbase/blob/main/MIGRATION.md
+    about: The Migration Guide covers the common drop-in compatibility questions and the one OLAP/OLTP gotcha.
+  - name: Performance / benchmark questions
+    url: https://github.com/Kuanhao-Chao/gffbase/blob/main/PERFORMANCE_COMPARISON.md
+    about: The Performance Comparison document has the full multi-corpus head-to-head numbers and per-corpus root-cause analysis.
