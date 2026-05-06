@@ -133,7 +133,8 @@ jobs:
       name: pypi
       url: https://pypi.org/p/gffbase
     permissions:
-      id-token: write
+      id-token: write   # OIDC claim → PyPI Trusted Publisher
+      contents: write   # softprops/action-gh-release attaches binaries to the GitHub Release
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -145,6 +146,23 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          verbose: true
           # If the env-pinned PyPI URL ever needs to be overridden (TestPyPI,
           # mirror), uncomment and set repository-url: …
           # repository-url: https://test.pypi.org/legacy/
+
+      # ------------------------------------------------------------------
+      # Mirror the same artifacts onto the GitHub Release.
+      # Matches the existing Draft Release (created from
+      # RELEASE_NOTES_v0.1.0.md in the GitHub UI) by tag_name. `draft: true`
+      # keeps it as a draft after the upload so the maintainer eyeballs the
+      # attached binaries before clicking "Publish release" themselves.
+      # ------------------------------------------------------------------
+      - name: Attach artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          fail_on_unmatched_files: true
+          draft: true
