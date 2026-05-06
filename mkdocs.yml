@@ -1,6 +1,6 @@
 site_name: GFFBase
 site_description: Rust + DuckDB GFF3/GTF engine — 15× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
-site_url: https://kuanhao-chao.github.io/gffbase/
+site_url: https://gffbase.khchao.com/
 repo_url: https://github.com/Kuanhao-Chao/gffbase
 repo_name: Kuanhao-Chao/gffbase
 edit_uri: edit/main/docs/
