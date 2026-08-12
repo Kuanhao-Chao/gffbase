@@ -26,6 +26,8 @@ from gffbase.exceptions import (
     DuplicateIDError,
     EmptyInputError,
     FeatureNotFoundError,
+)
+from gffbase.exceptions import (
     GFFFormatError as _PyGFFFormatError,
 )
 
@@ -37,15 +39,14 @@ try:  # pragma: no cover — import-time branch
     from gffbase._native import GFFFormatError  # type: ignore[attr-defined]
 except ImportError:
     GFFFormatError = _PyGFFFormatError  # type: ignore[assignment]
-from gffbase.feature import Feature, ParsedFeature
-from gffbase.parser import parse_gff, parse_bytes, detect_dialect, native_available
-from gffbase import ingest
-from gffbase import merge_criteria
-from gffbase.helpers import example_filename
-from gffbase.gffwriter import GFFWriter
-from gffbase.iterators import DataIterator
-from gffbase.interface import FeatureDB
+from gffbase import ingest, merge_criteria
 from gffbase.create_db import create_db
+from gffbase.feature import Feature, ParsedFeature
+from gffbase.gffwriter import GFFWriter
+from gffbase.helpers import example_filename
+from gffbase.interface import FeatureDB
+from gffbase.iterators import DataIterator
+from gffbase.parser import detect_dialect, native_available, parse_bytes, parse_gff
 from gffbase.sqlite_export import export_sqlite
 
 __all__ = [
@@ -73,4 +74,4 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

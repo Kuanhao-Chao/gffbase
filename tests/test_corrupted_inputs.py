@@ -34,12 +34,8 @@ The Rust + Python parser engines are exercised in parallel via the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
 from gffbase import GFFFormatError, create_db, parse_bytes
-
 
 # ---------------------------------------------------------------------------
 # 1. Circular dependencies
@@ -65,19 +61,14 @@ def test_gff3_circular_parent_chain_terminates(tmp_path):
     )
     db = create_db(str(src), str(tmp_path / "out.duckdb"), force=True)
     # Edges materialized cleanly — both directions present.
-    edges = sorted(
-        (r[0], r[1]) for r in db.execute(
-            "SELECT parent, child FROM edges"
-        ).fetchall()
-    )
+    edges = sorted((r[0], r[1]) for r in db.execute("SELECT parent, child FROM edges").fetchall())
     assert ("A", "B") in edges
     assert ("B", "A") in edges
     assert ("A", "e1") in edges
     # Closure terminated (didn't hang) and contains both A and B as
     # ancestors of e1.
     rows = db.execute(
-        "SELECT DISTINCT ancestor FROM closure WHERE descendant = 'e1' "
-        "ORDER BY ancestor"
+        "SELECT DISTINCT ancestor FROM closure WHERE descendant = 'e1' ORDER BY ancestor"
     ).fetchall()
     ancestors = {r[0] for r in rows}
     assert "A" in ancestors and "B" in ancestors
@@ -90,10 +81,7 @@ def test_gff3_self_parent_doesnt_explode(tmp_path):
     """Feature listing itself as its own Parent. The closure CTE's
     depth bound prevents an infinite walk."""
     src = tmp_path / "self_parent.gff3"
-    src.write_text(
-        "##gff-version 3\n"
-        "chr1\trs\tgene\t1\t100\t.\t+\t.\tID=loop;Parent=loop\n"
-    )
+    src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t100\t.\t+\t.\tID=loop;Parent=loop\n")
     db = create_db(str(src), str(tmp_path / "self.duckdb"), force=True)
     n_closure = db.execute("SELECT COUNT(*) FROM closure").fetchone()[0]
     # Bounded — finite number of (loop, loop, k) rows up to max_depth.
@@ -119,9 +107,7 @@ def test_orphan_parent_reference_does_not_crash(tmp_path):
     )
     db = create_db(str(src), str(tmp_path / "orphan.duckdb"), force=True)
     # Edge to phantom is recorded.
-    edges = {(r[0], r[1]) for r in db.execute(
-        "SELECT parent, child FROM edges"
-    ).fetchall()}
+    edges = {(r[0], r[1]) for r in db.execute("SELECT parent, child FROM edges").fetchall()}
     assert ("phantom_gene", "e1") in edges
     # children() of the phantom walks the edge we recorded — so it
     # returns the orphan exon. That's correct: the user can use the
@@ -131,6 +117,7 @@ def test_orphan_parent_reference_does_not_crash(tmp_path):
     assert "e1" in phantom_children
     # But the phantom itself is NOT a queryable feature (no row).
     from gffbase.exceptions import FeatureNotFoundError
+
     with pytest.raises(FeatureNotFoundError):
         db["phantom_gene"]
     # The orphan exon itself is still present and queryable directly.
@@ -163,10 +150,7 @@ def test_orphan_doesnt_break_real_hierarchy(tmp_path):
 
 
 def test_negative_start_strict_with_line_no(engine):
-    bad = (
-        b"chr1\trs\texon\t100\t200\t.\t+\t.\tID=ok\n"
-        b"chr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
-    )
+    bad = b"chr1\trs\texon\t100\t200\t.\t+\t.\tID=ok\nchr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
     with pytest.raises(GFFFormatError) as excinfo:
         list(parse_bytes(bad, engine=engine))
     assert excinfo.value.line_no == 2
@@ -209,10 +193,7 @@ def test_oob_coords_non_strict_drops_line(engine):
     records = list(it)
     ids = [r.attributes_pairs[0][1] for r in records]
     assert ids == ["ok", "ok2"]
-    assert any(
-        w["line_no"] == 2 and w["kind"] == "InvalidCoordinate"
-        for w in it.warnings
-    )
+    assert any(w["line_no"] == 2 and w["kind"] == "InvalidCoordinate" for w in it.warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -227,14 +208,11 @@ def test_mixed_crlf_lf_line_endings(engine):
     mixed = (
         b"##gff-version 3\r\n"
         b"chr1\trs\texon\t1\t100\t.\t+\t.\tID=a\r\n"
-        b"chr1\trs\texon\t200\t300\t.\t+\t.\tID=b\n"     # LF
-        b"chr1\trs\texon\t400\t500\t.\t+\t.\tID=c\r\n"   # back to CRLF
+        b"chr1\trs\texon\t200\t300\t.\t+\t.\tID=b\n"  # LF
+        b"chr1\trs\texon\t400\t500\t.\t+\t.\tID=c\r\n"  # back to CRLF
     )
     records = list(parse_bytes(mixed, engine=engine))
-    ids = [
-        next(v for k, v, _ in r.attributes_pairs if k == "ID")
-        for r in records
-    ]
+    ids = [next(v for k, v, _ in r.attributes_pairs if k == "ID") for r in records]
     assert ids == ["a", "b", "c"]
 
 
@@ -246,10 +224,7 @@ def test_pure_crlf_file(engine):
         b"chr1\trs\texon\t200\t300\t.\t+\t.\tID=just_b\r\n"
     )
     records = list(parse_bytes(crlf, engine=engine))
-    ids = [
-        next(v for k, v, _ in r.attributes_pairs if k == "ID")
-        for r in records
-    ]
+    ids = [next(v for k, v, _ in r.attributes_pairs if k == "ID") for r in records]
     # If the parser leaked the \r into the attribute, this would be
     # 'just_a\r' — assert the bare value.
     assert ids == ["just_a", "just_b"]
@@ -270,10 +245,7 @@ def test_utf8_bom_first_line(engine):
     # line is treated as a parser warning + the second line still
     # parses.  What we *don't* accept is a hard crash.
     records = list(parse_bytes(bom, engine=engine, strict=False))
-    assert any(
-        any(k == "ID" and v == "x" for k, v, _ in r.attributes_pairs)
-        for r in records
-    )
+    assert any(any(k == "ID" and v == "x" for k, v, _ in r.attributes_pairs) for r in records)
 
 
 def test_latin1_garbage_in_attribute_value_doesnt_crash(engine):
@@ -282,9 +254,7 @@ def test_latin1_garbage_in_attribute_value_doesnt_crash(engine):
     yield the record (lossy or strict-decoded depending on engine) or
     surface a warning. The exact handling is engine-dependent — we
     only assert *no crash*."""
-    latin1 = (
-        b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=x;Note=caf\xe9_signal\n"
-    )
+    latin1 = b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=x;Note=caf\xe9_signal\n"
     try:
         records = list(parse_bytes(latin1, engine=engine, strict=False))
     except Exception as e:  # pragma: no cover - defense-in-depth
@@ -330,18 +300,15 @@ def test_multi_corruption_line_numbers_preserved(engine):
     list must report each one with the correct ``line_no`` so users
     can grep their original file."""
     src = (
-        b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok1\n"        # line 1, valid
-        b"chr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"       # line 2, bad coord
-        b"chr1\trs\texon\t1\t10\t.\t@\t.\tID=str\n"        # line 3, bad strand
-        b"chr1\trs\texon\t100\t200\t.\t+\t.\tID=ok2\n"     # line 4, valid
-        b"chr1\trs\t\t1\t10\t.\t+\t.\tID=noft\n"           # line 5, empty ft
+        b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok1\n"  # line 1, valid
+        b"chr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"  # line 2, bad coord
+        b"chr1\trs\texon\t1\t10\t.\t@\t.\tID=str\n"  # line 3, bad strand
+        b"chr1\trs\texon\t100\t200\t.\t+\t.\tID=ok2\n"  # line 4, valid
+        b"chr1\trs\t\t1\t10\t.\t+\t.\tID=noft\n"  # line 5, empty ft
     )
     it = parse_bytes(src, strict=False, engine=engine)
     records = list(it)
-    valid_ids = [
-        next(v for k, v, _ in r.attributes_pairs if k == "ID")
-        for r in records
-    ]
+    valid_ids = [next(v for k, v, _ in r.attributes_pairs if k == "ID") for r in records]
     assert valid_ids == ["ok1", "ok2"]
     warning_lines = sorted(w["line_no"] for w in it.warnings)
     assert warning_lines == [2, 3, 5]
@@ -361,7 +328,7 @@ def test_truncated_partial_last_line_strict(engine):
     on the last line). Strict mode raises with the exact line number."""
     bad = (
         b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\n"
-        b"chr1\trs\texon\t100\t200"   # truncated; only 5 columns
+        b"chr1\trs\texon\t100\t200"  # truncated; only 5 columns
     )
     with pytest.raises(GFFFormatError) as excinfo:
         list(parse_bytes(bad, engine=engine))
@@ -370,10 +337,7 @@ def test_truncated_partial_last_line_strict(engine):
 
 
 def test_truncated_partial_last_line_non_strict(engine):
-    bad = (
-        b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\n"
-        b"chr1\trs\texon\t100\t200"
-    )
+    bad = b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\nchr1\trs\texon\t100\t200"
     it = parse_bytes(bad, strict=False, engine=engine)
     records = list(it)
     assert len(records) == 1
@@ -417,8 +381,7 @@ def test_create_db_strict_default_raises_on_bad_line(tmp_path):
     exact line number."""
     src = tmp_path / "bad.gff3"
     src.write_text(
-        "chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\n"
-        "chr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
+        "chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\nchr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
     )
     with pytest.raises(GFFFormatError) as excinfo:
         create_db(str(src), str(tmp_path / "out.duckdb"), force=True)

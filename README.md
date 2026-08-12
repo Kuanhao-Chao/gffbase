@@ -5,9 +5,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-gffbase.khchao.com-blue.svg)](https://gffbase.khchao.com/)
-[![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-99.19%25-brightgreen.svg)](#testing)
-[![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus)
+[![CI](https://github.com/Kuanhao-Chao/gffbase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kuanhao-Chao/gffbase/actions/workflows/ci.yml)
 
 ---
 
@@ -260,9 +258,15 @@ mkdocs serve            # http://localhost:8000
 ## 🧪 Testing
 
 ```bash
-pip install -e .[test]
-pytest                  # 523 passed, 7 skipped, 99.19% coverage
+pip install -e '.[test,all]'
+pytest                                     # 530 passed
+pytest --cov=gffbase --cov-report=term     # coverage report
 ```
+
+All 530 tests pass with the compiled extension built and the DuckDB spatial
+extension available. Without them, the `native` and `rtree` cells skip rather
+than fail — CI runs dedicated jobs where a missing capability is an error, so
+those paths cannot silently go unexercised.
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
 B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
@@ -302,13 +306,14 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.1.0},
+  version = {0.1.1},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```
 
-Per-version DOIs and a `CITATION.cff` for GitHub's "Cite this
-repository" button are tracked on the
+The repository also ships a [`CITATION.cff`](CITATION.cff), so GitHub's
+"Cite this repository" button produces an up-to-date reference. Per-version
+DOIs are tracked on the
 [Releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
 
 ---

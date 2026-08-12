@@ -36,12 +36,11 @@ sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import OUT
 
-
 STAGES = [
-    ("01_ingest",     "01_ingest.py"),
-    ("02_spatial",    "02_spatial.py"),
+    ("01_ingest", "01_ingest.py"),
+    ("02_spatial", "02_spatial.py"),
     ("03_relational", "03_relational.py"),
-    ("04_disk",       "04_disk.py"),
+    ("04_disk", "04_disk.py"),
 ]
 
 
@@ -53,16 +52,21 @@ def run_stage(script_relpath: str, extra_args: list[str]) -> int:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--reuse-cached", action="store_true",
-                    help="Reuse Phase 6 cached legacy ingest numbers + DBs")
+    ap.add_argument(
+        "--reuse-cached",
+        action="store_true",
+        help="Reuse Phase 6 cached legacy ingest numbers + DBs",
+    )
     ap.add_argument("--n-spatial", type=int, default=5000)
     ap.add_argument("--n-relational", type=int, default=500)
     ap.add_argument("--legacy-timeout", type=int, default=7200)
     args = ap.parse_args()
 
-    rc = run_stage("01_ingest.py",
-                   (["--reuse-cached"] if args.reuse_cached else [])
-                   + ["--legacy-timeout", str(args.legacy_timeout)])
+    rc = run_stage(
+        "01_ingest.py",
+        (["--reuse-cached"] if args.reuse_cached else [])
+        + ["--legacy-timeout", str(args.legacy_timeout)],
+    )
     if rc != 0:
         sys.exit(f"01_ingest.py exited {rc}")
 

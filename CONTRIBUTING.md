@@ -118,19 +118,19 @@ pip install polars pyfaidx gffutils
 ## 4. Running the test suite
 
 GFFBase's correctness story rests on two things: the unit tests
-(currently 523 passing at ≥ 99 % branch coverage) and the
-differential-correctness checks against legacy `gffutils` in the
-benchmark harness.
+(currently 530, all passing) and the differential-correctness checks against
+legacy `gffutils` in the benchmark harness.
 
 ### 4.1 Full unit suite + coverage
 
 ```bash
-pytest
+pytest                                  # tests only
+pytest --cov=gffbase --cov-report=term  # tests + coverage
 ```
 
-This runs the complete suite and enforces the coverage gate
-(`--cov-fail-under=99`, configured in `pyproject.toml`). Any drop
-below 99 % fails CI.
+Coverage is **not** part of the default invocation — a bare `pytest` reports on
+tests, not on coverage. CI applies the gate explicitly with
+`--cov-fail-under`; see `.github/workflows/ci.yml` for the enforced threshold.
 
 The default invocation also writes:
 - `coverage.xml` — for codecov / Codacy / your CI's coverage parser.
@@ -254,8 +254,14 @@ For multi-paragraph rationale, use the body of the commit — explain
 
 - [ ] **Tests.** New behaviour: a new test. Bug fix: a regression
       test that fails on `main` and passes on your branch.
-- [ ] **Coverage held at ≥ 99 %.** Run `pytest` locally and confirm.
-- [ ] **`ruff check` clean.** No new lint warnings.
+- [ ] **Coverage not regressed.** Run
+      `pytest --cov=gffbase --cov-report=term` and confirm.
+- [ ] **`ruff check` and `ruff format --check` clean.** No new lint warnings
+      and no formatting drift.
+- [ ] **Rust clean** if you touched `rust/`:
+      `cargo fmt --manifest-path rust/Cargo.toml --all -- --check`,
+      `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings`,
+      and `cargo test --manifest-path rust/Cargo.toml`.
 - [ ] **Documentation updated** if you touched a public API: the
       docstring, the migration guide, the cookbook, or the API
       reference.
@@ -299,12 +305,11 @@ If you're trying to find your way around:
 - `python/gffbase/schema.py` — the 7-table DuckDB schema (one source
   of truth).
 - `tests/conftest.py` — every shared fixture.
-- `tests/test_coverage_gaps.py` — the targeted edge-case suite that
-  guards the 99 % gate.
+- `tests/test_coverage_gaps.py` — the targeted edge-case suite.
 
-The `PHASE*_*_SUMMARY.md` files in `plans/` document the design
-decisions phase-by-phase — useful when you want to know *why*
-something works the way it does, not just what the current code says.
+`CHANGELOG.md` records what changed in each release and why — useful when you
+want to know *why* something works the way it does, not just what the current
+code says.
 
 ---
 

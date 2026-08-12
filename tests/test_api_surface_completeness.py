@@ -25,7 +25,6 @@ fallbacks.
 from __future__ import annotations
 
 import pytest
-
 from gffbase import Feature, FeatureDB, create_db
 
 
@@ -50,36 +49,41 @@ def db(tmp_path):
 
 
 def test_feature_chrom_alias_returns_seqid():
-    f = Feature(seqid="chr7", source="src", featuretype="exon",
-                start=1, end=10, strand="+", frame=".")
+    f = Feature(
+        seqid="chr7", source="src", featuretype="exon", start=1, end=10, strand="+", frame="."
+    )
     assert f.chrom == "chr7"
     assert f.chrom == f.seqid
 
 
 def test_feature_stop_alias_returns_end():
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=42, strand="+", frame=".")
+    f = Feature(
+        seqid="chr1", source="src", featuretype="exon", start=1, end=42, strand="+", frame="."
+    )
     assert f.stop == 42
     assert f.stop == f.end
 
 
 def test_feature_chrom_setter_writes_seqid():
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=10, strand="+", frame=".")
+    f = Feature(
+        seqid="chr1", source="src", featuretype="exon", start=1, end=10, strand="+", frame="."
+    )
     f.chrom = "chrM"
     assert f.seqid == "chrM"
 
 
 def test_feature_stop_setter_writes_end():
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=10, strand="+", frame=".")
+    f = Feature(
+        seqid="chr1", source="src", featuretype="exon", start=1, end=10, strand="+", frame="."
+    )
     f.stop = 999
     assert f.end == 999
 
 
 def test_feature_unicode_dunder_matches_str():
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=10, strand="+", frame=".")
+    f = Feature(
+        seqid="chr1", source="src", featuretype="exon", start=1, end=10, strand="+", frame="."
+    )
     assert f.__unicode__() == str(f)
 
 
@@ -87,6 +91,7 @@ def test_parsed_feature_chrom_and_stop_aliases():
     """`ParsedFeature` (the dataclass yielded by the parser) carries
     the same `chrom` / `stop` aliases as the user-facing `Feature`."""
     from gffbase import parse_bytes
+
     src = b"chr1\trs\texon\t100\t200\t.\t+\t.\tID=p1\n"
     pf = next(iter(parse_bytes(src)))
     assert pf.chrom == "chr1"
@@ -101,12 +106,24 @@ def test_parsed_feature_chrom_and_stop_aliases():
 def test_region_with_strand_filter(db):
     """Combine seqid + start/end + strand. Exercises the strand
     branch of `_region_sql_btree`."""
-    plus = sorted(f.id for f in db.region(
-        seqid="chr1", start=1, end=10_000, strand="+",
-    ))
-    minus = sorted(f.id for f in db.region(
-        seqid="chr1", start=1, end=10_000, strand="-",
-    ))
+    plus = sorted(
+        f.id
+        for f in db.region(
+            seqid="chr1",
+            start=1,
+            end=10_000,
+            strand="+",
+        )
+    )
+    minus = sorted(
+        f.id
+        for f in db.region(
+            seqid="chr1",
+            start=1,
+            end=10_000,
+            strand="-",
+        )
+    )
     assert "e1" in plus and "e2" in plus
     assert "e3" in minus
     assert "e3" not in plus
@@ -116,10 +133,15 @@ def test_region_with_strand_filter(db):
 def test_region_with_featuretype_list(db):
     """Pass `featuretype` as a list, not a single string. Exercises
     the `featuretype IN (...)` branch."""
-    rows = sorted(f.id for f in db.region(
-        seqid="chr1", start=1, end=10_000,
-        featuretype=["exon", "mRNA"],
-    ))
+    rows = sorted(
+        f.id
+        for f in db.region(
+            seqid="chr1",
+            start=1,
+            end=10_000,
+            featuretype=["exon", "mRNA"],
+        )
+    )
     assert "t1" in rows
     assert "e1" in rows
     assert "g1" not in rows  # gene was excluded
@@ -138,9 +160,9 @@ def test_region_tuple_len_2_seqid_only(db):
     """A 2-tuple `(seqid, _)` shorthand: `_normalize_region_args`
     branches on tuple length 2 to mean "seqid only, no coord
     constraint." Exercises the `len(region) == 2` branch."""
-    rows = list(db.region(("chr2", None)))   # all of chr2
+    rows = list(db.region(("chr2", None)))  # all of chr2
     assert any(f.id == "e_chr2" for f in rows)
-    rows = list(db.region(("chrZZ", None)))   # absent seqid
+    rows = list(db.region(("chrZZ", None)))  # absent seqid
     assert rows == []
 
 
@@ -184,9 +206,7 @@ def test_features_of_type_order_by_reverse(db):
     rows_asc = list(db.features_of_type("exon", order_by="start"))
     rows_desc = list(db.features_of_type("exon", order_by="start", reverse=True))
     assert [f.start for f in rows_asc] == sorted(f.start for f in rows_asc)
-    assert [f.start for f in rows_desc] == sorted(
-        (f.start for f in rows_desc), reverse=True
-    )
+    assert [f.start for f in rows_desc] == sorted((f.start for f in rows_desc), reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +220,7 @@ def test_bed12_falls_back_to_id_when_attribute_missing(db):
     tx = db["t1"]
     line = db.bed12(tx, name_field="nonexistent_attribute_key")
     cols = line.split("\t")
-    assert cols[3] == "t1"   # id column used as name
+    assert cols[3] == "t1"  # id column used as name
 
 
 def test_bed12_falls_back_when_attribute_value_empty(tmp_path):
@@ -266,11 +286,19 @@ def test_feature_constructor_accepts_lazyattributes_directly():
     re-uses an already-built lazy object without re-parsing — used by
     the row-materialization path internally."""
     from gffbase.feature import _LazyAttributes
+
     lazy = _LazyAttributes(initial={"ID": ["x"]}, dialect_fmt="gff3")
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=10, strand="+", frame=".",
-                attributes=lazy)
-    assert f.attributes is lazy   # same object, not re-wrapped
+    f = Feature(
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=1,
+        end=10,
+        strand="+",
+        frame=".",
+        attributes=lazy,
+    )
+    assert f.attributes is lazy  # same object, not re-wrapped
     assert f.attributes.get("ID") == ["x"]
 
 
@@ -283,9 +311,13 @@ def test_children_with_limit_seqid_only(db):
     """`children(..., limit="chr1:200-400")` clips the relational
     walk to a coordinate window. Exercises the seqid+coords branch
     of `_relation_region_filter`."""
-    rows = sorted(f.id for f in db.children(
-        "t1", limit="chr1:200-400",
-    ))
+    rows = sorted(
+        f.id
+        for f in db.children(
+            "t1",
+            limit="chr1:200-400",
+        )
+    )
     # Only e2 (300..500 — overlaps) makes the cut here. e1 (100..200
     # — overlaps at one base) might also match depending on overlap
     # semantics; the test simply pins that limit-filtering does
@@ -296,9 +328,14 @@ def test_children_with_limit_seqid_only(db):
 def test_children_with_limit_seqid_and_completely_within(db):
     """Combine limit + completely_within. Exercises the
     `completely_within=True` branch of `_relation_region_filter`."""
-    rows = sorted(f.id for f in db.children(
-        "t1", limit="chr1:50-550", completely_within=True,
-    ))
+    rows = sorted(
+        f.id
+        for f in db.children(
+            "t1",
+            limit="chr1:50-550",
+            completely_within=True,
+        )
+    )
     # e1 (100..200) and e2 (300..500) are fully within 50..550;
     # e3 (600..700) is not.
     assert "e1" in rows and "e2" in rows
@@ -315,9 +352,10 @@ def test_gffwriter_write_exon_children(tmp_path, db):
     `write_rec` + a `db.children(level=1)` walk. Smoke-test it
     writes the parent + its children to the output file."""
     from gffbase import GFFWriter
+
     out = tmp_path / "exonchildren.gff3"
     with GFFWriter(str(out)) as w:
-        w.write_exon_children(db, "e1")    # the exon has no children
+        w.write_exon_children(db, "e1")  # the exon has no children
     text = out.read_text()
     assert "e1" in text
 
@@ -326,6 +364,7 @@ def test_gffwriter_write_mrna_children(tmp_path, db):
     """Symmetric helper: `write_mRNA_children` writes the mRNA plus
     all level-1 children."""
     from gffbase import GFFWriter
+
     out = tmp_path / "mrnachildren.gff3"
     with GFFWriter(str(out)) as w:
         w.write_mRNA_children(db, "t1")
@@ -366,10 +405,7 @@ def test_featuredb_seqid_map_missing_falls_back_to_btree(tmp_path):
     side table is missing or empty, the opener disables the R-tree
     path so `region()` falls through to the B-tree."""
     src = tmp_path / "smap.gff3"
-    src.write_text(
-        "##gff-version 3\n"
-        "chr1\trs\texon\t1\t100\t.\t+\t.\tID=e1\n"
-    )
+    src.write_text("##gff-version 3\nchr1\trs\texon\t1\t100\t.\t+\t.\tID=e1\n")
     out = tmp_path / "smap.duckdb"
     db = create_db(str(src), str(out), force=True)
     if db._rtree_built:
@@ -392,7 +428,7 @@ def test_empty_batched_polars_format(db):
     polars branch of `_empty_batched_result` if polars is
     installed; otherwise the import-error path raises with a
     helpful message."""
-    pl = pytest.importorskip("polars")
+    pytest.importorskip("polars")
     out = db.children_batched([], format="polars")
     assert out.shape[0] == 0
     out_r = db.region_batched([], format="polars")
@@ -409,12 +445,9 @@ def test_coerce_ids_accepts_featuredb_instance(tmp_path, db):
     legacy behavior — it deletes every feature in the source DB.
     Exercises the `isinstance(features, FeatureDB)` branch."""
     other_src = tmp_path / "other.gff3"
-    other_src.write_text(
-        "##gff-version 3\n"
-        "chr1\trs\texon\t300\t500\t.\t+\t.\tID=e2\n"
-    )
+    other_src.write_text("##gff-version 3\nchr1\trs\texon\t300\t500\t.\t+\t.\tID=e2\n")
     other = create_db(str(other_src), str(tmp_path / "o.duckdb"), force=True)
-    db.delete(other)   # deletes ids that exist in `other`, i.e. e2
+    db.delete(other)  # deletes ids that exist in `other`, i.e. e2
     assert "e2" not in {f.id for f in db.features_of_type("exon")}
 
 
@@ -441,9 +474,13 @@ def test_interfeatures_with_merge_attributes(db):
     # Inject some overlap-able attributes.
     e1.attributes["tag"] = ["A", "B"]
     e2.attributes["tag"] = ["B", "C"]
-    inter = list(db.interfeatures(
-        [e1, e2], new_featuretype="intergap", merge_attributes=True,
-    ))
+    inter = list(
+        db.interfeatures(
+            [e1, e2],
+            new_featuretype="intergap",
+            merge_attributes=True,
+        )
+    )
     assert len(inter) == 1
     f = inter[0]
     assert f.featuretype == "intergap"
@@ -460,12 +497,17 @@ def test_interfeatures_skips_negative_gaps(db):
     e1 = db["e1"]
     # Construct a synthetic overlapping pair.
     overlapping = Feature(
-        seqid=e1.seqid, source="t", featuretype="exon",
-        start=e1.start + 5, end=e1.end + 5, strand="+", frame=".",
+        seqid=e1.seqid,
+        source="t",
+        featuretype="exon",
+        start=e1.start + 5,
+        end=e1.end + 5,
+        strand="+",
+        frame=".",
         attributes={"ID": ["overlap_x"]},
     )
     inter = list(db.interfeatures([e1, overlapping]))
-    assert inter == []   # no gap to fill
+    assert inter == []  # no gap to fill
 
 
 def test_interfeatures_with_attribute_func(db):
@@ -473,10 +515,12 @@ def test_interfeatures_with_attribute_func(db):
     and gets to rewrite the merged attribute dict."""
     e1, e2 = db["e1"], db["e2"]
     seen_calls = []
+
     def ftn(prev, cur, attrs):
         seen_calls.append((prev.id, cur.id))
         attrs["custom"] = ["from_callback"]
         return attrs
+
     inter = list(db.interfeatures([e1, e2], attribute_func=ftn))
     assert seen_calls == [("e1", "e2")]
     assert inter[0].attributes["custom"] == ["from_callback"]
@@ -496,13 +540,16 @@ def test_feature_sequence_with_dict_like_fasta():
     Pyfaidx itself uses dict-like indexing, so any object with the
     same `[seqid][start:end]` shape works as a drop-in. Exercises
     the `else: fa = fasta` arm of `Feature.sequence`."""
+
     class DictLikeFasta:
-        def __init__(self, data): self._data = data
+        def __init__(self, data):
+            self._data = data
+
         def __getitem__(self, k):
             return self._data[k]
+
     fasta = DictLikeFasta({"chr1": "AAAACCCCGGGGTTTT"})
-    f = Feature(seqid="chr1", source="t", featuretype="exon",
-                start=5, end=8, strand="+", frame=".")
+    f = Feature(seqid="chr1", source="t", featuretype="exon", start=5, end=8, strand="+", frame=".")
     seq = f.sequence(fasta)
     assert seq == "CCCC"
 
@@ -511,8 +558,7 @@ def test_feature_sequence_revcomp_on_minus_strand():
     """Sequence on the `-` strand is reverse-complemented when
     `use_strand=True` (the default). Exercises `_revcomp`."""
     fasta = {"chr1": "AAAACCCCGGGGTTTT"}
-    f = Feature(seqid="chr1", source="t", featuretype="exon",
-                start=5, end=8, strand="-", frame=".")
+    f = Feature(seqid="chr1", source="t", featuretype="exon", start=5, end=8, strand="-", frame=".")
     # Forward bases at 5..8 (1-based, inclusive) are "CCCC";
     # revcomp is "GGGG".
     assert f.sequence(fasta) == "GGGG"
@@ -526,18 +572,26 @@ def test_merge_flushes_on_featuretype_change(db):
     one starts. Exercises the `accum.children = list(components);
     yield accum` arm of the loop."""
     from gffbase import merge_criteria as mc
+
     e1 = db["e1"]
-    e2 = db["e2"]   # same featuretype as e1 (exon) — they merge
+    e2 = db["e2"]  # same featuretype as e1 (exon) — they merge
     # Force a featuretype change by cloning e2 with a different type.
     different = Feature(
-        seqid=e1.seqid, source=e1.source, featuretype="CDS",
-        start=e2.start, end=e2.end, strand=e2.strand, frame=".",
+        seqid=e1.seqid,
+        source=e1.source,
+        featuretype="CDS",
+        start=e2.start,
+        end=e2.end,
+        strand=e2.strand,
+        frame=".",
         attributes={"ID": ["c1"]},
     )
-    merged = list(db.merge(
-        [e1, different],
-        merge_criteria=(mc.feature_type,),
-    ))
+    merged = list(
+        db.merge(
+            [e1, different],
+            merge_criteria=(mc.feature_type,),
+        )
+    )
     # Two distinct merge groups: one exon (e1), one CDS (different).
     assert len(merged) == 2
     fts = sorted(f.featuretype for f in merged)

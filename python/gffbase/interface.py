@@ -32,20 +32,18 @@ Two routing decisions are made dynamically:
 from __future__ import annotations
 
 import json
-import os
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Optional, Union
 
 import duckdb
 
 from gffbase.exceptions import FeatureNotFoundError
-from gffbase.feature import Feature, feature_from_row, _DB_ROW_FIELDS
-
+from gffbase.feature import Feature, feature_from_row
 
 # Selection clause for FeatureDB → Feature reconstruction. Mirrors
 # `_DB_ROW_FIELDS`.
 _SELECT_FEATURE = (
     'id, seqid, source, featuretype, start, "end", '
-    'score, strand, frame, attributes_blob, extra_blob, file_order'
+    "score, strand, frame, attributes_blob, extra_blob, file_order"
 )
 
 
@@ -75,8 +73,10 @@ class FeatureDB:
         if isinstance(dbfn, duckdb.DuckDBPyConnection):
             self.conn = dbfn
             self.dbfn = ":existing-connection:"
-        elif isinstance(dbfn, tuple) and len(dbfn) == 2 and isinstance(
-            dbfn[0], duckdb.DuckDBPyConnection
+        elif (
+            isinstance(dbfn, tuple)
+            and len(dbfn) == 2
+            and isinstance(dbfn[0], duckdb.DuckDBPyConnection)
         ):
             # (con, IngestStats) — used internally by `create_db`.
             self.conn = dbfn[0]
@@ -135,9 +135,7 @@ class FeatureDB:
         self._seqid_y_map: dict = {}
         if self._rtree_built:
             try:
-                rows = self.conn.execute(
-                    "SELECT seqid, seqid_y FROM seqid_map"
-                ).fetchall()
+                rows = self.conn.execute("SELECT seqid, seqid_y FROM seqid_map").fetchall()
                 self._seqid_y_map = {s: int(y) for s, y in rows}
             except duckdb.Error:
                 # Older DBs without the map — fall back to B-tree to be safe.
@@ -145,9 +143,8 @@ class FeatureDB:
 
         # Directives
         self.directives = [
-            row[0] for row in self.conn.execute(
-                "SELECT directive FROM directives ORDER BY seq"
-            ).fetchall()
+            row[0]
+            for row in self.conn.execute("SELECT directive FROM directives ORDER BY seq").fetchall()
         ]
 
     @staticmethod
@@ -250,9 +247,13 @@ class FeatureDB:
         completely_within: bool = False,
     ) -> Iterator[Feature]:
         sql, params = self._build_scan_sql(
-            base_where=[], base_params=[],
-            limit=limit, strand=strand, featuretype=featuretype,
-            order_by=order_by, reverse=reverse,
+            base_where=[],
+            base_params=[],
+            limit=limit,
+            strand=strand,
+            featuretype=featuretype,
+            order_by=order_by,
+            reverse=reverse,
             completely_within=completely_within,
         )
         yield from self._yield_features(sql, params)
@@ -267,14 +268,26 @@ class FeatureDB:
         completely_within: bool = False,
     ) -> Iterator[Feature]:
         yield from self.all_features(
-            limit=limit, strand=strand, featuretype=featuretype,
-            order_by=order_by, reverse=reverse,
+            limit=limit,
+            strand=strand,
+            featuretype=featuretype,
+            order_by=order_by,
+            reverse=reverse,
             completely_within=completely_within,
         )
 
-    def _build_scan_sql(self, *, base_where, base_params,
-                        limit, strand, featuretype,
-                        order_by, reverse, completely_within):
+    def _build_scan_sql(
+        self,
+        *,
+        base_where,
+        base_params,
+        limit,
+        strand,
+        featuretype,
+        order_by,
+        reverse,
+        completely_within,
+    ):
         where = list(base_where)
         params = list(base_params)
         # `limit` (legacy) accepts a region triple. Reuse `region()`'s parser.
@@ -285,10 +298,10 @@ class FeatureDB:
                 params.append(rseqid)
             if rstart is not None and rend is not None:
                 if completely_within:
-                    where.append("start >= ? AND \"end\" <= ?")
+                    where.append('start >= ? AND "end" <= ?')
                     params.extend([rstart, rend])
                 else:
-                    where.append("start <= ? AND \"end\" >= ?")
+                    where.append('start <= ? AND "end" >= ?')
                     params.extend([rend, rstart])
         if strand is not None:
             where.append("strand = ?")
@@ -315,8 +328,15 @@ class FeatureDB:
         elif order_by == "length":
             col = '("end" - start)'
         elif order_by in {
-            "seqid", "source", "featuretype", "start", "end",
-            "score", "strand", "frame", "file_order",
+            "seqid",
+            "source",
+            "featuretype",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "frame",
+            "file_order",
         }:
             col = '"end"' if order_by == "end" else order_by
         else:
@@ -342,10 +362,7 @@ class FeatureDB:
         rseqid, rstart, rend = self._normalize_region_args(region, seqid, start, end)
         # Decide path.
         use_rtree = (
-            self._rtree_built
-            and rseqid is not None
-            and rstart is not None
-            and rend is not None
+            self._rtree_built and rseqid is not None and rstart is not None and rend is not None
         )
         if use_rtree:
             sql, params = self._region_sql_rtree(
@@ -365,7 +382,7 @@ class FeatureDB:
             # Unknown seqid (e.g., not in this DB). Fall through to a query
             # that returns no rows but is still valid.
             return self._region_sql_btree(seqid, start, end, strand, featuretype, completely_within)
-        where = ['seqid = ?', 'ST_Intersects(bbox, ST_MakeEnvelope(?, ?, ?, ?))']
+        where = ["seqid = ?", "ST_Intersects(bbox, ST_MakeEnvelope(?, ?, ?, ?))"]
         params = [seqid, start, seqid_y, end, seqid_y + 1]
         if completely_within:
             where.append('start >= ? AND "end" <= ?')
@@ -381,10 +398,7 @@ class FeatureDB:
             else:
                 where.append("featuretype = ?")
                 params.append(featuretype)
-        sql = (
-            f"SELECT {_SELECT_FEATURE} FROM features "
-            f"WHERE {' AND '.join(where)} ORDER BY start"
-        )
+        sql = f"SELECT {_SELECT_FEATURE} FROM features WHERE {' AND '.join(where)} ORDER BY start"
         return sql, params
 
     def _region_sql_btree(self, seqid, start, end, strand, featuretype, completely_within):
@@ -501,12 +515,15 @@ class FeatureDB:
             return self._empty_region_batched(format)
 
         import pyarrow as pa
-        regions_table = pa.table({
-            "query_idx":   list(range(len(rows))),
-            "query_seqid": [r[0] for r in rows],
-            "query_start": [r[1] for r in rows],
-            "query_end":   [r[2] for r in rows],
-        })
+
+        regions_table = pa.table(
+            {
+                "query_idx": list(range(len(rows))),
+                "query_seqid": [r[0] for r in rows],
+                "query_start": [r[1] for r in rows],
+                "query_end": [r[2] for r in rows],
+            }
+        )
         self.conn.register("__staging_regions", regions_table)
         try:
             # The R-tree path uses the seqid_y-encoded envelope so that
@@ -517,7 +534,8 @@ class FeatureDB:
             ft_clause = (" AND " + " AND ".join(ft_where)) if ft_where else ""
             within_clause = (
                 ' AND f.start >= q.query_start AND f."end" <= q.query_end'
-                if completely_within else ""
+                if completely_within
+                else ""
             )
 
             if self._rtree_built and self._seqid_y_map:
@@ -574,33 +592,45 @@ class FeatureDB:
 
     def _empty_region_batched(self, format: str):
         import pyarrow as pa
-        schema = pa.schema([
-            ("query_idx",    pa.int64()),
-            ("query_seqid",  pa.string()),
-            ("query_start",  pa.int64()),
-            ("query_end",    pa.int64()),
-            ("id",           pa.string()),
-            ("seqid",        pa.string()),
-            ("source",       pa.string()),
-            ("featuretype",  pa.string()),
-            ("start",        pa.int64()),
-            ("end",          pa.int64()),
-            ("score",        pa.string()),
-            ("strand",       pa.string()),
-            ("frame",        pa.string()),
-            ("file_order",   pa.int64()),
-        ])
+
+        schema = pa.schema(
+            [
+                ("query_idx", pa.int64()),
+                ("query_seqid", pa.string()),
+                ("query_start", pa.int64()),
+                ("query_end", pa.int64()),
+                ("id", pa.string()),
+                ("seqid", pa.string()),
+                ("source", pa.string()),
+                ("featuretype", pa.string()),
+                ("start", pa.int64()),
+                ("end", pa.int64()),
+                ("score", pa.string()),
+                ("strand", pa.string()),
+                ("frame", pa.string()),
+                ("file_order", pa.int64()),
+            ]
+        )
         empty = pa.table({name: [] for name in schema.names}, schema=schema)
         fmt = format.lower()
         if fmt == "arrow":
             return empty
         if fmt in ("df", "pandas"):
-            return empty.to_pandas()
+            try:
+                return empty.to_pandas()
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ImportError(
+                    "format='df' requires the optional pandas package "
+                    "(pip install 'gffbase[pandas]')"
+                ) from e
         if fmt == "polars":
             try:
                 import polars as pl
             except ImportError as e:  # pragma: no cover
-                raise ImportError("format='polars' requires the optional polars package") from e
+                raise ImportError(
+                    "format='polars' requires the optional polars package "
+                    "(pip install 'gffbase[polars]')"
+                ) from e
             return pl.from_arrow(empty)
         raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
 
@@ -620,7 +650,13 @@ class FeatureDB:
     ) -> Iterator[Feature]:
         target_id = id.id if isinstance(id, Feature) else id
         yield from self._relation_query(
-            target_id, level, featuretype, order_by, reverse, limit, completely_within,
+            target_id,
+            level,
+            featuretype,
+            order_by,
+            reverse,
+            limit,
+            completely_within,
             direction="children",
         )
 
@@ -636,7 +672,13 @@ class FeatureDB:
     ) -> Iterator[Feature]:
         target_id = id.id if isinstance(id, Feature) else id
         yield from self._relation_query(
-            target_id, level, featuretype, order_by, reverse, limit, completely_within,
+            target_id,
+            level,
+            featuretype,
+            order_by,
+            reverse,
+            limit,
+            completely_within,
             direction="parents",
         )
 
@@ -679,8 +721,11 @@ class FeatureDB:
         strand, frame, file_order, depth.
         """
         return self._batched_relation(
-            feature_ids, level=level, featuretype=featuretype,
-            direction="children", format=format,
+            feature_ids,
+            level=level,
+            featuretype=featuretype,
+            direction="children",
+            format=format,
         )
 
     def parents_batched(
@@ -693,8 +738,11 @@ class FeatureDB:
         """Bulk parents lookup. Mirrors `children_batched` but walks the
         closure / edges in the reverse direction."""
         return self._batched_relation(
-            feature_ids, level=level, featuretype=featuretype,
-            direction="parents", format=format,
+            feature_ids,
+            level=level,
+            featuretype=featuretype,
+            direction="parents",
+            format=format,
         )
 
     def _batched_relation(
@@ -708,13 +756,14 @@ class FeatureDB:
     ):
         ids = self._coerce_id_list(feature_ids)
         if not ids:
-            return self._empty_batched_result(format, "children" if direction == "children" else "parents")
+            return self._empty_batched_result(
+                format, "children" if direction == "children" else "parents"
+            )
 
         # Decide cache vs dynamic the same way the row-by-row dispatcher
         # does — it's a one-time decision per call here, not per-row.
-        use_dynamic = (
-            (level is not None and level > self._max_depth)
-            or (level is None and self._closure_max_depth == 0)
+        use_dynamic = (level is not None and level > self._max_depth) or (
+            level is None and self._closure_max_depth == 0
         )
 
         ph = ",".join("?" * len(ids))
@@ -788,9 +837,7 @@ class FeatureDB:
             elif isinstance(item, str):
                 out.append(item)
             else:
-                raise TypeError(
-                    f"feature_ids may contain only str or Feature; got {type(item)!r}"
-                )
+                raise TypeError(f"feature_ids may contain only str or Feature; got {type(item)!r}")
         return out
 
     def _materialize_batched(self, sql: str, params: list, *, format: str):
@@ -805,45 +852,70 @@ class FeatureDB:
         if fmt == "arrow":
             # DuckDB ≥ 1.0 prefers `to_arrow_table()`; fall back to the older
             # `fetch_arrow_table()` for environments pinning ≤ 0.10.
-            return getattr(cur, "to_arrow_table", cur.fetch_arrow_table)() \
-                if hasattr(cur, "to_arrow_table") else cur.fetch_arrow_table()
+            return (
+                getattr(cur, "to_arrow_table", cur.fetch_arrow_table)()
+                if hasattr(cur, "to_arrow_table")
+                else cur.fetch_arrow_table()
+            )
         if fmt in ("df", "pandas"):
-            return cur.df()
+            try:
+                return cur.df()
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ImportError(
+                    "format='df' requires the optional pandas package "
+                    "(pip install 'gffbase[pandas]')"
+                ) from e
         if fmt == "polars":
-            return cur.pl()                  # DuckDB ≥1.0 returns a polars.DataFrame
-        raise ValueError(
-            f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}"
-        )
+            try:
+                return cur.pl()  # DuckDB >=1.0 returns a polars.DataFrame
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ImportError(
+                    "format='polars' requires the optional polars package "
+                    "(pip install 'gffbase[polars]')"
+                ) from e
+        raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
 
     def _empty_batched_result(self, format: str, direction: str):
         """Return a properly-typed empty result when the input id list is
         empty. Avoids issuing a SQL query at all."""
         import pyarrow as pa
-        schema = pa.schema([
-            ("anchor",         pa.string()),
-            ("descendant_id",  pa.string()),
-            ("seqid",          pa.string()),
-            ("source",         pa.string()),
-            ("featuretype",    pa.string()),
-            ("start",          pa.int64()),
-            ("end",            pa.int64()),
-            ("score",          pa.string()),
-            ("strand",         pa.string()),
-            ("frame",          pa.string()),
-            ("file_order",     pa.int64()),
-            ("depth",          pa.int16()),
-        ])
+
+        schema = pa.schema(
+            [
+                ("anchor", pa.string()),
+                ("descendant_id", pa.string()),
+                ("seqid", pa.string()),
+                ("source", pa.string()),
+                ("featuretype", pa.string()),
+                ("start", pa.int64()),
+                ("end", pa.int64()),
+                ("score", pa.string()),
+                ("strand", pa.string()),
+                ("frame", pa.string()),
+                ("file_order", pa.int64()),
+                ("depth", pa.int16()),
+            ]
+        )
         empty = pa.table({name: [] for name in schema.names}, schema=schema)
         fmt = format.lower()
         if fmt == "arrow":
             return empty
         if fmt in ("df", "pandas"):
-            return empty.to_pandas()
+            try:
+                return empty.to_pandas()
+            except ModuleNotFoundError as e:  # pragma: no cover
+                raise ImportError(
+                    "format='df' requires the optional pandas package "
+                    "(pip install 'gffbase[pandas]')"
+                ) from e
         if fmt == "polars":
             try:
                 import polars as pl
             except ImportError as e:  # pragma: no cover
-                raise ImportError("format='polars' requires the optional polars package") from e
+                raise ImportError(
+                    "format='polars' requires the optional polars package "
+                    "(pip install 'gffbase[polars]')"
+                ) from e
             return pl.from_arrow(empty)
         raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
 
@@ -862,19 +934,29 @@ class FeatureDB:
         use_dynamic = self._dispatch_relation(level, target_id, direction)
         if use_dynamic:
             sql, params = self._relation_sql_dynamic(
-                target_id, level, featuretype, order_by, reverse,
-                limit, completely_within, direction,
+                target_id,
+                level,
+                featuretype,
+                order_by,
+                reverse,
+                limit,
+                completely_within,
+                direction,
             )
         else:
             sql, params = self._relation_sql_cached(
-                target_id, level, featuretype, order_by, reverse,
-                limit, completely_within, direction,
+                target_id,
+                level,
+                featuretype,
+                order_by,
+                reverse,
+                limit,
+                completely_within,
+                direction,
             )
         yield from self._yield_features(sql, params)
 
-    def _dispatch_relation(
-        self, level: Optional[int], target_id: str, direction: str
-    ) -> bool:
+    def _dispatch_relation(self, level: Optional[int], target_id: str, direction: str) -> bool:
         """Return True iff the caller should be served by the dynamic CTE.
 
         Decision matrix (Phase 7, revised):
@@ -903,7 +985,7 @@ class FeatureDB:
             return level > self._max_depth
         # level is None.
         if self._closure_max_depth == 0:
-            return True            # closure is empty; dynamic walks edges
+            return True  # closure is empty; dynamic walks edges
         # Cache covers most of the tree; check for overflow past the boundary.
         return self._has_overflow(target_id, direction)
 
@@ -929,8 +1011,15 @@ class FeatureDB:
         return bool(row[0])
 
     def _relation_sql_cached(
-        self, target_id, level, featuretype, order_by, reverse,
-        limit, completely_within, direction,
+        self,
+        target_id,
+        level,
+        featuretype,
+        order_by,
+        reverse,
+        limit,
+        completely_within,
+        direction,
     ):
         if direction == "children":
             join_col, anchor_col = "c.descendant", "c.ancestor"
@@ -957,8 +1046,15 @@ class FeatureDB:
         return sql, params
 
     def _relation_sql_dynamic(
-        self, target_id, level, featuretype, order_by, reverse,
-        limit, completely_within, direction,
+        self,
+        target_id,
+        level,
+        featuretype,
+        order_by,
+        reverse,
+        limit,
+        completely_within,
+        direction,
     ):
         # Dynamic recursive CTE walks the edges table directly.
         if direction == "children":
@@ -1007,8 +1103,18 @@ class FeatureDB:
     @staticmethod
     def _select_feature_aliased(alias: str) -> str:
         cols = [
-            "id", "seqid", "source", "featuretype", "start", '"end"',
-            "score", "strand", "frame", "attributes_blob", "extra_blob", "file_order",
+            "id",
+            "seqid",
+            "source",
+            "featuretype",
+            "start",
+            '"end"',
+            "score",
+            "strand",
+            "frame",
+            "attributes_blob",
+            "extra_blob",
+            "file_order",
         ]
         return ", ".join(f"{alias}.{c}" if c != '"end"' else f'{alias}."end"' for c in cols)
 
@@ -1046,8 +1152,15 @@ class FeatureDB:
         elif order_by == "length":
             col = f'({qualifier}."end" - {qualifier}.start)'
         elif order_by in {
-            "seqid", "source", "featuretype", "start", "end",
-            "score", "strand", "frame", "file_order",
+            "seqid",
+            "source",
+            "featuretype",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "frame",
+            "file_order",
         }:
             col = f'{qualifier}."end"' if order_by == "end" else f"{qualifier}.{order_by}"
         else:
@@ -1059,7 +1172,7 @@ class FeatureDB:
     # Mutation
     # ------------------------------------------------------------------
 
-    def delete(self, features, make_backup: bool = True, **kwargs) -> "FeatureDB":
+    def delete(self, features, make_backup: bool = True, **kwargs) -> FeatureDB:
         ids = self._coerce_ids(features)
         if not ids:
             return self
@@ -1076,11 +1189,11 @@ class FeatureDB:
         )
         return self
 
-    def update(self, data, make_backup: bool = True, **kwargs) -> "FeatureDB":
+    def update(self, data, make_backup: bool = True, **kwargs) -> FeatureDB:
         # Phase 5 minimal update: accept iterable of Feature objects and
         # append them to features + attributes + edges, then refresh closure.
-        from gffbase.ingest import _ArrowBatchBuilder
         from gffbase.feature import ParsedFeature
+        from gffbase.ingest import _ArrowBatchBuilder
 
         # Phase 19: the builder needs the seqid_to_y dict so it can stamp
         # seqid_y (and bbox, when the R-tree is live) inline. Reuse the map
@@ -1089,9 +1202,7 @@ class FeatureDB:
             self._seqid_y_map,
             has_spatial=bool(self._rtree_built),
         )
-        order = self.conn.execute(
-            "SELECT COALESCE(MAX(file_order), 0) FROM features"
-        ).fetchone()[0]
+        order = self.conn.execute("SELECT COALESCE(MAX(file_order), 0) FROM features").fetchone()[0]
 
         if isinstance(data, FeatureDB):
             data = list(data.all_features())
@@ -1131,16 +1242,16 @@ class FeatureDB:
         # Refresh closure: rebuild from edges (cheap on small updates).
         self.conn.execute("DELETE FROM closure")
         from gffbase.schema import CLOSURE_RECURSIVE_CTE
+
         self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
         return self
 
-    def add_relation(self, parent, child, level: int = 1,
-                     parent_func=None, child_func=None) -> "FeatureDB":
+    def add_relation(
+        self, parent, child, level: int = 1, parent_func=None, child_func=None
+    ) -> FeatureDB:
         parent_id = parent.id if isinstance(parent, Feature) else parent
         child_id = child.id if isinstance(child, Feature) else child
-        self.conn.execute(
-            "INSERT INTO edges(parent, child) VALUES (?, ?)", [parent_id, child_id]
-        )
+        self.conn.execute("INSERT INTO edges(parent, child) VALUES (?, ?)", [parent_id, child_id])
         # Apply optional callbacks (legacy semantics: mutate attributes).
         if parent_func is not None and isinstance(parent, Feature):
             parent_func(parent, child)
@@ -1167,6 +1278,7 @@ class FeatureDB:
         # cheaper than a full table rebuild and avoids the keyword pitfalls
         # of nested CTEs in DuckDB.
         from gffbase.schema import CLOSURE_RECURSIVE_CTE
+
         self.conn.execute("DELETE FROM closure")
         self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
         return self
@@ -1191,9 +1303,16 @@ class FeatureDB:
     # Synthesis / convenience
     # ------------------------------------------------------------------
 
-    def interfeatures(self, features, new_featuretype=None,
-                      merge_attributes: bool = True, numeric_sort: bool = False,
-                      dialect=None, attribute_func=None, update_attributes=None):
+    def interfeatures(
+        self,
+        features,
+        new_featuretype=None,
+        merge_attributes: bool = True,
+        numeric_sort: bool = False,
+        dialect=None,
+        attribute_func=None,
+        update_attributes=None,
+    ):
         feats = list(features)
         if not feats:
             return
@@ -1228,6 +1347,7 @@ class FeatureDB:
 
     def merge(self, features, merge_criteria=None, multiline: bool = False):
         from gffbase import merge_criteria as mc
+
         if merge_criteria is None:
             merge_criteria = (mc.seqid, mc.overlap_end_inclusive, mc.strand, mc.feature_type)
         feats = sorted(features, key=lambda f: (f.seqid, f.start, f.end))
@@ -1255,15 +1375,25 @@ class FeatureDB:
     @staticmethod
     def _clone_for_merge(f: Feature) -> Feature:
         return Feature(
-            seqid=f.seqid, source=f.source, featuretype=f.featuretype,
-            start=f.start, end=f.end, score=f.score, strand=f.strand,
-            frame=f.frame, attributes={k: list(v) for k, v in f.attributes.items()},
+            seqid=f.seqid,
+            source=f.source,
+            featuretype=f.featuretype,
+            start=f.start,
+            end=f.end,
+            score=f.score,
+            strand=f.strand,
+            frame=f.frame,
+            attributes={k: list(v) for k, v in f.attributes.items()},
             dialect=f.dialect,
         )
 
-    def merge_all(self, merge_order=("seqid", "featuretype", "strand", "start"),
-                  merge_criteria=None, featuretypes_groups=(None,),
-                  exclude_components: bool = False) -> List[Feature]:
+    def merge_all(
+        self,
+        merge_order=("seqid", "featuretype", "strand", "start"),
+        merge_criteria=None,
+        featuretypes_groups=(None,),
+        exclude_components: bool = False,
+    ) -> List[Feature]:
         out: List[Feature] = []
         for group in featuretypes_groups:
             feats = list(self.all_features(featuretype=group))
@@ -1272,12 +1402,15 @@ class FeatureDB:
             out.extend(self.merge(feats, merge_criteria=merge_criteria))
         return out
 
-    def create_introns(self, exon_featuretype: str = "exon",
-                       grandparent_featuretype: Optional[str] = "gene",
-                       parent_featuretype: Optional[str] = None,
-                       new_featuretype: str = "intron",
-                       merge_attributes: bool = True,
-                       numeric_sort: bool = False) -> Iterator[Feature]:
+    def create_introns(
+        self,
+        exon_featuretype: str = "exon",
+        grandparent_featuretype: Optional[str] = "gene",
+        parent_featuretype: Optional[str] = None,
+        new_featuretype: str = "intron",
+        merge_attributes: bool = True,
+        numeric_sort: bool = False,
+    ) -> Iterator[Feature]:
         if grandparent_featuretype and parent_featuretype:
             raise ValueError("specify exactly one of grandparent_featuretype/parent_featuretype")
         if not (grandparent_featuretype or parent_featuretype):
@@ -1285,47 +1418,62 @@ class FeatureDB:
         anchor_type = grandparent_featuretype or parent_featuretype
         for anchor in self.features_of_type(anchor_type):
             exons = sorted(
-                (
-                    e for e in self.children(anchor, featuretype=exon_featuretype)
-                ),
+                (e for e in self.children(anchor, featuretype=exon_featuretype)),
                 key=lambda f: (f.start, f.end),
             )
             if len(exons) < 2:
                 continue
             yield from self.interfeatures(
-                exons, new_featuretype=new_featuretype,
+                exons,
+                new_featuretype=new_featuretype,
                 merge_attributes=merge_attributes,
                 numeric_sort=numeric_sort,
             )
 
-    def create_splice_sites(self, exon_featuretype: str = "exon",
-                            grandparent_featuretype: Optional[str] = "gene",
-                            parent_featuretype: Optional[str] = None,
-                            merge_attributes: bool = True,
-                            numeric_sort: bool = False) -> Iterator[Feature]:
+    def create_splice_sites(
+        self,
+        exon_featuretype: str = "exon",
+        grandparent_featuretype: Optional[str] = "gene",
+        parent_featuretype: Optional[str] = None,
+        merge_attributes: bool = True,
+        numeric_sort: bool = False,
+    ) -> Iterator[Feature]:
         for intron in self.create_introns(
             exon_featuretype=exon_featuretype,
             grandparent_featuretype=grandparent_featuretype,
             parent_featuretype=parent_featuretype,
             new_featuretype="splice_site",
-            merge_attributes=merge_attributes, numeric_sort=numeric_sort,
+            merge_attributes=merge_attributes,
+            numeric_sort=numeric_sort,
         ):
             # Yield 1bp left + 1bp right splice sites.
             yield Feature(
-                seqid=intron.seqid, source=intron.source,
+                seqid=intron.seqid,
+                source=intron.source,
                 featuretype="splice_site",
-                start=intron.start, end=intron.start,
-                strand=intron.strand, dialect=self.dialect,
+                start=intron.start,
+                end=intron.start,
+                strand=intron.strand,
+                dialect=self.dialect,
             )
             yield Feature(
-                seqid=intron.seqid, source=intron.source,
+                seqid=intron.seqid,
+                source=intron.source,
                 featuretype="splice_site",
-                start=intron.end, end=intron.end,
-                strand=intron.strand, dialect=self.dialect,
+                start=intron.end,
+                end=intron.end,
+                strand=intron.strand,
+                dialect=self.dialect,
             )
 
-    def children_bp(self, feature, child_featuretype: str = "exon",
-                    merge: bool = False, merge_criteria=None, **kwargs) -> int:
+    def children_bp(
+        self,
+        feature,
+        child_featuretype: str = "exon",
+        merge: bool = False,
+        merge_criteria=None,
+        **kwargs,
+    ) -> int:
         kids = list(self.children(feature, featuretype=child_featuretype))
         if merge:
             kids = list(self.merge(kids, merge_criteria=merge_criteria))
@@ -1335,9 +1483,15 @@ class FeatureDB:
                 total += k.end - k.start + 1
         return total
 
-    def bed12(self, feature, block_featuretype=("exon",),
-              thick_featuretype=("CDS",), thin_featuretype=None,
-              name_field: str = "ID", color=None) -> str:
+    def bed12(
+        self,
+        feature,
+        block_featuretype=("exon",),
+        thick_featuretype=("CDS",),
+        thin_featuretype=None,
+        name_field: str = "ID",
+        color=None,
+    ) -> str:
         if isinstance(feature, str):
             feature = self[feature]
         blocks = sorted(
@@ -1363,21 +1517,42 @@ class FeatureDB:
         block_count = len(blocks)
         block_sizes = ",".join(str(b.end - b.start + 1) for b in blocks)
         block_starts = ",".join(str((b.start - 1) - chrom_start) for b in blocks)
-        return "\t".join(str(x) for x in (
-            feature.seqid, chrom_start, chrom_end, name_value, score, strand,
-            thick_start, thick_end, rgb, block_count,
-            block_sizes + ("," if block_count else ""),
-            block_starts + ("," if block_count else ""),
-        ))
+        return "\t".join(
+            str(x)
+            for x in (
+                feature.seqid,
+                chrom_start,
+                chrom_end,
+                name_value,
+                score,
+                strand,
+                thick_start,
+                thick_end,
+                rgb,
+                block_count,
+                block_sizes + ("," if block_count else ""),
+                block_starts + ("," if block_count else ""),
+            )
+        )
 
-    def iter_by_parent_childs(self, featuretype: str = "gene",
-                              level: Optional[int] = None,
-                              order_by=None, reverse: bool = False,
-                              completely_within: bool = False) -> Iterator[List[Feature]]:
+    def iter_by_parent_childs(
+        self,
+        featuretype: str = "gene",
+        level: Optional[int] = None,
+        order_by=None,
+        reverse: bool = False,
+        completely_within: bool = False,
+    ) -> Iterator[List[Feature]]:
         for parent in self.features_of_type(featuretype, order_by=order_by, reverse=reverse):
-            kids = list(self.children(parent, level=level,
-                                       order_by=order_by, reverse=reverse,
-                                       completely_within=completely_within))
+            kids = list(
+                self.children(
+                    parent,
+                    level=level,
+                    order_by=order_by,
+                    reverse=reverse,
+                    completely_within=completely_within,
+                )
+            )
             yield [parent, *kids]
 
     # ------------------------------------------------------------------

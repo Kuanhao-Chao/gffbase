@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from gffbase import (
     AttributeStringError,
     DuplicateIDError,
@@ -136,7 +135,8 @@ def test_create_db_force_overwrite(tmp_path):
 def test_create_db_accepts_legacy_kwargs_without_error():
     # All accepted-but-no-op kwargs from the legacy signature.
     db = create_db(
-        str(DATA / "simple.gff3"), ":memory:",
+        str(DATA / "simple.gff3"),
+        ":memory:",
         keep_order=False,
         sort_attribute_values=False,
         text_factory=str,

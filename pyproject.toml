@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "gffbase"
-version = "0.1.0"
+version = "0.1.1"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -74,11 +74,23 @@ bench = [
 ]
 dev = [
     "pytest>=7",
+    "pytest-cov>=4",
     "hypothesis>=6",
     "psutil>=5",
     "ruff>=0.4",
     "mypy>=1.8",
     "maturin>=1.5,<2.0",
+]
+# Optional integrations. Each corresponds to a code path that must either work
+# when the extra is installed or raise a precise installation error when it is
+# not — there are no silent degradations.
+pandas = ["pandas>=1.5"]
+polars = ["polars>=0.20"]
+fasta = ["pyfaidx>=0.7"]
+all = [
+    "pandas>=1.5",
+    "polars>=0.20",
+    "pyfaidx>=0.7",
 ]
 docs = [
     # MkDocs site (themed with Material; API ref via mkdocstrings).
@@ -116,31 +128,30 @@ bindings       = "pyo3"
 include = [
     { path = "LICENSE", format = "sdist" },
     { path = "MANIFEST.in", format = "sdist" },
+    { path = "CHANGELOG.md", format = "sdist" },
+    { path = "rust/Cargo.lock", format = "sdist" },
     { path = "tests/**/*.py", format = "sdist" },
     { path = "tests/data/*", format = "sdist" },
-    { path = "PHASE3_PARSER_SUMMARY.md", format = "sdist" },
-    { path = "PHASE4_INGESTION_SUMMARY.md", format = "sdist" },
-    { path = "PHASE5_API_SUMMARY.md", format = "sdist" },
-    { path = "PHASE6_BENCHMARK_REPORT.md", format = "sdist" },
-    { path = "PHASE7_REMEDIATION_REPORT.md", format = "sdist" },
-    { path = "PHASE8_PACKAGING_SUMMARY.md", format = "sdist" },
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is part of the standard test invocation. The 99 % gate is
-# enforced via `--cov-fail-under=99`; CI re-asserts this with the same flag
-# so a coverage drop fails the build before merge.
-addopts = """\
-    -q
-    --cov=gffbase
-    --cov-report=term-missing
-    --cov-report=xml:coverage.xml
-    --cov-report=html:htmlcov
-    --cov-fail-under=99
-"""
+# Deliberately NO coverage flags here. Putting `--cov`/`--cov-fail-under` in
+# the default addopts made a bare `pytest` hard-require pytest-cov (which the
+# `dev` extra did not even install) and made every local run fail on coverage
+# rather than on tests. Coverage is a CI gate, applied explicitly:
+#
+#     pytest --cov=gffbase --cov-report=term-missing --cov-fail-under=<N>
+#
+# See .github/workflows/ci.yml for the enforced thresholds.
+addopts = "-q"
 filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",
+]
+markers = [
+    "native: requires the compiled gffbase._native extension",
+    "rtree: requires the DuckDB spatial extension (R-tree index path)",
+    "slow: long-running; excluded from the default PR run",
 ]
 
 [tool.coverage.run]
@@ -151,11 +162,14 @@ omit = [
     # exactly, and the Rust path is the production path. Most of its lines
     # are exercised indirectly via differential tests, but full branch
     # coverage there is redundant work.
+    #
+    # NOTE: this omit is scheduled for removal in 0.2.0. The fallback parser
+    # is the oracle the Rust engine is diffed against and is the *only*
+    # parser on a wheel-less install, so it needs real coverage, not an
+    # exemption. The `_bins.py` entry that used to sit here was dead — its
+    # comment described sqlite_export.py, and `_bins.py` is a 43-line module
+    # that the suite already covers.
     "*/_pyfallback/*",
-    # The legacy SQLite export path emits one-shot SQL; the schema is
-    # smoke-tested by test_featuredb_export but column-by-column branch
-    # coverage isn't useful.
-    "*/_bins.py",
 ]
 
 [tool.coverage.report]
@@ -187,4 +201,32 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["E501"]
+ignore = [
+    "E501",
+    # Every module carries `from __future__ import annotations`, so ruff's
+    # pyupgrade rules propose PEP 585/604 rewrites (`list[str]`, `X | None`)
+    # regardless of `target-version`. Those are correct *in annotations* on
+    # 3.9, but not in the runtime positions this codebase also uses them in
+    # (e.g. `typing.get_type_hints`, `TypeAlias` values), so applying them
+    # wholesale while 3.9 is still supported is not safe.
+    # These four are re-enabled in 0.2.0, where the floor moves to 3.10.
+    "UP006",  # non-pep585-annotation      -> List[x] to list[x]
+    "UP007",  # non-pep604-annotation-union -> Union[a, b] to a | b
+    "UP035",  # deprecated-import           -> typing.List etc.
+    "UP045",  # non-pep604-annotation-optional -> Optional[x] to x | None
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The benchmark and bench scripts are standalone entry points meant to be run
+# straight out of a checkout (`python benchmarks/01_ingest.py`). They must
+# `sys.path.insert()` the in-tree `python/` directory before importing gffbase,
+# so module-level imports genuinely cannot all sit at the top of the file.
+"bench/*.py" = ["E402"]
+"benchmarks/*.py" = ["E402"]
+
+[tool.ruff.format]
+# Match the existing house style: double quotes, spaces, trailing commas on
+# multi-line collections. `ruff format --check` is a CI gate from 0.1.1 on.
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

@@ -24,7 +24,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from gffbase import ingest
 
 DATA = Path(__file__).parent / "data"
@@ -78,13 +77,11 @@ def test_gff3_edges(hier_path):
 def test_gff3_closure_depths(hier_path):
     con, stats = ingest.from_file(hier_path)
     # depth 1: gene -> transcript, transcript -> exon/CDS
-    assert ("g1", "t1", 1) in set(con.execute(
-        "SELECT ancestor, descendant, depth FROM closure WHERE depth=1"
-    ).fetchall())
+    assert ("g1", "t1", 1) in set(
+        con.execute("SELECT ancestor, descendant, depth FROM closure WHERE depth=1").fetchall()
+    )
     # depth 2: gene -> exon
-    rows_d2 = set(con.execute(
-        "SELECT ancestor, descendant FROM closure WHERE depth=2"
-    ).fetchall())
+    rows_d2 = set(con.execute("SELECT ancestor, descendant FROM closure WHERE depth=2").fetchall())
     assert ("g1", "e1") in rows_d2
     assert ("g1", "c2") in rows_d2
     # No depth=3 in this file (max actual depth is 2).
@@ -106,42 +103,35 @@ def test_gtf_synthesis_counts(synth_path):
 def test_gtf_synthesis_extents(synth_path):
     con, _ = ingest.from_file(synth_path)
     # T1 spans exons 100..200 + 300..500
-    row = con.execute(
-        "SELECT seqid, start, \"end\", strand FROM features WHERE id='T1'"
-    ).fetchone()
+    row = con.execute("SELECT seqid, start, \"end\", strand FROM features WHERE id='T1'").fetchone()
     assert row == ("chr1", 100, 500, "+")
     # T2 = single exon 700..900
-    row = con.execute(
-        "SELECT start, \"end\" FROM features WHERE id='T2'"
-    ).fetchone()
+    row = con.execute("SELECT start, \"end\" FROM features WHERE id='T2'").fetchone()
     assert row == (700, 900)
     # G1 covers T1 and T2: 100..900
-    row = con.execute(
-        "SELECT seqid, start, \"end\", strand FROM features WHERE id='G1'"
-    ).fetchone()
+    row = con.execute("SELECT seqid, start, \"end\", strand FROM features WHERE id='G1'").fetchone()
     assert row == ("chr1", 100, 900, "+")
     # G2 covers T3 only: 1000..2500 on chr2
-    row = con.execute(
-        "SELECT seqid, start, \"end\", strand FROM features WHERE id='G2'"
-    ).fetchone()
+    row = con.execute("SELECT seqid, start, \"end\", strand FROM features WHERE id='G2'").fetchone()
     assert row == ("chr2", 1000, 2500, "-")
 
 
 def test_gtf_closure_after_synthesis(synth_path):
     con, _ = ingest.from_file(synth_path)
     # G1 -> T1 (depth 1), G1 -> exon (depth 2)
-    rows = set(con.execute(
-        "SELECT ancestor, descendant, depth FROM closure"
-    ).fetchall())
+    rows = set(con.execute("SELECT ancestor, descendant, depth FROM closure").fetchall())
     assert any(a == "G1" and d == 1 for a, _, d in rows)
     assert any(a == "G1" and d == 2 for a, _, d in rows)
 
 
 def test_indexes_built(hier_path):
     con, _ = ingest.from_file(hier_path)
-    idx = [r[0] for r in con.execute(
-        "SELECT index_name FROM duckdb_indexes() WHERE table_name IN ('features','attributes','edges','closure')"
-    ).fetchall()]
+    idx = [
+        r[0]
+        for r in con.execute(
+            "SELECT index_name FROM duckdb_indexes() WHERE table_name IN ('features','attributes','edges','closure')"
+        ).fetchall()
+    ]
     assert "features_seqstart" in idx
     assert "attributes_kv" in idx
     assert "closure_ancestor" in idx
@@ -221,12 +211,13 @@ def test_duplicate_ids_create_unique(tmp_path):
         "chr1\trs\tCDS\t500\t600\t.\t+\t0\tID=cds-x;Parent=t1\n"
     )
     con, _ = ingest.from_file(str(src))
-    ids = sorted(r[0] for r in con.execute(
-        "SELECT id FROM features WHERE featuretype = 'CDS' ORDER BY id"
-    ).fetchall())
+    ids = sorted(
+        r[0]
+        for r in con.execute(
+            "SELECT id FROM features WHERE featuretype = 'CDS' ORDER BY id"
+        ).fetchall()
+    )
     # Three CDS rows: bare + __2 + __3.
     assert ids == ["cds-x", "cds-x__2", "cds-x__3"]
-    dups = con.execute(
-        "SELECT original_id, new_id FROM duplicates ORDER BY new_id"
-    ).fetchall()
+    dups = con.execute("SELECT original_id, new_id FROM duplicates ORDER BY new_id").fetchall()
     assert dups == [("cds-x", "cds-x__2"), ("cds-x", "cds-x__3")]

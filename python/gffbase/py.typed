@@ -1,0 +1,2 @@
+# PEP 561 marker. gffbase ships inline type annotations; type checkers may
+# read them directly from the installed package.
