@@ -22,13 +22,11 @@ is inspected to confirm dispatch.
 
 from __future__ import annotations
 
-import inspect
 import os
 from pathlib import Path
 
 import pytest
-
-from gffbase import FeatureDB, Feature, create_db
+from gffbase import Feature, FeatureDB, create_db
 from gffbase.ingest import from_file
 
 DATA = Path(__file__).parent / "data"
@@ -37,9 +35,7 @@ DATA = Path(__file__).parent / "data"
 # GFFBASE_TEST_DISABLE_RTREE=1 — every test that asserts the R-tree path
 # must skip in that mode. The other tests run in both modes and validate
 # that results are identical regardless of which path is taken.
-RTREE_DISABLED = os.environ.get(
-    "GFFBASE_TEST_DISABLE_RTREE", ""
-).lower() in ("1", "true", "yes")
+RTREE_DISABLED = os.environ.get("GFFBASE_TEST_DISABLE_RTREE", "").lower() in ("1", "true", "yes")
 requires_rtree = pytest.mark.skipif(
     RTREE_DISABLED, reason="GFFBASE_TEST_DISABLE_RTREE set; R-tree path off"
 )

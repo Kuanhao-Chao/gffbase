@@ -37,7 +37,6 @@ Idempotent: an existing file is skipped (compare by size + suffix).
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -67,8 +66,7 @@ CORPORA: Dict[str, str] = {
         "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz"
     ),
     "chess3.1.3.GRCh38.gff.gz": (
-        "https://github.com/chess-genome/chess/releases/download/v.3.1.3/"
-        "chess3.1.3.GRCh38.gff.gz"
+        "https://github.com/chess-genome/chess/releases/download/v.3.1.3/chess3.1.3.GRCh38.gff.gz"
     ),
 }
 
@@ -102,9 +100,7 @@ def fetch(name: str, url: str, *, force: bool = False) -> Path:
             seen += len(chunk)
             if total:
                 pct = 100 * seen / total
-                sys.stdout.write(
-                    f"\r        {_human(seen)} / {_human(total)} ({pct:.1f}%)"
-                )
+                sys.stdout.write(f"\r        {_human(seen)} / {_human(total)} ({pct:.1f}%)")
                 sys.stdout.flush()
         sys.stdout.write("\n")
     tmp.rename(dst)
@@ -120,7 +116,7 @@ def main() -> None:
         choices=["gencode-gtf", "gencode-gff3", "gencode", "refseq", "mane", "chess"],
         action="append",
         help="restrict to one or more corpora (repeatable). "
-             "`gencode` is shorthand for both `gencode-gtf` and `gencode-gff3`.",
+        "`gencode` is shorthand for both `gencode-gtf` and `gencode-gff3`.",
     )
     args = ap.parse_args()
 

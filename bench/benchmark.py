@@ -196,6 +196,7 @@ def ingest_gffbase_inproc(gtf_path: Path, dbfn: Path, *, skip_if_exists: bool = 
         # when iterating on routing experiments to avoid re-paying the
         # ingest cost. Wall is reported as 0 (we did NOT ingest).
         from gffbase import FeatureDB
+
         db = FeatureDB(str(dbfn))
         info = {
             "label": "gffbase (cached)",
@@ -213,6 +214,7 @@ def ingest_gffbase_inproc(gtf_path: Path, dbfn: Path, *, skip_if_exists: bool = 
     if dbfn.exists():
         dbfn.unlink()
     from gffbase import create_db
+
     with measure("gffbase create_db") as m:
         # Suppress DuckDB's progress bar via PRAGMA, set on the connection
         # opened inside create_db.
@@ -360,7 +362,7 @@ print(json.dumps({{"n": len(rows), "out": {str(legacy_json)!r}}}))
 """
     new_script = f"""
 import json, sys
-sys.path.insert(0, {str(ROOT / 'python')!r})
+sys.path.insert(0, {str(ROOT / "python")!r})
 from gffbase import create_db
 db = create_db({str(slice_path)!r}, {str(new_db)!r}, force=True,
                disable_infer_genes=True, disable_infer_transcripts=True)
@@ -407,8 +409,11 @@ def main():
     parser.add_argument("--diff-lines", type=int, default=50_000)
     parser.add_argument("--legacy-timeout", type=int, default=1800)
     parser.add_argument("--skip-legacy-full", action="store_true")
-    parser.add_argument("--reuse-db", action="store_true",
-                        help="reuse existing gffbase DuckDB on disk; skip re-ingest")
+    parser.add_argument(
+        "--reuse-db",
+        action="store_true",
+        help="reuse existing gffbase DuckDB on disk; skip re-ingest",
+    )
     parser.add_argument("--out", default=str(OUT / "results.json"))
     args = parser.parse_args()
 
@@ -435,33 +440,40 @@ def main():
     new_dbfn = OUT / "gencode.duckdb"
     new_info = ingest_gffbase_inproc(gtf, new_dbfn, skip_if_exists=args.reuse_db)
     results["ingestion"]["gffbase"] = new_info
-    print(f"    wall = {new_info['wall_seconds']:.2f}s, peak RSS = "
-          f"{fmt_bytes(new_info['peak_rss_bytes'])}, n_features = {new_info['n_features']}",
-          flush=True)
+    print(
+        f"    wall = {new_info['wall_seconds']:.2f}s, peak RSS = "
+        f"{fmt_bytes(new_info['peak_rss_bytes'])}, n_features = {new_info['n_features']}",
+        flush=True,
+    )
 
     # --------------------------------------------------------------
     # 1b. Ingestion (legacy gffutils) — slow; subprocess + timeout
     # --------------------------------------------------------------
     if not args.skip_legacy_full:
-        print(f"[1/4] legacy gffutils ingest (timeout {args.legacy_timeout}s) …",
-              flush=True)
+        print(f"[1/4] legacy gffutils ingest (timeout {args.legacy_timeout}s) …", flush=True)
         legacy_dbfn = OUT / "gencode_legacy.sqlite"
         legacy_info = ingest_legacy_subproc(gtf, legacy_dbfn, args.legacy_timeout)
         results["ingestion"]["legacy"] = legacy_info
         if legacy_info.get("wall_seconds") and not legacy_info.get("timed_out"):
             ratio = legacy_info["wall_seconds"] / new_info["wall_seconds"]
             results["ingestion"]["speedup_ratio"] = ratio
-            print(f"    legacy wall = {legacy_info['wall_seconds']:.2f}s, peak RSS = "
-                  f"{fmt_bytes(legacy_info['peak_rss_bytes'])}, speedup = {ratio:.2f}×",
-                  flush=True)
+            print(
+                f"    legacy wall = {legacy_info['wall_seconds']:.2f}s, peak RSS = "
+                f"{fmt_bytes(legacy_info['peak_rss_bytes'])}, speedup = {ratio:.2f}×",
+                flush=True,
+            )
         else:
-            print(f"    legacy did not complete: timed_out={legacy_info.get('timed_out')}, "
-                  f"exit_code={legacy_info.get('exit_code')}", flush=True)
+            print(
+                f"    legacy did not complete: timed_out={legacy_info.get('timed_out')}, "
+                f"exit_code={legacy_info.get('exit_code')}",
+                flush=True,
+            )
 
     # --------------------------------------------------------------
     # Re-open the DuckDB for routing experiments.
     # --------------------------------------------------------------
     from gffbase import FeatureDB
+
     db = FeatureDB(str(new_dbfn))
 
     # --------------------------------------------------------------
@@ -477,41 +489,49 @@ def main():
         "btree": bt,
         "rtree_speedup_vs_btree": rt_speedup,
     }
-    print(f"    rtree={rt['wall_seconds']:.3f}s ({rt['qps']:.0f} qps), "
-          f"btree={bt['wall_seconds']:.3f}s ({bt['qps']:.0f} qps), "
-          f"speedup={rt_speedup:.2f}×",
-          flush=True)
+    print(
+        f"    rtree={rt['wall_seconds']:.3f}s ({rt['qps']:.0f} qps), "
+        f"btree={bt['wall_seconds']:.3f}s ({bt['qps']:.0f} qps), "
+        f"speedup={rt_speedup:.2f}×",
+        flush=True,
+    )
 
     # --------------------------------------------------------------
     # 3. Relational routing ablation
     # --------------------------------------------------------------
     print(f"[3/4] Relational routing — {args.n_children} genes …", flush=True)
-    gene_ids = [r[0] for r in db.conn.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene' "
-        "ORDER BY id LIMIT ?", [args.n_children],
-    ).fetchall()]
+    gene_ids = [
+        r[0]
+        for r in db.conn.execute(
+            "SELECT id FROM features WHERE featuretype = 'gene' ORDER BY id LIMIT ?",
+            [args.n_children],
+        ).fetchall()
+    ]
     cache = bench_children(db, gene_ids, force_dynamic=False, level=None)
     dyn = bench_children(db, gene_ids, force_dynamic=True, level=None)
-    cache_speedup = (dyn["wall_seconds"] / cache["wall_seconds"]) if cache["wall_seconds"] else float("inf")
+    cache_speedup = (
+        (dyn["wall_seconds"] / cache["wall_seconds"]) if cache["wall_seconds"] else float("inf")
+    )
     results["routing"]["children"] = {
         "closure_cache": cache,
         "dynamic_cte": dyn,
         "cache_speedup_vs_dynamic": cache_speedup,
     }
-    print(f"    cache={cache['wall_seconds']:.3f}s "
-          f"({cache['qps']:.0f} qps, {cache['total_descendants']} descs), "
-          f"dyn={dyn['wall_seconds']:.3f}s "
-          f"({dyn['qps']:.0f} qps, {dyn['total_descendants']} descs), "
-          f"speedup={cache_speedup:.2f}×",
-          flush=True)
+    print(
+        f"    cache={cache['wall_seconds']:.3f}s "
+        f"({cache['qps']:.0f} qps, {cache['total_descendants']} descs), "
+        f"dyn={dyn['wall_seconds']:.3f}s "
+        f"({dyn['qps']:.0f} qps, {dyn['total_descendants']} descs), "
+        f"speedup={cache_speedup:.2f}×",
+        flush=True,
+    )
 
     db.conn.close()
 
     # --------------------------------------------------------------
     # 4. Differential correctness
     # --------------------------------------------------------------
-    print(f"[4/4] Differential correctness on first {args.diff_lines} lines …",
-          flush=True)
+    print(f"[4/4] Differential correctness on first {args.diff_lines} lines …", flush=True)
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         slice_path = tmp / "slice.gtf"
@@ -519,9 +539,12 @@ def main():
         diff = diff_correctness(slice_path, tmp)
     diff["n_input_lines"] = n_written
     results["correctness"] = diff
-    print(f"    legacy={diff.get('legacy_n')}, new={diff.get('new_n')}, "
-          f"match={diff.get('match')}, only_legacy={diff.get('n_only_legacy')}, "
-          f"only_new={diff.get('n_only_new')}", flush=True)
+    print(
+        f"    legacy={diff.get('legacy_n')}, new={diff.get('new_n')}, "
+        f"match={diff.get('match')}, only_legacy={diff.get('n_only_legacy')}, "
+        f"only_new={diff.get('n_only_new')}",
+        flush=True,
+    )
 
     out_path = Path(args.out)
     out_path.write_text(json.dumps(results, indent=2))

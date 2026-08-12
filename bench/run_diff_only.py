@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from benchmark import diff_correctness, slice_gtf, DEFAULT_INPUT, OUT
+from benchmark import DEFAULT_INPUT, OUT, diff_correctness, slice_gtf
 
 
 def main():

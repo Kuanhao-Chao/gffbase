@@ -45,15 +45,15 @@ pub enum ErrorKind {
 impl ErrorKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            ErrorKind::TooFewFields       => "TooFewFields",
-            ErrorKind::EmptySeqid         => "EmptySeqid",
-            ErrorKind::EmptyFeaturetype   => "EmptyFeaturetype",
+            ErrorKind::TooFewFields => "TooFewFields",
+            ErrorKind::EmptySeqid => "EmptySeqid",
+            ErrorKind::EmptyFeaturetype => "EmptyFeaturetype",
             ErrorKind::InvalidFeaturetype => "InvalidFeaturetype",
-            ErrorKind::InvalidCoordinate  => "InvalidCoordinate",
-            ErrorKind::InvalidStrand      => "InvalidStrand",
-            ErrorKind::InvalidPhase       => "InvalidPhase",
-            ErrorKind::InvalidScore       => "InvalidScore",
-            ErrorKind::InvalidAttribute   => "InvalidAttribute",
+            ErrorKind::InvalidCoordinate => "InvalidCoordinate",
+            ErrorKind::InvalidStrand => "InvalidStrand",
+            ErrorKind::InvalidPhase => "InvalidPhase",
+            ErrorKind::InvalidScore => "InvalidScore",
+            ErrorKind::InvalidAttribute => "InvalidAttribute",
         }
     }
 }
@@ -150,10 +150,7 @@ pub fn validate_fields(
         return Err(GffError::new(
             line_no,
             ErrorKind::InvalidStrand,
-            format!(
-                "strand must be one of '+', '-', '?', '.'; got {:?}",
-                strand
-            ),
+            format!("strand must be one of '+', '-', '?', '.'; got {:?}", strand),
         ));
     }
 
@@ -208,9 +205,9 @@ pub fn validate_attributes_pairs(
     if trimmed.is_empty() || trimmed == "." {
         return Ok(());
     }
-    let has_eq    = trimmed.contains('=');
+    let has_eq = trimmed.contains('=');
     let has_quote = trimmed.contains('"');
-    let has_pair  = n_pairs > 0;
+    let has_pair = n_pairs > 0;
 
     // Accept the blob if EITHER `=` (GFF3) OR `"` (GTF) appears AND the
     // parser produced at least one pair. The dialect flag is informational
@@ -225,7 +222,11 @@ pub fn validate_attributes_pairs(
             ErrorKind::InvalidAttribute,
             format!(
                 "attribute string did not parse into any key=value pair: {:?}",
-                if trimmed.len() > 60 { &trimmed[..60] } else { trimmed }
+                if trimmed.len() > 60 {
+                    &trimmed[..60]
+                } else {
+                    trimmed
+                }
             ),
         ));
     }
@@ -234,15 +235,37 @@ pub fn validate_attributes_pairs(
 
 #[cfg(test)]
 mod tests {
+    // A GFF row is nine columns wide, so the per-column test helpers below
+    // legitimately take one argument per column.
+    #![allow(clippy::too_many_arguments)]
+
     use super::*;
 
-    fn ok(seqid: &str, ft: &str, s: Option<i64>, e: Option<i64>,
-          score: &str, strand: &str, frame: &str, attrs: &[u8]) {
+    fn ok(
+        seqid: &str,
+        ft: &str,
+        s: Option<i64>,
+        e: Option<i64>,
+        score: &str,
+        strand: &str,
+        frame: &str,
+        attrs: &[u8],
+    ) {
         validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false).unwrap();
     }
-    fn err_kind(seqid: &str, ft: &str, s: Option<i64>, e: Option<i64>,
-                score: &str, strand: &str, frame: &str, attrs: &[u8]) -> ErrorKind {
-        validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false).unwrap_err().kind
+    fn err_kind(
+        seqid: &str,
+        ft: &str,
+        s: Option<i64>,
+        e: Option<i64>,
+        score: &str,
+        strand: &str,
+        frame: &str,
+        attrs: &[u8],
+    ) -> ErrorKind {
+        validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false)
+            .unwrap_err()
+            .kind
     }
 
     #[test]
@@ -261,7 +284,16 @@ mod tests {
     #[test]
     fn whitespace_in_featuretype() {
         assert_eq!(
-            err_kind("chr1", "exon foo", Some(1), Some(10), ".", "+", ".", b"ID=x"),
+            err_kind(
+                "chr1",
+                "exon foo",
+                Some(1),
+                Some(10),
+                ".",
+                "+",
+                ".",
+                b"ID=x"
+            ),
             ErrorKind::InvalidFeaturetype,
         );
     }

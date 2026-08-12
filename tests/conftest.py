@@ -51,6 +51,4 @@ def pytest_configure(config):
     # `pytest` directly from the repo.
     repo_root = Path(__file__).parent.parent
     py_src = repo_root / "python"
-    os.environ["PYTHONPATH"] = (
-        f"{py_src}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"
-    )
+    os.environ["PYTHONPATH"] = f"{py_src}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"

@@ -28,17 +28,12 @@ from pathlib import Path
 
 import pyarrow as pa
 import pytest
-
-from gffbase import Feature, create_db
+from gffbase import create_db
 
 DATA = Path(__file__).parent / "data"
 
-RTREE_DISABLED = os.environ.get(
-    "GFFBASE_TEST_DISABLE_RTREE", ""
-).lower() in ("1", "true", "yes")
-requires_rtree = pytest.mark.skipif(
-    RTREE_DISABLED, reason="GFFBASE_TEST_DISABLE_RTREE active"
-)
+RTREE_DISABLED = os.environ.get("GFFBASE_TEST_DISABLE_RTREE", "").lower() in ("1", "true", "yes")
+requires_rtree = pytest.mark.skipif(RTREE_DISABLED, reason="GFFBASE_TEST_DISABLE_RTREE active")
 
 
 @pytest.fixture
@@ -247,10 +242,13 @@ def test_region_batched_empty_input(gtf_db):
 
 def test_region_batched_skips_invalid_regions(gtf_db):
     # Mix valid + invalid (seqid-only string, no coords) — invalid ones drop out.
-    out = gtf_db.region_batched([
-        ("chr1", 100, 600),
-        "chr2",                 # seqid-only → no coords → filtered
-    ], featuretype="exon")
+    out = gtf_db.region_batched(
+        [
+            ("chr1", 100, 600),
+            "chr2",  # seqid-only → no coords → filtered
+        ],
+        featuretype="exon",
+    )
     # Only chr1 query produces results.
     assert set(out.column("query_seqid").to_pylist()) == {"chr1"}
 
@@ -290,12 +288,8 @@ def test_children_row_by_row_matches_batched(hier_db):
 
 
 def test_region_row_by_row_matches_batched(gtf_db):
-    rbr = sorted(
-        f.id for f in gtf_db.region(seqid="chr1", start=100, end=600,
-                                     featuretype="exon")
-    )
+    rbr = sorted(f.id for f in gtf_db.region(seqid="chr1", start=100, end=600, featuretype="exon"))
     batched = sorted(
-        gtf_db.region_batched([("chr1", 100, 600)], featuretype="exon")
-              .column("id").to_pylist()
+        gtf_db.region_batched([("chr1", 100, 600)], featuretype="exon").column("id").to_pylist()
     )
     assert rbr == batched

@@ -21,7 +21,6 @@ Centralized so the ingestion engine and tests share one source of truth.
 
 from __future__ import annotations
 
-
 # Seven user-facing tables plus the bbox helper view if the spatial extension
 # is available. Schema version is recorded in `meta`.
 SCHEMA_VERSION = "1"

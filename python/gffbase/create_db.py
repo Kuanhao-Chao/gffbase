@@ -70,9 +70,7 @@ def create_db(
     cleanup_path: Optional[str] = None
     if from_string:
         # Materialize to a temp file so the parser can mmap-style read it.
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".gff3", delete=False, encoding="utf-8"
-        )
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".gff3", delete=False, encoding="utf-8")
         tmp.write(data)
         tmp.close()
         path = tmp.name
@@ -96,7 +94,11 @@ def create_db(
             except OSError:
                 pass
 
-    db = FeatureDB((con, stats), keep_order=keep_order,
-                   sort_attribute_values=sort_attribute_values,
-                   text_factory=text_factory, pragmas=pragmas)
+    db = FeatureDB(
+        (con, stats),
+        keep_order=keep_order,
+        sort_attribute_values=sort_attribute_values,
+        text_factory=text_factory,
+        pragmas=pragmas,
+    )
     return db

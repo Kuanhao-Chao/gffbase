@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from gffbase import create_db
 
 DATA = Path(__file__).parent / "data"
@@ -39,9 +38,7 @@ def test_features_compat_view(hier_db):
 
 
 def test_features_compat_attributes_are_raw_bytes(hier_db):
-    row = hier_db.execute(
-        "SELECT attributes FROM features_compat WHERE id='g1'"
-    ).fetchone()
+    row = hier_db.execute("SELECT attributes FROM features_compat WHERE id='g1'").fetchone()
     # Documented break: this is the col-9 raw text, not JSON.
     assert row[0] == "ID=g1;Name=geneA"
 

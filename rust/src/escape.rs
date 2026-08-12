@@ -20,7 +20,7 @@
 
 use std::borrow::Cow;
 
-pub fn unescape<'a>(input: &'a str) -> Cow<'a, str> {
+pub fn unescape(input: &str) -> Cow<'_, str> {
     if !input.contains('%') {
         return Cow::Borrowed(input);
     }

@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: >-
+  GFFBase: Rust-accelerated GFF3/GTF parser with a DuckDB-backed
+  storage engine and zero-copy PyArrow interface
+message: If GFFBase contributes to your research, please cite it.
+type: software
+authors:
+  - given-names: Kuan-Hao
+    family-names: Chao
+    email: kuanhao.chao@gmail.com
+    orcid: https://orcid.org/0000-0003-3026-4266
+repository-code: https://github.com/Kuanhao-Chao/gffbase
+url: https://gffbase.khchao.com/
+license: Apache-2.0
+version: 0.1.1
+keywords:
+  - bioinformatics
+  - genomics
+  - gff3
+  - gtf
+  - genome-annotation
+  - duckdb
+  - rust

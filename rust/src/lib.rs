@@ -20,25 +20,27 @@
 //! callable plus a `parse_bytes(data, ...)` callable. Both yield Python tuples
 //! with the canonical 11-tuple shape that `gffbase.parser` consumes:
 //!
-//!     (seqid, source, featuretype, start, end, score, strand, frame,
-//!      attributes_blob, attributes_pairs, extra)
+//! ```text
+//! (seqid, source, featuretype, start, end, score, strand, frame,
+//!  attributes_blob, attributes_pairs, extra)
+//! ```
 //!
 //! `attributes_pairs` is a list[(key, value, idx)]; `idx` preserves multi-value
 //! ordering. `start`/`end` are int or None (`.` becomes None). `attributes_blob`
 //! is the raw col-9 bytes for byte-faithful round-trip.
 
+use pyo3::create_exception;
+use pyo3::exceptions::{PyIOError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
-use pyo3::exceptions::{PyIOError, PyValueError};
-use pyo3::create_exception;
 
-mod dialect;
 mod attributes;
+mod dialect;
 mod escape;
 mod parser;
 mod validate;
 
-use parser::{ParseOptions, RecordIter, FileSource};
+use parser::{FileSource, ParseOptions, RecordIter};
 use validate::GffError;
 
 // Phase 16: descriptive parser errors. Subclassing `PyValueError` keeps
@@ -57,7 +59,7 @@ fn gff_error_to_py(py: Python<'_>, e: GffError) -> PyErr {
         // mypy / runtime path — set on the bound value, not the type.
         let _ = value_obj;
     }
-    if let Some(inst) = err.value_bound(py).extract::<Bound<'_, PyAny>>().ok() {
+    if let Ok(inst) = err.value_bound(py).extract::<Bound<'_, PyAny>>() {
         let _ = inst.setattr("line_no", e.line_no);
         let _ = inst.setattr("kind", e.kind.as_str());
         let _ = inst.setattr("message", e.message.clone());
@@ -131,7 +133,7 @@ fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<PyO
     };
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
-    Ok(dialect_to_pydict(py, iter.dialect())?)
+    dialect_to_pydict(py, iter.dialect())
 }
 
 #[pyclass]
@@ -212,7 +214,10 @@ fn record_to_pytuple(py: Python<'_>, rec: &parser::Record) -> PyResult<PyObject>
     let attrs_blob = PyBytes::new_bound(py, &rec.attributes_blob);
     let pairs = PyList::empty_bound(py);
     for (k, v, idx) in &rec.attributes_pairs {
-        let t = PyTuple::new_bound(py, &[k.into_py(py), v.into_py(py), (*idx as i64).into_py(py)]);
+        let t = PyTuple::new_bound(
+            py,
+            &[k.into_py(py), v.into_py(py), (*idx as i64).into_py(py)],
+        );
         pairs.append(t)?;
     }
     let extra_list = PyList::empty_bound(py);

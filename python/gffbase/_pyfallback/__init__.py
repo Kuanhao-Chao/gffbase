@@ -18,6 +18,6 @@
 implementation and as a fallback when the native extension is unavailable.
 """
 
-from gffbase._pyfallback.parser import parse_file, parse_bytes, detect_dialect
+from gffbase._pyfallback.parser import detect_dialect, parse_bytes, parse_file
 
 __all__ = ["parse_file", "parse_bytes", "detect_dialect"]

@@ -75,25 +75,32 @@ def main():
     print(f"max_depth         = {db._max_depth}", flush=True)
     print(f"rtree_built       = {db._rtree_built}", flush=True)
 
-    gene_ids = [r[0] for r in db.conn.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene' "
-        "ORDER BY id LIMIT ?", [args.n],
-    ).fetchall()]
+    gene_ids = [
+        r[0]
+        for r in db.conn.execute(
+            "SELECT id FROM features WHERE featuretype = 'gene' ORDER BY id LIMIT ?",
+            [args.n],
+        ).fetchall()
+    ]
     print(f"gene sample size  = {len(gene_ids)}", flush=True)
 
     results = {}
     for label in ("auto", "cache", "dynamic"):
         force = None if label == "auto" else label
         r = bench(db, gene_ids, force=force)
-        print(f"{label:7s}: wall={r['wall_seconds']:.3f}s, "
-              f"qps={r['qps']:.0f}, descs={r['total_descendants']}",
-              flush=True)
+        print(
+            f"{label:7s}: wall={r['wall_seconds']:.3f}s, "
+            f"qps={r['qps']:.0f}, descs={r['total_descendants']}",
+            flush=True,
+        )
         results[label] = r
 
-    speedup_auto_vs_cache = (results["cache"]["wall_seconds"]
-                             / results["auto"]["wall_seconds"]) if results["auto"]["wall_seconds"] else 0
-    print(f"\nauto vs forced-cache speedup: {speedup_auto_vs_cache:.2f}×",
-          flush=True)
+    speedup_auto_vs_cache = (
+        (results["cache"]["wall_seconds"] / results["auto"]["wall_seconds"])
+        if results["auto"]["wall_seconds"]
+        else 0
+    )
+    print(f"\nauto vs forced-cache speedup: {speedup_auto_vs_cache:.2f}×", flush=True)
     results["auto_speedup_vs_cache"] = speedup_auto_vs_cache
     Path(args.out).write_text(json.dumps(results, indent=2))
 

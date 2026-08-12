@@ -28,9 +28,9 @@ import gzip
 import io
 from typing import Iterator, List, Optional
 
+from gffbase._pyfallback.attributes import parse_attributes
 from gffbase.dialect import merge_dialects
 from gffbase.feature import ParsedFeature
-from gffbase._pyfallback.attributes import parse_attributes
 
 
 def _gff_format_error_class():
@@ -44,10 +44,12 @@ def _gff_format_error_class():
     the Python fallback raised.
     """
     try:
-        from gffbase._native import GFFFormatError as _C   # type: ignore
+        from gffbase._native import GFFFormatError as _C  # type: ignore
+
         return _C
     except Exception:
         from gffbase.exceptions import GFFFormatError as _C
+
         return _C
 
 
@@ -73,6 +75,7 @@ def _make_error(message: str, line_no: int, kind: str):
 class _LazyGFFFormatErrorProxy:
     def __instancecheck__(self, instance):
         return isinstance(instance, _gff_format_error_class())
+
     def __call__(self, *a, **kw):
         return _gff_format_error_class()(*a, **kw)
 
@@ -83,7 +86,7 @@ GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise s
 def _open(path: str):
     if path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8", newline="")
-    return open(path, "r", encoding="utf-8", newline="")
+    return open(path, encoding="utf-8", newline="")
 
 
 def _iter_lines(stream) -> Iterator[str]:
@@ -117,42 +120,51 @@ def _validate(
     """Mirror of `validate.rs::validate_fields` + `validate_attributes_pairs`."""
     if not seqid:
         return _make_error(
-            f"line {line_no}: seqid (col 1) is empty", line_no, "EmptySeqid",
+            f"line {line_no}: seqid (col 1) is empty",
+            line_no,
+            "EmptySeqid",
         )
     if not featuretype:
         return _make_error(
             f"line {line_no}: featuretype (col 3) is empty",
-            line_no, "EmptyFeaturetype",
+            line_no,
+            "EmptyFeaturetype",
         )
     if any(ch.isspace() for ch in featuretype):
         return _make_error(
             f"line {line_no}: featuretype contains whitespace: {featuretype!r}",
-            line_no, "InvalidFeaturetype",
+            line_no,
+            "InvalidFeaturetype",
         )
     if start is not None and start < 1:
         return _make_error(
             f"line {line_no}: start coordinate must be >= 1 (got {start})",
-            line_no, "InvalidCoordinate",
+            line_no,
+            "InvalidCoordinate",
         )
     if start is not None and end is not None and end < start:
         return _make_error(
             f"line {line_no}: end < start ({end} < {start})",
-            line_no, "InvalidCoordinate",
+            line_no,
+            "InvalidCoordinate",
         )
     if strand not in ("+", "-", "?", "."):
         return _make_error(
             f"line {line_no}: strand must be one of '+', '-', '?', '.'; got {strand!r}",
-            line_no, "InvalidStrand",
+            line_no,
+            "InvalidStrand",
         )
     if frame not in (".", "0", "1", "2"):
         return _make_error(
             f"line {line_no}: phase must be 0, 1, 2, or '.'; got {frame!r}",
-            line_no, "InvalidPhase",
+            line_no,
+            "InvalidPhase",
         )
     if featuretype == "CDS" and frame == ".":
         return _make_error(
             f"line {line_no}: CDS row missing required phase (must be 0, 1, or 2)",
-            line_no, "InvalidPhase",
+            line_no,
+            "InvalidPhase",
         )
     if score not in ("", "."):
         try:
@@ -160,7 +172,8 @@ def _validate(
         except ValueError:
             return _make_error(
                 f"line {line_no}: score must be a float or '.'; got {score!r}",
-                line_no, "InvalidScore",
+                line_no,
+                "InvalidScore",
             )
     trimmed = blob.strip()
     if trimmed and trimmed != ".":
@@ -176,7 +189,8 @@ def _validate(
             return _make_error(
                 f"line {line_no}: attribute string did not parse into any "
                 f"key=value pair: {trimmed[:60]!r}",
-                line_no, "InvalidAttribute",
+                line_no,
+                "InvalidAttribute",
             )
     return None
 
@@ -187,20 +201,21 @@ def _coord_or_error(s: str, line_no: int, which: str) -> Optional[int]:
         return None
     try:
         return int(s)
-    except ValueError:
+    except ValueError as err:
         raise _make_error(
             f"line {line_no}: {which} coordinate is not an integer: {s!r}",
-            line_no, "InvalidCoordinate",
-        )
+            line_no,
+            "InvalidCoordinate",
+        ) from err
 
 
 def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
     fields = line.split("\t")
     if len(fields) < 9:
         raise _make_error(
-            f"line {line_no}: expected at least 9 tab-separated fields, "
-            f"found {len(fields)}",
-            line_no, "TooFewFields",
+            f"line {line_no}: expected at least 9 tab-separated fields, found {len(fields)}",
+            line_no,
+            "TooFewFields",
         )
     seqid, source, featuretype, start_s, end_s, score, strand, frame = fields[:8]
     blob = fields[8]
@@ -210,10 +225,15 @@ def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
     end = _coord_or_error(end_s, line_no, "end")
     err = _validate(
         line_no=line_no,
-        seqid=seqid, featuretype=featuretype,
-        start=start, end=end,
-        score=score, strand=strand, frame=frame,
-        n_pairs=len(pairs), blob=blob,
+        seqid=seqid,
+        featuretype=featuretype,
+        start=start,
+        end=end,
+        score=score,
+        strand=strand,
+        frame=frame,
+        n_pairs=len(pairs),
+        blob=blob,
     )
     if err is not None:
         raise err
@@ -255,11 +275,13 @@ def _stream_features(
         should propagate (i.e., raise)."""
         if strict:
             return False
-        warnings.append({
-            "line_no": getattr(err, "line_no", 0),
-            "kind":    getattr(err, "kind", ""),
-            "message": getattr(err, "message", str(err)),
-        })
+        warnings.append(
+            {
+                "line_no": getattr(err, "line_no", 0),
+                "kind": getattr(err, "kind", ""),
+                "message": getattr(err, "message", str(err)),
+            }
+        )
         return True
 
     for line in _iter_lines(stream):
@@ -325,13 +347,23 @@ class _FallbackIterator:
     ``strict=False``).
     """
 
-    def __init__(self, stream, checklines: int, force_dialect_check: bool,
-                 force_gff: bool, strict: bool = True):
+    def __init__(
+        self,
+        stream,
+        checklines: int,
+        force_dialect_check: bool,
+        force_gff: bool,
+        strict: bool = True,
+    ):
         self._warnings: List[dict] = []
         self._directives: List[str] = []
         self._gen = _stream_features(
-            stream, checklines, force_dialect_check, force_gff,
-            strict=strict, warnings=self._warnings,
+            stream,
+            checklines,
+            force_dialect_check,
+            force_gff,
+            strict=strict,
+            warnings=self._warnings,
             directives=self._directives,
         )
         self._dialect = None

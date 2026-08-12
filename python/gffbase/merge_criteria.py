@@ -61,18 +61,22 @@ def overlap_any_inclusive(acc, cur, components):
 def overlap_end_threshold(threshold: int):
     def predicate(acc, cur, components):
         return abs(acc.end - cur.start) <= threshold
+
     return predicate
 
 
 def overlap_start_threshold(threshold: int):
     def predicate(acc, cur, components):
         return abs(acc.start - cur.end) <= threshold
+
     return predicate
 
 
 def overlap_any_threshold(threshold: int):
     end_thr = overlap_end_threshold(threshold)
     start_thr = overlap_start_threshold(threshold)
+
     def predicate(acc, cur, components):
         return end_thr(acc, cur, components) or start_thr(acc, cur, components)
+
     return predicate

@@ -22,8 +22,7 @@ not built.
 from __future__ import annotations
 
 import pytest
-
-from gffbase import parse_gff, native_available
+from gffbase import native_available, parse_gff
 
 
 @pytest.mark.skipif(not native_available(), reason="Rust extension not built")

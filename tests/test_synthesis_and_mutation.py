@@ -20,12 +20,11 @@ bed12, children_bp, iter_by_parent_childs) and mutation
 
 from __future__ import annotations
 
-import types
 from pathlib import Path
 
 import pytest
-
-from gffbase import Feature, FeatureNotFoundError, create_db, merge_criteria as mc
+from gffbase import Feature, FeatureNotFoundError, create_db
+from gffbase import merge_criteria as mc
 
 DATA = Path(__file__).parent / "data"
 
@@ -41,8 +40,7 @@ def hier_db():
 
 
 def test_interfeatures_yields_gaps(hier_db):
-    exons = sorted(hier_db.children("t1", featuretype="exon"),
-                   key=lambda f: f.start)
+    exons = sorted(hier_db.children("t1", featuretype="exon"), key=lambda f: f.start)
     inters = list(hier_db.interfeatures(exons, new_featuretype="intron"))
     assert len(inters) == len(exons) - 1
     for inter in inters:
@@ -53,43 +51,41 @@ def test_interfeatures_yields_gaps(hier_db):
 
 
 def test_interfeatures_skips_zero_length_gaps(hier_db):
-    f1 = Feature(seqid="chr1", start=1, end=10, dialect={"fmt": "gff3"},
-                 attributes={"ID": "a"})
-    f2 = Feature(seqid="chr1", start=11, end=20, dialect={"fmt": "gff3"},
-                 attributes={"ID": "b"})
+    f1 = Feature(seqid="chr1", start=1, end=10, dialect={"fmt": "gff3"}, attributes={"ID": "a"})
+    f2 = Feature(seqid="chr1", start=11, end=20, dialect={"fmt": "gff3"}, attributes={"ID": "b"})
     inters = list(hier_db.interfeatures([f1, f2]))
     assert inters == []
 
 
 def test_interfeatures_merge_attributes_dedupe(hier_db):
-    a = Feature(seqid="chr1", start=1, end=10,
-                attributes={"k": ["v1", "v2"]}, dialect={"fmt": "gff3"})
-    b = Feature(seqid="chr1", start=20, end=30,
-                attributes={"k": ["v2", "v3"]}, dialect={"fmt": "gff3"})
+    a = Feature(
+        seqid="chr1", start=1, end=10, attributes={"k": ["v1", "v2"]}, dialect={"fmt": "gff3"}
+    )
+    b = Feature(
+        seqid="chr1", start=20, end=30, attributes={"k": ["v2", "v3"]}, dialect={"fmt": "gff3"}
+    )
     inters = list(hier_db.interfeatures([a, b]))
     assert inters[0].attributes["k"] == ["v1", "v2", "v3"]
 
 
 def test_interfeatures_attribute_func_called(hier_db):
-    a = Feature(seqid="chr1", start=1, end=10,
-                attributes={"k": "v"}, dialect={"fmt": "gff3"})
-    b = Feature(seqid="chr1", start=20, end=30,
-                attributes={"k": "v"}, dialect={"fmt": "gff3"})
+    a = Feature(seqid="chr1", start=1, end=10, attributes={"k": "v"}, dialect={"fmt": "gff3"})
+    b = Feature(seqid="chr1", start=20, end=30, attributes={"k": "v"}, dialect={"fmt": "gff3"})
     seen = []
+
     def cb(prev, cur, attrs):
         seen.append(attrs)
         attrs["custom"] = ["yes"]
         return attrs
+
     out = list(hier_db.interfeatures([a, b], attribute_func=cb))
     assert seen
     assert out[0].attributes["custom"] == ["yes"]
 
 
 def test_interfeatures_update_attributes(hier_db):
-    a = Feature(seqid="chr1", start=1, end=10, attributes={"a": "1"},
-                dialect={"fmt": "gff3"})
-    b = Feature(seqid="chr1", start=20, end=30, attributes={"b": "2"},
-                dialect={"fmt": "gff3"})
+    a = Feature(seqid="chr1", start=1, end=10, attributes={"a": "1"}, dialect={"fmt": "gff3"})
+    b = Feature(seqid="chr1", start=20, end=30, attributes={"b": "2"}, dialect={"fmt": "gff3"})
     out = list(hier_db.interfeatures([a, b], update_attributes={"forced": ["yes"]}))
     assert out[0].attributes["forced"] == ["yes"]
 
@@ -105,12 +101,20 @@ def test_interfeatures_empty_input(hier_db):
 
 def test_merge_overlapping_features(hier_db):
     feats = [
-        Feature(seqid="chr1", featuretype="exon", strand="+",
-                start=1, end=100, dialect={"fmt": "gff3"}),
-        Feature(seqid="chr1", featuretype="exon", strand="+",
-                start=50, end=150, dialect={"fmt": "gff3"}),
-        Feature(seqid="chr1", featuretype="exon", strand="+",
-                start=300, end=400, dialect={"fmt": "gff3"}),
+        Feature(
+            seqid="chr1", featuretype="exon", strand="+", start=1, end=100, dialect={"fmt": "gff3"}
+        ),
+        Feature(
+            seqid="chr1", featuretype="exon", strand="+", start=50, end=150, dialect={"fmt": "gff3"}
+        ),
+        Feature(
+            seqid="chr1",
+            featuretype="exon",
+            strand="+",
+            start=300,
+            end=400,
+            dialect={"fmt": "gff3"},
+        ),
     ]
     merged = list(hier_db.merge(feats))
     assert len(merged) == 2
@@ -125,16 +129,20 @@ def test_merge_empty_input(hier_db):
 
 def test_merge_with_custom_criteria(hier_db):
     feats = [
-        Feature(seqid="chr1", featuretype="exon", strand="+",
-                start=1, end=10, dialect={"fmt": "gff3"}),
-        Feature(seqid="chr1", featuretype="CDS", strand="+",
-                start=5, end=15, dialect={"fmt": "gff3"}),
+        Feature(
+            seqid="chr1", featuretype="exon", strand="+", start=1, end=10, dialect={"fmt": "gff3"}
+        ),
+        Feature(
+            seqid="chr1", featuretype="CDS", strand="+", start=5, end=15, dialect={"fmt": "gff3"}
+        ),
     ]
     # Default criteria require same featuretype → no merge.
     out_default = list(hier_db.merge(feats))
     assert len(out_default) == 2
     # Drop featuretype criterion → both merge.
-    out_relaxed = list(hier_db.merge(feats, merge_criteria=(mc.seqid, mc.overlap_end_inclusive, mc.strand)))
+    out_relaxed = list(
+        hier_db.merge(feats, merge_criteria=(mc.seqid, mc.overlap_end_inclusive, mc.strand))
+    )
     assert len(out_relaxed) == 1
 
 
@@ -157,18 +165,15 @@ def test_create_introns_grandparent(hier_db):
 
 
 def test_create_introns_parent(hier_db):
-    introns = list(hier_db.create_introns(
-        grandparent_featuretype=None, parent_featuretype="mRNA"))
+    introns = list(hier_db.create_introns(grandparent_featuretype=None, parent_featuretype="mRNA"))
     assert any(f.featuretype == "intron" for f in introns)
 
 
 def test_create_introns_requires_one_anchor(hier_db):
     with pytest.raises(ValueError):
-        list(hier_db.create_introns(
-            grandparent_featuretype="gene", parent_featuretype="mRNA"))
+        list(hier_db.create_introns(grandparent_featuretype="gene", parent_featuretype="mRNA"))
     with pytest.raises(ValueError):
-        list(hier_db.create_introns(
-            grandparent_featuretype=None, parent_featuretype=None))
+        list(hier_db.create_introns(grandparent_featuretype=None, parent_featuretype=None))
 
 
 def test_create_splice_sites(hier_db):
@@ -270,7 +275,7 @@ def test_delete_empty_iterable_is_noop(hier_db):
 def test_add_relation_creates_edge_and_closure(hier_db):
     # Insert a synthetic feature first.
     hier_db.conn.execute(
-        "INSERT INTO features (id, seqid, source, featuretype, start, \"end\", "
+        'INSERT INTO features (id, seqid, source, featuretype, start, "end", '
         "score, strand, frame, attributes_blob, extra_blob, file_order, is_synthetic) "
         "VALUES ('orphan', 'chr1', 'test', 'leaf', 100, 200, '.', '+', '.', NULL, NULL, NULL, FALSE)"
     )
@@ -284,12 +289,15 @@ def test_add_relation_creates_edge_and_closure(hier_db):
 
 def test_add_relation_with_callbacks(hier_db):
     seen = {}
+
     def parent_cb(p, c):
         seen["parent_called"] = True
+
     def child_cb(p, c):
         seen["child_called"] = True
+
     hier_db.conn.execute(
-        "INSERT INTO features (id, seqid, source, featuretype, start, \"end\", "
+        'INSERT INTO features (id, seqid, source, featuretype, start, "end", '
         "score, strand, frame, attributes_blob, extra_blob, file_order, is_synthetic) "
         "VALUES ('cb', 'chr1', 'test', 'leaf', 100, 200, '.', '+', '.', NULL, NULL, NULL, FALSE)"
     )
@@ -301,9 +309,17 @@ def test_add_relation_with_callbacks(hier_db):
 
 def test_update_appends_features(hier_db):
     new_feat = Feature(
-        seqid="chr1", source="test", featuretype="exon",
-        start=10000, end=10500, score=".", strand="+", frame=".",
-        attributes={"ID": "newx"}, dialect={"fmt": "gff3"}, id="newx",
+        seqid="chr1",
+        source="test",
+        featuretype="exon",
+        start=10000,
+        end=10500,
+        score=".",
+        strand="+",
+        frame=".",
+        attributes={"ID": "newx"},
+        dialect={"fmt": "gff3"},
+        id="newx",
     )
     hier_db.update([new_feat])
     assert "newx" in hier_db

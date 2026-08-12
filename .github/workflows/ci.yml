@@ -26,15 +26,32 @@ jobs:
   # Lint job — fast, single cell. Runs ruff against the Python sources.
   # ------------------------------------------------------------------------
   lint:
-    name: Lint (ruff)
+    name: Lint (ruff + rustfmt + clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install --upgrade pip ruff
-      - run: ruff check python/gffbase tests bench
+      # Pin ruff: an unpinned lint tool turns any upstream release into a
+      # surprise CI failure on an unrelated PR.
+      - run: pip install --upgrade pip 'ruff==0.16.2'
+      # `benchmarks/` is included here. It was omitted before, so 70 errors in
+      # it were invisible to CI while CONTRIBUTING told contributors to lint it.
+      - name: ruff check
+        run: ruff check python/gffbase tests bench benchmarks
+      - name: ruff format --check
+        run: ruff format --check python/gffbase tests bench benchmarks
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.83
+        with:
+          components: clippy, rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+      # clippy was installed by CI but never actually invoked.
+      - name: cargo clippy
+        run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
 
   # ------------------------------------------------------------------------
   # Test matrix — exhaustive over the *routing* axis (rtree vs btree).
@@ -89,31 +106,38 @@ jobs:
 
       - name: Install runtime + test deps
         shell: bash
-        run: pip install -e .[test]
+        run: pip install -e ".[test,all]"
 
-      - name: Rust unit tests (cargo test --lib)
+      # Full `cargo test`, not `--lib`. The doc-test target was excluded
+      # before, which hid a module doc comment that failed to compile.
+      - name: Rust tests
         shell: bash
         working-directory: rust
-        run: cargo test --lib --release
+        run: cargo test --locked --release
 
-      - name: Run pytest — R-tree path (≥95% coverage gate)
+      # The compiled extension must be present. Previously the `engine`
+      # fixture silently skipped every Rust cell when it was missing, so a
+      # broken native build looked like a pass.
+      - name: Assert native extension is available
+        shell: bash
+        run: python -c "import gffbase, sys; sys.exit(0 if gffbase.native_available() else 'native extension missing')"
+
+      - name: Run pytest — R-tree path
         if: matrix.spatial == 'rtree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: ""
-        # Inherits --cov-fail-under=95 from pyproject's addopts.
-        run: pytest -q
+        run: pytest -q --cov=gffbase --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=99
 
-      - name: Run pytest — B-tree fallback path (≥93% coverage gate)
+      - name: Run pytest — B-tree fallback path
         if: matrix.spatial == 'btree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: "1"
-        # B-tree cells skip 3 R-tree-specific tests; the R-tree-only branches
-        # in interface.py / ingest.py are unreachable here. Lower threshold
-        # by ~2 points so this matrix axis still has a meaningful gate
-        # (catches regressions on the B-tree-reachable code).
-        run: pytest -q --cov-fail-under=93
+        # B-tree cells skip the R-tree-specific tests, so the R-tree-only
+        # branches are unreachable here; the threshold is lowered to keep the
+        # gate meaningful for the B-tree-reachable code rather than vacuous.
+        run: pytest -q --cov=gffbase --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=96
 
       - name: Upload coverage report
         if: always()

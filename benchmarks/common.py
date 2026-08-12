@@ -148,7 +148,7 @@ def du(path: Path) -> int:
 
 def pretty_seconds(s: float) -> str:
     if s < 1:
-        return f"{s*1000:.1f} ms"
+        return f"{s * 1000:.1f} ms"
     if s < 60:
         return f"{s:.2f} s"
     m, s = divmod(s, 60)

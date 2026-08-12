@@ -27,12 +27,19 @@ This module hosts two distinct types:
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import MutableMapping
 from dataclasses import dataclass, field
 from typing import Iterator, List, Mapping, Optional, Tuple, Union
 
+# `slots=True` landed in Python 3.10. `ParsedFeature` is instantiated once per
+# parsed line — millions of times on a GENCODE-scale file — so the per-instance
+# memory saving is worth keeping wherever it is available. On 3.9 we fall back
+# to a plain dataclass rather than failing at import time.
+_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
-@dataclass(slots=True)
+
+@dataclass(**_SLOTS)
 class ParsedFeature:
     seqid: str
     source: str
@@ -69,7 +76,7 @@ class ParsedFeature:
         return out
 
     @classmethod
-    def from_tuple(cls, tup) -> "ParsedFeature":
+    def from_tuple(cls, tup) -> ParsedFeature:
         """Build from the 11-tuple shape that the Rust extension yields."""
         (
             seqid,
@@ -106,8 +113,15 @@ class ParsedFeature:
 
 # Field order for integer-indexed __getitem__ / __setitem__ (legacy semantics).
 _FIELD_ORDER = (
-    "seqid", "source", "featuretype", "start", "end",
-    "score", "strand", "frame", "attributes",
+    "seqid",
+    "source",
+    "featuretype",
+    "start",
+    "end",
+    "score",
+    "strand",
+    "frame",
+    "attributes",
 )
 
 
@@ -176,6 +190,7 @@ class _LazyAttributes(MutableMapping):
         # Defer to the pure-Python attribute parser to avoid a Rust hop on a
         # single line. This is the warm path for users who *do* read attrs.
         from gffbase._pyfallback.attributes import parse_attributes
+
         text = self._blob.decode("utf-8", errors="replace")
         pairs, _obs = parse_attributes(text)
         for k, v, _idx in pairs:
@@ -237,11 +252,22 @@ class Feature:
     """
 
     __slots__ = (
-        "seqid", "source", "featuretype",
-        "start", "end", "score", "strand", "frame",
-        "attributes", "extra",
-        "bin", "id", "dialect", "file_order",
-        "keep_order", "sort_attribute_values",
+        "seqid",
+        "source",
+        "featuretype",
+        "start",
+        "end",
+        "score",
+        "strand",
+        "frame",
+        "attributes",
+        "extra",
+        "bin",
+        "id",
+        "dialect",
+        "file_order",
+        "keep_order",
+        "sort_attribute_values",
         "_attributes_blob",
         "children",  # populated by FeatureDB.merge to expose component features
     )
@@ -411,8 +437,14 @@ class Feature:
         start_s = "." if self.start is None else str(self.start)
         end_s = "." if self.end is None else str(self.end)
         cols = [
-            self.seqid, self.source, self.featuretype,
-            start_s, end_s, self.score, self.strand, self.frame,
+            self.seqid,
+            self.source,
+            self.featuretype,
+            start_s,
+            end_s,
+            self.score,
+            self.strand,
+            self.frame,
             self._format_attributes(),
         ]
         cols.extend(self.extra)
@@ -448,6 +480,7 @@ class Feature:
         if self.start is None or self.end is None:
             return None
         from gffbase._bins import bin_from_coords
+
         self.bin = bin_from_coords(self.start, self.end)
         return self.bin
 
@@ -482,16 +515,36 @@ def _revcomp(seq: str) -> str:
 
 # Row column order produced by FeatureDB._yield_features.
 _DB_ROW_FIELDS = (
-    "id", "seqid", "source", "featuretype", "start", "end",
-    "score", "strand", "frame", "attributes_blob", "extra_blob", "file_order",
+    "id",
+    "seqid",
+    "source",
+    "featuretype",
+    "start",
+    "end",
+    "score",
+    "strand",
+    "frame",
+    "attributes_blob",
+    "extra_blob",
+    "file_order",
 )
 
 
 def feature_from_row(row, dialect: Optional[dict] = None) -> Feature:
     """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes."""
     (
-        fid, seqid, source, featuretype, start, end,
-        score, strand, frame, blob, extra_blob, file_order,
+        fid,
+        seqid,
+        source,
+        featuretype,
+        start,
+        end,
+        score,
+        strand,
+        frame,
+        blob,
+        extra_blob,
+        file_order,
     ) = row
     return Feature(
         seqid=seqid,

@@ -22,7 +22,7 @@ that consumes the iterator and prints features Just Works.
 
 from __future__ import annotations
 
-from typing import Iterator, List, Optional
+from typing import Iterator, List
 
 from gffbase import parser as _parser
 from gffbase.feature import Feature, ParsedFeature

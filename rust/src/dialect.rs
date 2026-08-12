@@ -26,9 +26,9 @@ pub enum Format {
 #[derive(Debug, Clone)]
 pub struct Dialect {
     pub fmt: Format,
-    pub field_separator: String,        // ";", "; ", " ; "
-    pub keyval_separator: char,         // '=' for GFF3, ' ' for GTF
-    pub multival_separator: char,       // typically ','
+    pub field_separator: String,  // ";", "; ", " ; "
+    pub keyval_separator: char,   // '=' for GFF3, ' ' for GTF
+    pub multival_separator: char, // typically ','
     pub leading_semicolon: bool,
     pub trailing_semicolon: bool,
     pub quoted_gff2_values: bool,
@@ -71,14 +71,20 @@ pub fn choose(samples: &[Dialect]) -> Dialect {
     }
     let n_gtf = samples.iter().filter(|d| d.fmt == Format::Gtf).count();
     let n_gff3 = samples.len() - n_gtf;
-    let fmt = if n_gtf > n_gff3 { Format::Gtf } else { Format::Gff3 };
+    let fmt = if n_gtf > n_gff3 {
+        Format::Gtf
+    } else {
+        Format::Gff3
+    };
 
     // For each flag, take the OR — if *any* line had a trailing semicolon,
     // the file has trailing semicolons. Mirrors gffutils' weighted-vote outcome
     // closely enough for round-trip purposes.
-    let mut chosen = Dialect::default();
-    chosen.fmt = fmt;
-    chosen.keyval_separator = if fmt == Format::Gtf { ' ' } else { '=' };
+    let mut chosen = Dialect {
+        fmt,
+        keyval_separator: if fmt == Format::Gtf { ' ' } else { '=' },
+        ..Default::default()
+    };
     for s in samples {
         chosen.leading_semicolon |= s.leading_semicolon;
         chosen.trailing_semicolon |= s.trailing_semicolon;

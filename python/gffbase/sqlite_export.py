@@ -28,12 +28,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from typing import Optional
 
 import duckdb
 
 from gffbase._bins import bin_from_coords
-
 
 _LEGACY_SCHEMA = """
 CREATE TABLE features (
@@ -82,8 +80,7 @@ CREATE INDEX binindex ON features (bin);
 """
 
 
-def export_sqlite(con: duckdb.DuckDBPyConnection, path: str,
-                  force: bool = False) -> str:
+def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False) -> str:
     """Write a legacy SQLite ``.db`` from the given DuckDB connection.
 
     Returns the absolute path on success.
@@ -113,12 +110,35 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str,
         # legacy SQLite users rely on this for `region()` queries).
         export_rows = []
         for r in rows:
-            (fid, seqid, source, featuretype, start, end, score, strand,
-             frame, attributes, extra) = r
+            (
+                fid,
+                seqid,
+                source,
+                featuretype,
+                start,
+                end,
+                score,
+                strand,
+                frame,
+                attributes,
+                extra,
+            ) = r
             ucsc_bin = bin_from_coords(start, end) if start and end else None
             export_rows.append(
-                (fid, seqid, source, featuretype, start, end, score, strand,
-                 frame, attributes or "", extra or "", ucsc_bin)
+                (
+                    fid,
+                    seqid,
+                    source,
+                    featuretype,
+                    start,
+                    end,
+                    score,
+                    strand,
+                    frame,
+                    attributes or "",
+                    extra or "",
+                    ucsc_bin,
+                )
             )
         sqlite_con.executemany(
             "INSERT INTO features VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -126,23 +146,18 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str,
         )
 
         # Closure → relations(parent, child, level=depth).
-        rels = con.execute(
-            "SELECT ancestor, descendant, depth FROM closure"
-        ).fetchall()
+        rels = con.execute("SELECT ancestor, descendant, depth FROM closure").fetchall()
         sqlite_con.executemany("INSERT INTO relations VALUES (?,?,?)", rels)
 
         # Meta — write the dialect (JSON) + version.
         meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
         sqlite_con.execute(
             "INSERT INTO meta VALUES (?, ?)",
-            (meta.get("dialect", json.dumps({"fmt": "gff3"})),
-             "gffbase-export"),
+            (meta.get("dialect", json.dumps({"fmt": "gff3"})), "gffbase-export"),
         )
 
         # Directives.
-        dirs = con.execute(
-            "SELECT directive FROM directives ORDER BY seq"
-        ).fetchall()
+        dirs = con.execute("SELECT directive FROM directives ORDER BY seq").fetchall()
         sqlite_con.executemany("INSERT INTO directives VALUES (?)", dirs)
 
         # Autoincrements (typically empty in Phase 5).

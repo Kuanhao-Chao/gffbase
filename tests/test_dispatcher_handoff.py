@@ -32,12 +32,8 @@ fallback kicks in.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
-from gffbase import FeatureDB, create_db
-from gffbase import ingest
+from gffbase import FeatureDB, ingest
 
 
 def _deep_chain_lines(depth: int) -> str:
@@ -48,14 +44,10 @@ def _deep_chain_lines(depth: int) -> str:
     parent = "g"
     for i in range(1, depth):
         nid = f"t{i}"
-        lines.append(
-            f"chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID={nid};Parent={parent}\n"
-        )
+        lines.append(f"chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID={nid};Parent={parent}\n")
         parent = nid
     # Leaf
-    lines.append(
-        f"chr1\trs\texon\t100\t200\t.\t+\t.\tID=leaf;Parent={parent}\n"
-    )
+    lines.append(f"chr1\trs\texon\t100\t200\t.\t+\t.\tID=leaf;Parent={parent}\n")
     return "".join(lines)
 
 
@@ -68,7 +60,10 @@ def deep_db_max2(tmp_path):
     src.write_text(_deep_chain_lines(depth=6))
     out = tmp_path / "deep.duckdb"
     con, _stats = ingest.from_file(
-        str(src), dbfn=str(out), force=True, max_depth=2,
+        str(src),
+        dbfn=str(out),
+        force=True,
+        max_depth=2,
     )
     con.close()
     db = FeatureDB(str(out))
@@ -86,21 +81,17 @@ def deep_db_max2(tmp_path):
 def test_dispatcher_picks_cache_within_max_depth(deep_db_max2):
     """`level <= max_depth` MUST go through the materialized closure
     cache (the constant-time path)."""
-    assert deep_db_max2._dispatch_relation(
-        level=1, target_id="g", direction="children"
-    ) is False
-    assert deep_db_max2._dispatch_relation(
-        level=2, target_id="g", direction="children"
-    ) is False
+    assert deep_db_max2._dispatch_relation(level=1, target_id="g", direction="children") is False
+    assert deep_db_max2._dispatch_relation(level=2, target_id="g", direction="children") is False
 
 
 def test_dispatcher_picks_dynamic_past_max_depth(deep_db_max2):
     """`level > max_depth` MUST go through the dynamic CTE (the
     deeper-than-cache fallback)."""
     for lvl in (3, 5, 6):
-        assert deep_db_max2._dispatch_relation(
-            level=lvl, target_id="g", direction="children"
-        ) is True
+        assert (
+            deep_db_max2._dispatch_relation(level=lvl, target_id="g", direction="children") is True
+        )
 
 
 def test_dispatcher_level_none_dynamic_when_overflow(deep_db_max2):
@@ -108,9 +99,7 @@ def test_dispatcher_level_none_dynamic_when_overflow(deep_db_max2):
     actual hierarchy depth exceeds the materialized cache."""
     # The chain runs 6 deep; the cache only knows 2 levels; the
     # dispatcher must detect the overflow and fall through.
-    assert deep_db_max2._dispatch_relation(
-        level=None, target_id="g", direction="children"
-    ) is True
+    assert deep_db_max2._dispatch_relation(level=None, target_id="g", direction="children") is True
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +116,8 @@ def test_cache_and_dynamic_return_same_descendants_at_level_2(deep_db_max2):
     feature at depth 2 below g, which is `t2`."""
     cache_ids = sorted(f.id for f in deep_db_max2.children("g", level=2))
     # Flip the dispatcher to dynamic for this same query.
-    deep_db_max2._closure_max_depth = 0   # forces use_dynamic for level=None
-    deep_db_max2._max_depth = 0           # forces use_dynamic for level >= 1
+    deep_db_max2._closure_max_depth = 0  # forces use_dynamic for level=None
+    deep_db_max2._max_depth = 0  # forces use_dynamic for level >= 1
     dynamic_ids = sorted(f.id for f in deep_db_max2.children("g", level=2))
     assert cache_ids == dynamic_ids
     assert cache_ids == ["t2"]
@@ -146,11 +135,17 @@ def test_cache_and_dynamic_return_same_full_descendants(tmp_path):
     src_b.write_text(chain)
 
     con_a, _ = ingest.from_file(
-        str(src_a), dbfn=str(tmp_path / "a.duckdb"), force=True, max_depth=8,
+        str(src_a),
+        dbfn=str(tmp_path / "a.duckdb"),
+        force=True,
+        max_depth=8,
     )
     con_a.close()
     con_b, _ = ingest.from_file(
-        str(src_b), dbfn=str(tmp_path / "b.duckdb"), force=True, max_depth=2,
+        str(src_b),
+        dbfn=str(tmp_path / "b.duckdb"),
+        force=True,
+        max_depth=2,
     )
     con_b.close()
 

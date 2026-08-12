@@ -31,9 +31,11 @@ wheels/
 
 # --- Rust ---------------------------------------------------------------
 target/
-# Cargo.lock IS committed for binary crates; we ship a cdylib so omit it
-# (regenerated deterministically per maturin build).
-Cargo.lock
+# `rust/Cargo.lock` IS committed. We ship a cdylib, but the wheel we publish is
+# a binary artifact: without a lock file, dependency resolution varies by build
+# time and platform, which is exactly what the declared MSRV is supposed to
+# rule out. `MANIFEST.in` and `rust/Cargo.toml` both already claimed it was
+# shipped; now it actually is.
 # Rust analyzer / IDE leftovers.
 **/*.rs.bk
 

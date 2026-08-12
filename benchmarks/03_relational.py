@@ -34,23 +34,29 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
-    GFFBASE_DB, LEGACY_DB, pretty_seconds, write_results,
+    GFFBASE_DB,
+    LEGACY_DB,
+    pretty_seconds,
+    write_results,
 )
 
 
 def sample_gene_ids(n: int, seed: int = 20260501):
     """Pick gene IDs that exist in BOTH databases so the per-engine descendant
     counts can be compared apples-to-apples."""
-    import duckdb, sqlite3
+    import sqlite3
+
+    import duckdb
+
     duck = duckdb.connect(str(GFFBASE_DB), read_only=True)
-    duck_genes = {r[0] for r in duck.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene'"
-    ).fetchall()}
+    duck_genes = {
+        r[0] for r in duck.execute("SELECT id FROM features WHERE featuretype = 'gene'").fetchall()
+    }
     duck.close()
     sq = sqlite3.connect(str(LEGACY_DB))
-    sq_genes = {r[0] for r in sq.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene'"
-    ).fetchall()}
+    sq_genes = {
+        r[0] for r in sq.execute("SELECT id FROM features WHERE featuretype = 'gene'").fetchall()
+    }
     sq.close()
     common = sorted(duck_genes & sq_genes)
     rng = random.Random(seed)
@@ -59,6 +65,7 @@ def sample_gene_ids(n: int, seed: int = 20260501):
 
 def run_gffbase(gene_ids, *, force_dynamic: bool = False):
     import gffbase
+
     db = gffbase.FeatureDB(str(GFFBASE_DB))
     saved = db._max_depth
     if force_dynamic:
@@ -75,6 +82,7 @@ def run_gffbase(gene_ids, *, force_dynamic: bool = False):
 
 def run_legacy(gene_ids):
     import gffutils
+
     db = gffutils.FeatureDB(str(LEGACY_DB))
     total = 0
     t0 = time.perf_counter()
@@ -96,24 +104,30 @@ def main():
 
     print("[relational] gffbase auto-routed (closure cache by default)…", flush=True)
     g_auto_wall, g_auto_total = run_gffbase(gene_ids, force_dynamic=False)
-    print(f"  wall={pretty_seconds(g_auto_wall)}, "
-          f"qps={len(gene_ids)/g_auto_wall:.1f}, "
-          f"descendants={g_auto_total}",
-          flush=True)
+    print(
+        f"  wall={pretty_seconds(g_auto_wall)}, "
+        f"qps={len(gene_ids) / g_auto_wall:.1f}, "
+        f"descendants={g_auto_total}",
+        flush=True,
+    )
 
     print("[relational] gffbase forced dynamic CTE…", flush=True)
     g_dyn_wall, g_dyn_total = run_gffbase(gene_ids, force_dynamic=True)
-    print(f"  wall={pretty_seconds(g_dyn_wall)}, "
-          f"qps={len(gene_ids)/g_dyn_wall:.1f}, "
-          f"descendants={g_dyn_total}",
-          flush=True)
+    print(
+        f"  wall={pretty_seconds(g_dyn_wall)}, "
+        f"qps={len(gene_ids) / g_dyn_wall:.1f}, "
+        f"descendants={g_dyn_total}",
+        flush=True,
+    )
 
     print("[relational] legacy gffutils.children(level=None)…", flush=True)
     lg_wall, lg_total = run_legacy(gene_ids)
-    print(f"  wall={pretty_seconds(lg_wall)}, "
-          f"qps={len(gene_ids)/lg_wall:.1f}, "
-          f"descendants={lg_total}",
-          flush=True)
+    print(
+        f"  wall={pretty_seconds(lg_wall)}, "
+        f"qps={len(gene_ids) / lg_wall:.1f}, "
+        f"descendants={lg_total}",
+        flush=True,
+    )
 
     payload = {
         "n_genes": len(gene_ids),

@@ -31,7 +31,11 @@ sys.path.insert(0, str(ROOT / "python"))
 import duckdb
 
 from benchmarks.common import (
-    GFFBASE_DB, LEGACY_DB, du, pretty_bytes, write_results,
+    GFFBASE_DB,
+    LEGACY_DB,
+    du,
+    pretty_bytes,
+    write_results,
 )
 
 
@@ -40,9 +44,12 @@ def gffbase_table_breakdown():
     # `pragma database_size` returns engine-level totals; per-table size is
     # not exposed in DuckDB's public catalog. We approximate via row counts +
     # average row width via `summary`.
-    tables = [r[0] for r in con.execute(
-        "SELECT table_name FROM duckdb_tables() WHERE database_name = current_database()"
-    ).fetchall()]
+    tables = [
+        r[0]
+        for r in con.execute(
+            "SELECT table_name FROM duckdb_tables() WHERE database_name = current_database()"
+        ).fetchall()
+    ]
     breakdown = {}
     for t in tables:
         try:
@@ -60,15 +67,11 @@ def legacy_table_breakdown():
     # SQLite's dbstat virtual table needs the SQLITE_ENABLE_DBSTAT_VTAB compile flag,
     # which the system Python build may lack. Fall back to row counts.
     try:
-        rows = sq.execute(
-            "SELECT name, SUM(pgsize) FROM dbstat GROUP BY name"
-        ).fetchall()
+        rows = sq.execute("SELECT name, SUM(pgsize) FROM dbstat GROUP BY name").fetchall()
         for name, size in rows:
             breakdown[name] = {"bytes": size}
     except sqlite3.OperationalError:
-        for (name,) in sq.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall():
+        for (name,) in sq.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
             try:
                 n = sq.execute(f"SELECT COUNT(*) FROM [{name}]").fetchone()[0]
                 breakdown[name] = {"row_count": n}
