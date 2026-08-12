@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import duckdb
 import pyarrow as pa
@@ -35,19 +35,18 @@ import pyarrow as pa
 from gffbase import parser as _parser
 from gffbase.feature import ParsedFeature
 from gffbase.schema import (
-    DDL,
-    POST_LOAD_INDEXES,
-    EDGES_FROM_PARENT,
-    EDGES_FROM_GTF,
-    GTF_SYNTHESIZE_TRANSCRIPTS,
-    GTF_SYNTHESIZE_TRANSCRIPT_ATTRS,
-    GTF_PROPAGATE_GENE_ID,
-    GTF_SYNTHESIZE_GENES,
     CLOSURE_RECURSIVE_CTE,
     COMPAT_VIEWS_SQL,
+    DDL,
+    EDGES_FROM_GTF,
+    EDGES_FROM_PARENT,
+    GTF_PROPAGATE_GENE_ID,
+    GTF_SYNTHESIZE_GENES,
+    GTF_SYNTHESIZE_TRANSCRIPT_ATTRS,
+    GTF_SYNTHESIZE_TRANSCRIPTS,
+    POST_LOAD_INDEXES,
     SCHEMA_VERSION,
 )
-
 
 DEFAULT_BATCH_SIZE = 50_000
 DEFAULT_MAX_DEPTH = 8
@@ -56,6 +55,7 @@ DEFAULT_MAX_DEPTH = 8
 @dataclass
 class IngestStats:
     """Reported back to the caller for benchmarking and tests."""
+
     n_features_raw: int = 0
     n_features_synthetic_transcripts: int = 0
     n_features_synthetic_genes: int = 0
@@ -74,6 +74,7 @@ class IngestStats:
 # Edges and directives are derived later by SQL.
 # ---------------------------------------------------------------------------
 
+
 class _ArrowBatchBuilder:
     """Accumulates parsed features into column-oriented Python lists, then
     produces PyArrow tables on flush. We deliberately keep the schema explicit
@@ -85,29 +86,33 @@ class _ArrowBatchBuilder:
     used to dominate ingest wall time on real GFF3 corpora.
     """
 
-    FEATURES_SCHEMA = pa.schema([
-        ("id",              pa.string()),
-        ("seqid",           pa.string()),
-        ("source",          pa.string()),
-        ("featuretype",     pa.string()),
-        ("start",           pa.int64()),
-        ("end",             pa.int64()),
-        ("score",           pa.string()),
-        ("strand",          pa.string()),
-        ("frame",           pa.string()),
-        ("attributes_blob", pa.binary()),
-        ("extra_blob",      pa.binary()),
-        ("file_order",      pa.int64()),
-        ("is_synthetic",    pa.bool_()),
-        ("seqid_y",         pa.int64()),
-    ])
+    FEATURES_SCHEMA = pa.schema(
+        [
+            ("id", pa.string()),
+            ("seqid", pa.string()),
+            ("source", pa.string()),
+            ("featuretype", pa.string()),
+            ("start", pa.int64()),
+            ("end", pa.int64()),
+            ("score", pa.string()),
+            ("strand", pa.string()),
+            ("frame", pa.string()),
+            ("attributes_blob", pa.binary()),
+            ("extra_blob", pa.binary()),
+            ("file_order", pa.int64()),
+            ("is_synthetic", pa.bool_()),
+            ("seqid_y", pa.int64()),
+        ]
+    )
 
-    ATTRIBUTES_SCHEMA = pa.schema([
-        ("feature_id", pa.string()),
-        ("key",        pa.string()),
-        ("value",      pa.string()),
-        ("idx",        pa.int16()),
-    ])
+    ATTRIBUTES_SCHEMA = pa.schema(
+        [
+            ("feature_id", pa.string()),
+            ("key", pa.string()),
+            ("value", pa.string()),
+            ("idx", pa.int16()),
+        ]
+    )
 
     def __init__(self, seqid_to_y: dict, has_spatial: bool = False):
         # Shared across all batches so seqid_y assignment is stable for the
@@ -171,30 +176,36 @@ class _ArrowBatchBuilder:
         return len(self.f_id)
 
     def features_table(self) -> pa.Table:
-        return pa.table({
-            "id": self.f_id,
-            "seqid": self.f_seqid,
-            "source": self.f_source,
-            "featuretype": self.f_type,
-            "start": self.f_start,
-            "end": self.f_end,
-            "score": self.f_score,
-            "strand": self.f_strand,
-            "frame": self.f_frame,
-            "attributes_blob": self.f_blob,
-            "extra_blob": self.f_extra,
-            "file_order": self.f_order,
-            "is_synthetic": self.f_synth,
-            "seqid_y": self.f_seqid_y,
-        }, schema=self.FEATURES_SCHEMA)
+        return pa.table(
+            {
+                "id": self.f_id,
+                "seqid": self.f_seqid,
+                "source": self.f_source,
+                "featuretype": self.f_type,
+                "start": self.f_start,
+                "end": self.f_end,
+                "score": self.f_score,
+                "strand": self.f_strand,
+                "frame": self.f_frame,
+                "attributes_blob": self.f_blob,
+                "extra_blob": self.f_extra,
+                "file_order": self.f_order,
+                "is_synthetic": self.f_synth,
+                "seqid_y": self.f_seqid_y,
+            },
+            schema=self.FEATURES_SCHEMA,
+        )
 
     def attributes_table(self) -> pa.Table:
-        return pa.table({
-            "feature_id": self.a_fid,
-            "key": self.a_key,
-            "value": self.a_val,
-            "idx": self.a_idx,
-        }, schema=self.ATTRIBUTES_SCHEMA)
+        return pa.table(
+            {
+                "feature_id": self.a_fid,
+                "key": self.a_key,
+                "value": self.a_val,
+                "idx": self.a_idx,
+            },
+            schema=self.ATTRIBUTES_SCHEMA,
+        )
 
     def flush_into(self, con: duckdb.DuckDBPyConnection):
         if not self.f_id:
@@ -210,19 +221,19 @@ class _ArrowBatchBuilder:
         if self._has_spatial:
             con.execute(
                 "INSERT INTO features ("
-                "id, seqid, source, featuretype, start, \"end\", "
+                'id, seqid, source, featuretype, start, "end", '
                 "score, strand, frame, attributes_blob, extra_blob, "
                 "file_order, is_synthetic, seqid_y, bbox"
-                ") SELECT id, seqid, source, featuretype, start, \"end\", "
+                ') SELECT id, seqid, source, featuretype, start, "end", '
                 "score, strand, frame, attributes_blob, extra_blob, "
                 "file_order, is_synthetic, seqid_y, "
-                "ST_MakeEnvelope(start, seqid_y, \"end\", seqid_y + 1) "
+                'ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) '
                 "FROM __staging_features"
             )
         else:
             con.execute(
                 "INSERT INTO features ("
-                "id, seqid, source, featuretype, start, \"end\", "
+                'id, seqid, source, featuretype, start, "end", '
                 "score, strand, frame, attributes_blob, extra_blob, "
                 "file_order, is_synthetic, seqid_y"
                 ") SELECT * FROM __staging_features"
@@ -237,6 +248,7 @@ class _ArrowBatchBuilder:
 # ID resolution. Pulled out so the bulk loop has zero branches that hit Python
 # attribute parsing twice.
 # ---------------------------------------------------------------------------
+
 
 def _derive_id(feat: ParsedFeature, dialect_fmt: str, autoincrement: dict) -> str:
     """Compute the row's primary key. GFF3 prefers `ID=`; GTF synthesizes
@@ -255,6 +267,7 @@ def _derive_id(feat: ParsedFeature, dialect_fmt: str, autoincrement: dict) -> st
 # ---------------------------------------------------------------------------
 # Public entry point.
 # ---------------------------------------------------------------------------
+
 
 def from_file(
     path: str,
@@ -276,9 +289,7 @@ def from_file(
     """
     if dbfn != ":memory:":
         if os.path.exists(dbfn) and not force:
-            raise ValueError(
-                f"{dbfn} already exists. Pass force=True to overwrite."
-            )
+            raise ValueError(f"{dbfn} already exists. Pass force=True to overwrite.")
         if os.path.exists(dbfn) and force:
             os.unlink(dbfn)
 
@@ -291,11 +302,7 @@ def from_file(
     # and stamp the R-tree envelope inline during the Arrow batch INSERT,
     # eliminating two full-table UPDATE passes that used to dominate
     # ingest wall time.
-    has_spatial = (
-        build_rtree
-        and not _rtree_disabled_by_env()
-        and _try_load_spatial(con)
-    )
+    has_spatial = build_rtree and not _rtree_disabled_by_env() and _try_load_spatial(con)
     if has_spatial:
         con.execute("ALTER TABLE features ADD COLUMN IF NOT EXISTS bbox GEOMETRY")
 
@@ -341,10 +348,12 @@ def from_file(
     # Record duplicate-id remappings (informational; the schema already has
     # this table — Phase 5).
     if duplicate_pairs:
-        dup_tbl = pa.table({
-            "original_id": [b for b, _ in duplicate_pairs],
-            "new_id":      [n for _, n in duplicate_pairs],
-        })
+        dup_tbl = pa.table(
+            {
+                "original_id": [b for b, _ in duplicate_pairs],
+                "new_id": [n for _, n in duplicate_pairs],
+            }
+        )
         con.register("__staging_dups", dup_tbl)
         con.execute(
             "INSERT INTO duplicates (original_id, new_id) "
@@ -382,7 +391,7 @@ def from_file(
                 "SET seqid_y = m.seqid_y, "
                 "    bbox = ST_MakeEnvelope("
                 "        features.start, m.seqid_y, "
-                "        features.\"end\", m.seqid_y + 1) "
+                '        features."end", m.seqid_y + 1) '
                 "FROM seqid_map m "
                 "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
             )
@@ -438,6 +447,7 @@ def from_file(
 # Helpers.
 # ---------------------------------------------------------------------------
 
+
 def _dialect_fmt_safe(it) -> str:
     """The Rust iterator commits to a dialect after the peek phase. The
     Python fallback only sets it after the first record yields. Both are
@@ -485,13 +495,9 @@ def _synthesize_transcripts(con, subfeature: str) -> int:
 
 
 def _synthesize_genes(con, subfeature: str) -> int:
-    before = con.execute(
-        "SELECT COUNT(*) FROM features WHERE featuretype = 'gene'"
-    ).fetchone()[0]
+    before = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
     con.execute(GTF_SYNTHESIZE_GENES, [subfeature])
-    after = con.execute(
-        "SELECT COUNT(*) FROM features WHERE featuretype = 'gene'"
-    ).fetchone()[0]
+    after = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
     n = after - before
     # Mirror the synthesized gene_id into attributes so downstream queries
     # treat synthesized genes the same as authored ones.
@@ -513,9 +519,7 @@ def _rtree_disabled_by_env() -> bool:
     """``GFFBASE_TEST_DISABLE_RTREE=1`` forces the B-tree fallback path
     library-wide so the CI matrix can exercise it without test-code
     changes."""
-    return os.environ.get(
-        "GFFBASE_TEST_DISABLE_RTREE", ""
-    ).lower() in ("1", "true", "yes")
+    return os.environ.get("GFFBASE_TEST_DISABLE_RTREE", "").lower() in ("1", "true", "yes")
 
 
 def _try_load_spatial(con: duckdb.DuckDBPyConnection) -> bool:
@@ -547,18 +551,22 @@ def _finalize_rtree(con: duckdb.DuckDBPyConnection, seqid_to_y: dict) -> bool:
                 "INSERT INTO seqid_map(seqid, seqid_y) VALUES (?, ?)",
                 seqid_rows,
             )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS features_rtree "
-            "ON features USING RTREE (bbox)"
-        )
+        con.execute("CREATE INDEX IF NOT EXISTS features_rtree ON features USING RTREE (bbox)")
         return True
     except duckdb.Error:
         return False
 
 
-def _write_meta(con: duckdb.DuckDBPyConnection, dialect: dict, fmt: str,
-                *, rtree_built: bool = False, max_depth: int = DEFAULT_MAX_DEPTH):
+def _write_meta(
+    con: duckdb.DuckDBPyConnection,
+    dialect: dict,
+    fmt: str,
+    *,
+    rtree_built: bool = False,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+):
     import json
+
     # Closure max depth: used by FeatureDB's relational dispatcher (Phase 7) to
     # pick the cache vs. dynamic CTE without a per-call query.
     row = con.execute("SELECT MAX(depth) FROM closure").fetchone()

@@ -18,12 +18,11 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import tempfile
 from typing import Iterable, Optional, Union
-
-from gffbase.feature import Feature
 
 
 class GFFWriter:
@@ -31,7 +30,7 @@ class GFFWriter:
 
     def __init__(
         self,
-        out: Union[str, "os.PathLike", "io.IOBase"],
+        out: Union[str, os.PathLike, io.IOBase],
         with_header: bool = True,
         in_place: bool = False,
     ):
@@ -46,8 +45,11 @@ class GFFWriter:
             # Atomic write via tempfile, swap on close.
             self._target_path = str(out)
             tmp = tempfile.NamedTemporaryFile(
-                mode="w", delete=False, dir=os.path.dirname(self._target_path) or ".",
-                suffix=".gffbase.tmp", encoding="utf-8",
+                mode="w",
+                delete=False,
+                dir=os.path.dirname(self._target_path) or ".",
+                suffix=".gffbase.tmp",
+                encoding="utf-8",
             )
             self._fh = tmp.file
             self._opened_path = tmp.name

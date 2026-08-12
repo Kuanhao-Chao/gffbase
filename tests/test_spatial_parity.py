@@ -31,12 +31,8 @@ correctness bug for users on the B-tree fallback.
 
 from __future__ import annotations
 
-import os
-from importlib import reload
-
 import pytest
-
-from gffbase import FeatureDB, create_db
+from gffbase import create_db
 
 
 @pytest.fixture
@@ -168,39 +164,45 @@ def test_rtree_btree_byte_identical(edge_db, edge_db_btree, region_kwargs, _expe
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("kwargs", "expected"), [
-    # completely_within=True over [100, 250]: e_inside (100..200) +
-    # e_overlap (150..250) are fully contained. e_left (90..100) is
-    # NOT (90 < 100). e_right (200..210) IS (200..210 ⊂ 100..250).
-    pytest.param(
-        dict(seqid="chr1", start=100, end=250, completely_within=True),
-        {"e_inside", "e_overlap", "e_right"},
-        id="fully_contained_subset",
-    ),
-    # completely_within=False over the same region pulls in e_left
-    # (overlaps at one base).
-    pytest.param(
-        dict(seqid="chr1", start=100, end=250, completely_within=False),
-        {"e_left", "e_inside", "e_overlap", "e_right"},
-        id="overlap_includes_edge_features",
-    ),
-])
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        # completely_within=True over [100, 250]: e_inside (100..200) +
+        # e_overlap (150..250) are fully contained. e_left (90..100) is
+        # NOT (90 < 100). e_right (200..210) IS (200..210 ⊂ 100..250).
+        pytest.param(
+            dict(seqid="chr1", start=100, end=250, completely_within=True),
+            {"e_inside", "e_overlap", "e_right"},
+            id="fully_contained_subset",
+        ),
+        # completely_within=False over the same region pulls in e_left
+        # (overlaps at one base).
+        pytest.param(
+            dict(seqid="chr1", start=100, end=250, completely_within=False),
+            {"e_left", "e_inside", "e_overlap", "e_right"},
+            id="overlap_includes_edge_features",
+        ),
+    ],
+)
 def test_completely_within_boundary(edge_db, kwargs, expected):
     assert set(_ids(edge_db, **kwargs)) == expected
 
 
-@pytest.mark.parametrize(("kwargs", "expected"), [
-    pytest.param(
-        dict(seqid="chr1", start=100, end=250, completely_within=True),
-        {"e_inside", "e_overlap", "e_right"},
-        id="fully_contained_subset",
-    ),
-    pytest.param(
-        dict(seqid="chr1", start=100, end=250, completely_within=False),
-        {"e_left", "e_inside", "e_overlap", "e_right"},
-        id="overlap_includes_edge_features",
-    ),
-])
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        pytest.param(
+            dict(seqid="chr1", start=100, end=250, completely_within=True),
+            {"e_inside", "e_overlap", "e_right"},
+            id="fully_contained_subset",
+        ),
+        pytest.param(
+            dict(seqid="chr1", start=100, end=250, completely_within=False),
+            {"e_left", "e_inside", "e_overlap", "e_right"},
+            id="overlap_includes_edge_features",
+        ),
+    ],
+)
 def test_completely_within_boundary_btree(edge_db_btree, kwargs, expected):
     assert set(_ids(edge_db_btree, **kwargs)) == expected
 
@@ -227,9 +229,14 @@ def multi_seqid_db(tmp_path):
 
 
 def test_query_on_chr1_doesnt_leak_chrX(multi_seqid_db):
-    rows = sorted(f.id for f in multi_seqid_db.region(
-        seqid="chr1", start=100, end=200,
-    ))
+    rows = sorted(
+        f.id
+        for f in multi_seqid_db.region(
+            seqid="chr1",
+            start=100,
+            end=200,
+        )
+    )
     # Only chr1 ids — the y-band keeps the chrX features in a
     # different R-tree subtree.
     assert all(r.endswith("chr1") or r == "overlap1" for r in rows)
@@ -238,9 +245,14 @@ def test_query_on_chr1_doesnt_leak_chrX(multi_seqid_db):
 
 
 def test_query_on_chrX_doesnt_leak_chr1(multi_seqid_db):
-    rows = sorted(f.id for f in multi_seqid_db.region(
-        seqid="chrX", start=100, end=200,
-    ))
+    rows = sorted(
+        f.id
+        for f in multi_seqid_db.region(
+            seqid="chrX",
+            start=100,
+            end=200,
+        )
+    )
     assert "on_chr1" not in rows
     assert "overlap1" not in rows
 

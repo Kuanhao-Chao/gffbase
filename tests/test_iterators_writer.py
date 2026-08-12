@@ -18,10 +18,7 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
-
-import pytest
 
 from gffbase import DataIterator, Feature, GFFWriter, create_db
 
@@ -62,6 +59,7 @@ def test_data_iterator_transform_returns_modified_feature():
     def bump(f):
         f.source = "modified"
         return f
+
     feats = list(DataIterator(str(DATA / "simple.gff3"), transform=bump))
     assert all(f.source == "modified" for f in feats)
 
@@ -119,7 +117,7 @@ def test_gffwriter_write_mRNA_children(tmp_path):
         w.write_mRNA_children(db, "t1")
     lines = out.read_text().splitlines()
     # mRNA + 4 direct children (e1, e2, c1, c2)
-    assert sum(1 for l in lines if not l.startswith("#")) == 5
+    assert sum(1 for line in lines if not line.startswith("#")) == 5
 
 
 def test_gffwriter_in_place_atomic_swap(tmp_path):

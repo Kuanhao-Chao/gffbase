@@ -28,20 +28,18 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from benchmarks.common import OUT, du, pretty_bytes, pretty_seconds, run_subprocess
-
 # Re-import the helpers that 06_mega.py defined.
 import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "_mega", ROOT / "benchmarks" / "06_mega.py"
-)
+
+from benchmarks.common import OUT, du, pretty_bytes, pretty_seconds, run_subprocess
+
+spec = importlib.util.spec_from_file_location("_mega", ROOT / "benchmarks" / "06_mega.py")
 mega = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mega)
 
@@ -63,25 +61,32 @@ def main() -> None:
         timeout=1800,
     )
     info["disk_bytes"] = du(DBPATH)
-    print(f"    wall={pretty_seconds(info['wall_seconds'])}, "
-          f"RSS={pretty_bytes(info['peak_rss_bytes'])}, "
-          f"disk={pretty_bytes(info['disk_bytes'])}", flush=True)
+    print(
+        f"    wall={pretty_seconds(info['wall_seconds'])}, "
+        f"RSS={pretty_bytes(info['peak_rss_bytes'])}, "
+        f"disk={pretty_bytes(info['disk_bytes'])}",
+        flush=True,
+    )
 
     print("  [gffbase] spatial — 5000 regions…", flush=True)
     regions = mega.sample_regions_from_db(DBPATH, n=5000)
     spatial = mega.bench_spatial(DBPATH, regions)
-    print(f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
-          f"qps={spatial['qps']:.0f}, "
-          f"features_returned={spatial['total_features_returned']}",
-          flush=True)
+    print(
+        f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
+        f"qps={spatial['qps']:.0f}, "
+        f"features_returned={spatial['total_features_returned']}",
+        flush=True,
+    )
 
     print("  [gffbase] batched — 5000 anchors…", flush=True)
     batched = mega.bench_batched(DBPATH, n_genes=5000)
     if "skipped" not in batched:
-        print(f"    wall={pretty_seconds(batched['wall_seconds'])}, "
-              f"anchors={batched['n_anchors']}, "
-              f"descendants={batched['n_descendants']}",
-              flush=True)
+        print(
+            f"    wall={pretty_seconds(batched['wall_seconds'])}, "
+            f"anchors={batched['n_anchors']}, "
+            f"descendants={batched['n_descendants']}",
+            flush=True,
+        )
 
     # Merge into existing JSON.
     json_path = OUT / "06_mega.json"
@@ -96,16 +101,16 @@ def main() -> None:
                 else None
             )
             payload["corpora"][i] = {
-                "name":          NAME,
-                "key":           KEY,
-                "input":         str(INPUT),
-                "input_bytes":   INPUT.stat().st_size,
+                "name": NAME,
+                "key": KEY,
+                "input": str(INPUT),
+                "input_bytes": INPUT.stat().st_size,
                 "feature_lines": feature_lines,
-                "gffbase":       info,
-                "legacy":        old_legacy,
+                "gffbase": info,
+                "legacy": old_legacy,
                 "ingest_speedup": speedup,
-                "spatial":       spatial,
-                "batched":       batched,
+                "spatial": spatial,
+                "batched": batched,
             }
             break
     json_path.write_text(json.dumps(payload, indent=2, default=str))

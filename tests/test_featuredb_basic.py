@@ -21,8 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from gffbase import FeatureDB, Feature, FeatureNotFoundError, create_db
+from gffbase import Feature, FeatureNotFoundError, create_db
 
 DATA = Path(__file__).parent / "data"
 
@@ -75,6 +74,7 @@ def test_seqids(gtf_db):
 
 def test_features_of_type_returns_generator(hier_db):
     import types
+
     gen = hier_db.features_of_type("exon")
     assert isinstance(gen, types.GeneratorType)
     feats = list(gen)

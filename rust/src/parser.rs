@@ -72,7 +72,9 @@ impl FileSource {
         let f = File::open(path)?;
         let is_gz = path.extension().map(|e| e == "gz").unwrap_or(false);
         if is_gz {
-            Ok(FileSource::Stream(Box::new(BufReader::new(MultiGzDecoder::new(f)))))
+            Ok(FileSource::Stream(Box::new(BufReader::new(
+                MultiGzDecoder::new(f),
+            ))))
         } else {
             // For plain text we read fully into memory. mmap could be a future
             // optimization but adds platform complexity; the parser is already
@@ -89,7 +91,7 @@ impl FileSource {
 }
 
 pub struct RecordIter {
-    buf: Vec<u8>,            // entire input materialized
+    buf: Vec<u8>, // entire input materialized
     pos: usize,
     dialect: Dialect,
     directives: Vec<String>,
@@ -146,7 +148,11 @@ impl RecordIter {
         let saved_fasta = self.fasta_reached;
 
         let mut samples: Vec<Dialect> = Vec::new();
-        let limit = if opts.force_dialect_check { usize::MAX } else { opts.checklines };
+        let limit = if opts.force_dialect_check {
+            usize::MAX
+        } else {
+            opts.checklines
+        };
         while samples.len() < limit {
             match self.next_raw_record() {
                 Some(Ok((_, _, _, _, _, _, _, _, blob, _))) => {
@@ -180,21 +186,23 @@ impl RecordIter {
     #[allow(clippy::type_complexity)]
     fn next_raw_record(
         &mut self,
-    ) -> Option<Result<
-        (
-            String, // seqid
-            String, // source
-            String, // featuretype
-            Option<i64>, // start
-            Option<i64>, // end
-            String, // score
-            String, // strand
-            String, // frame
-            Vec<u8>, // blob
-            Vec<String>, // extra
-        ),
-        GffError,
-    >> {
+    ) -> Option<
+        Result<
+            (
+                String,      // seqid
+                String,      // source
+                String,      // featuretype
+                Option<i64>, // start
+                Option<i64>, // end
+                String,      // score
+                String,      // strand
+                String,      // frame
+                Vec<u8>,     // blob
+                Vec<String>, // extra
+            ),
+            GffError,
+        >,
+    > {
         loop {
             if self.fasta_reached || self.pos >= self.buf.len() {
                 return None;
@@ -276,7 +284,18 @@ impl RecordIter {
             for ex in fields.iter().skip(9) {
                 extra.push(bytes_to_string(ex));
             }
-            return Some(Ok((seqid, source, featuretype, start, end, score, strand, frame, blob, extra)));
+            return Some(Ok((
+                seqid,
+                source,
+                featuretype,
+                start,
+                end,
+                score,
+                strand,
+                frame,
+                blob,
+                extra,
+            )));
         }
     }
 
@@ -321,7 +340,7 @@ impl Iterator for RecordIter {
 
             let is_gtf = matches!(self.dialect.fmt, crate::dialect::Format::Gtf);
             if let Err(e) = validate_fields(
-                self.line_no,           // line we just consumed
+                self.line_no, // line we just consumed
                 &seqid,
                 &featuretype,
                 start,
@@ -343,9 +362,7 @@ impl Iterator for RecordIter {
             let (pairs, _obs) = parse_attributes(blob_str);
             // Post-parse attribute structure check (handles both GFF3 and
             // GTF correctly because it inspects what the parser produced).
-            if let Err(e) = validate_attributes_pairs(
-                self.line_no, pairs.len(), &blob, is_gtf,
-            ) {
+            if let Err(e) = validate_attributes_pairs(self.line_no, pairs.len(), &blob, is_gtf) {
                 if self.strict {
                     return Some(Err(e));
                 }
@@ -388,7 +405,7 @@ fn split_tabs(line: &[u8]) -> Vec<&[u8]> {
 }
 
 fn trim_cr(line: &[u8]) -> &[u8] {
-    if let Some((&b'\r', rest)) = line.split_last().map(|(b, r)| (b, r)) {
+    if let Some((&b'\r', rest)) = line.split_last() {
         rest
     } else {
         line
@@ -399,15 +416,7 @@ fn bytes_to_string(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-fn parse_coord(b: &[u8]) -> Option<i64> {
-    if b == b"." || b.is_empty() {
-        return None;
-    }
-    let s = std::str::from_utf8(b).ok()?;
-    s.parse::<i64>().ok()
-}
-
-/// Like `parse_coord` but distinguishes "valid `.` / empty" from
+/// Parse a coordinate column, distinguishing "valid `.` / empty" from
 /// "non-numeric trash". Returns `Ok(None)` for `.` / empty, `Ok(Some(n))`
 /// for a real integer, and `Err(())` for anything else. The caller turns
 /// the `Err` into a structured `GffError`.

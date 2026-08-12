@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from gffbase import parse_gff, detect_dialect
+from gffbase import detect_dialect, parse_gff
 
 
 def test_simple_gff3_record_count(gff3_path, engine):

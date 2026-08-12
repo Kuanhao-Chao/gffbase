@@ -21,10 +21,10 @@ are required by tests to produce identical output.
 
 from __future__ import annotations
 
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
-from gffbase.feature import ParsedFeature
 from gffbase._pyfallback import parser as _pyparser
+from gffbase.feature import ParsedFeature
 
 try:  # pragma: no cover - import availability is env-dependent
     from gffbase import _native as _rust  # type: ignore[attr-defined]
@@ -166,9 +166,7 @@ def parse_bytes(
     return _Iterator(it, native=False)
 
 
-def detect_dialect(
-    path: str, *, checklines: int = 10, engine: Optional[str] = "auto"
-) -> dict:
+def detect_dialect(path: str, *, checklines: int = 10, engine: Optional[str] = "auto") -> dict:
     eng = _resolve_engine(engine)
     if eng == "rust":
         return _rust.detect_dialect(path, checklines=checklines)  # type: ignore[union-attr]

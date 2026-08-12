@@ -34,21 +34,22 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
-import os
 import random
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
-    OUT, du, pretty_bytes, pretty_seconds, run_subprocess, write_results,
+    OUT,
+    du,
+    pretty_bytes,
+    pretty_seconds,
+    run_subprocess,
 )
 
 DATA = ROOT / "benchmarks" / "data"
@@ -60,34 +61,34 @@ DATA = ROOT / "benchmarks" / "data"
 
 CORPORA: List[Dict] = [
     {
-        "name":   "GENCODE v49 (GTF)",
-        "key":    "gencode-gtf",
-        "input":  DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
-        "fmt":    "gtf",
+        "name": "GENCODE v49 (GTF)",
+        "key": "gencode-gtf",
+        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+        "fmt": "gtf",
     },
     {
-        "name":   "GENCODE v49 (GFF3)",
-        "key":    "gencode-gff3",
-        "input":  DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
-        "fmt":    "gff3",
+        "name": "GENCODE v49 (GFF3)",
+        "key": "gencode-gff3",
+        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+        "fmt": "gff3",
     },
     {
-        "name":   "RefSeq GRCh38.p14",
-        "key":    "refseq",
-        "input":  DATA / "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
-        "fmt":    "gff3",
+        "name": "RefSeq GRCh38.p14",
+        "key": "refseq",
+        "input": DATA / "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+        "fmt": "gff3",
     },
     {
-        "name":   "MANE v1.5 (Ensembl IDs)",
-        "key":    "mane",
-        "input":  DATA / "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
-        "fmt":    "gff3",
+        "name": "MANE v1.5 (Ensembl IDs)",
+        "key": "mane",
+        "input": DATA / "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+        "fmt": "gff3",
     },
     {
-        "name":   "CHESS 3.1.3",
-        "key":    "chess",
-        "input":  DATA / "chess3.1.3.GRCh38.gff.gz",
-        "fmt":    "gff3",
+        "name": "CHESS 3.1.3",
+        "key": "chess",
+        "input": DATA / "chess3.1.3.GRCh38.gff.gz",
+        "fmt": "gff3",
     },
 ]
 
@@ -111,14 +112,14 @@ def count_feature_lines(path: Path) -> int:
 def gffbase_ingest_script(input_path: Path, dbfn: Path, fmt: str) -> str:
     return f"""
 import json, time, sys
-sys.path.insert(0, {str(ROOT / 'python')!r})
+sys.path.insert(0, {str(ROOT / "python")!r})
 from gffbase import create_db
 t0 = time.perf_counter()
 # CHESS / MANE / RefSeq are all GFF3; GENCODE is GTF. The hardened
 # parser auto-detects but `force_gff=True` prevents quoted-attr lines
 # from being mis-classified as GTF in edge cases.
 db = create_db({str(input_path)!r}, {str(dbfn)!r}, force=True,
-               force_gff={'False' if fmt == 'gtf' else 'True'})
+               force_gff={"False" if fmt == "gtf" else "True"})
 elapsed = time.perf_counter() - t0
 print(json.dumps({{
     "wall_seconds": elapsed,
@@ -151,8 +152,7 @@ print(json.dumps({{
 """
 
 
-def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int,
-                            n_input_lines: int) -> Dict:
+def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_lines: int) -> Dict:
     """Run legacy gffutils ingest. If the process exceeds `timeout`, kill
     it and extrapolate the wall time linearly from the lines processed
     so far. Returns a dict ready to merge into the result payload."""
@@ -184,9 +184,11 @@ def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int,
     return result
 
 
-def sample_regions_from_db(db_path: Path, n: int = 5000,
-                           seed: int = 20260501) -> List[Tuple[str, int, int]]:
+def sample_regions_from_db(
+    db_path: Path, n: int = 5000, seed: int = 20260501
+) -> List[Tuple[str, int, int]]:
     import duckdb
+
     con = duckdb.connect(str(db_path), read_only=True)
     rows = con.execute("""
         SELECT seqid, MIN(start) AS lo, MAX("end") AS hi
@@ -209,6 +211,7 @@ def sample_regions_from_db(db_path: Path, n: int = 5000,
 
 def bench_spatial(db_path: Path, regions) -> Dict:
     import gffbase
+
     db = gffbase.FeatureDB(str(db_path))
     t0 = time.perf_counter()
     total = 0
@@ -217,21 +220,22 @@ def bench_spatial(db_path: Path, regions) -> Dict:
             total += 1
     elapsed = time.perf_counter() - t0
     return {
-        "n_queries":              len(regions),
-        "wall_seconds":           elapsed,
-        "qps":                    len(regions) / elapsed if elapsed else None,
+        "n_queries": len(regions),
+        "wall_seconds": elapsed,
+        "qps": len(regions) / elapsed if elapsed else None,
         "total_features_returned": total,
     }
 
 
 def bench_batched(db_path: Path, n_genes: int = 5000) -> Dict:
     import gffbase
+
     db = gffbase.FeatureDB(str(db_path))
     # FeatureDB.execute() doesn't accept params — drop down to the
     # underlying duckdb connection for parameter binding.
     cur = db.conn.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene' "
-        "ORDER BY id LIMIT ?", [n_genes],
+        "SELECT id FROM features WHERE featuretype = 'gene' ORDER BY id LIMIT ?",
+        [n_genes],
     )
     gene_ids = [r[0] for r in cur.fetchall()]
     if not gene_ids:
@@ -239,8 +243,8 @@ def bench_batched(db_path: Path, n_genes: int = 5000) -> Dict:
         # featuretype name. Probe a few common ones.
         for ft in ("Gene", "mRNA", "transcript", "ncRNA_gene", "pseudogene"):
             cur = db.conn.execute(
-                "SELECT id FROM features WHERE featuretype = ? "
-                "ORDER BY id LIMIT ?", [ft, n_genes],
+                "SELECT id FROM features WHERE featuretype = ? ORDER BY id LIMIT ?",
+                [ft, n_genes],
             )
             gene_ids = [r[0] for r in cur.fetchall()]
             if gene_ids:
@@ -251,10 +255,10 @@ def bench_batched(db_path: Path, n_genes: int = 5000) -> Dict:
     table = db.children_batched(gene_ids, format="arrow")
     elapsed = time.perf_counter() - t0
     return {
-        "n_anchors":     len(gene_ids),
+        "n_anchors": len(gene_ids),
         "n_descendants": table.num_rows,
-        "wall_seconds":  elapsed,
-        "qps":           len(gene_ids) / elapsed if elapsed else None,
+        "wall_seconds": elapsed,
+        "qps": len(gene_ids) / elapsed if elapsed else None,
     }
 
 
@@ -277,10 +281,10 @@ def run_one(corpus: Dict, args) -> Dict:
     print(f"  feature lines: {n_lines:,}", flush=True)
 
     gffbase_db = OUT / f"{key}.duckdb"
-    legacy_db  = OUT / f"{key}_legacy.sqlite"
+    legacy_db = OUT / f"{key}_legacy.sqlite"
 
     # ---- gffbase ingest ----
-    print(f"  [gffbase] ingest…", flush=True)
+    print("  [gffbase] ingest…", flush=True)
     if gffbase_db.exists():
         gffbase_db.unlink()
     g_info = run_subprocess(
@@ -290,9 +294,12 @@ def run_one(corpus: Dict, args) -> Dict:
     )
     g_info["disk_bytes"] = du(gffbase_db)
     if g_info.get("wall_seconds"):
-        print(f"    wall={pretty_seconds(g_info['wall_seconds'])}, "
-              f"RSS={pretty_bytes(g_info['peak_rss_bytes'])}, "
-              f"disk={pretty_bytes(g_info['disk_bytes'])}", flush=True)
+        print(
+            f"    wall={pretty_seconds(g_info['wall_seconds'])}, "
+            f"RSS={pretty_bytes(g_info['peak_rss_bytes'])}, "
+            f"disk={pretty_bytes(g_info['disk_bytes'])}",
+            flush=True,
+        )
     else:
         print(f"    failed: exit={g_info.get('exit_code')}", flush=True)
 
@@ -303,19 +310,25 @@ def run_one(corpus: Dict, args) -> Dict:
     l_info = run_legacy_with_timeout(inp, legacy_db, args.legacy_timeout, n_lines)
     l_info["disk_bytes"] = du(legacy_db)
     if l_info.get("extrapolated"):
-        print(f"    KILLED after {args.legacy_timeout}s — "
-              f"extrapolated wall: {pretty_seconds(l_info['wall_seconds'])}",
-              flush=True)
+        print(
+            f"    KILLED after {args.legacy_timeout}s — "
+            f"extrapolated wall: {pretty_seconds(l_info['wall_seconds'])}",
+            flush=True,
+        )
     elif l_info.get("wall_seconds"):
-        print(f"    wall={pretty_seconds(l_info['wall_seconds'])}, "
-              f"RSS={pretty_bytes(l_info['peak_rss_bytes'])}, "
-              f"disk={pretty_bytes(l_info['disk_bytes'])}", flush=True)
+        print(
+            f"    wall={pretty_seconds(l_info['wall_seconds'])}, "
+            f"RSS={pretty_bytes(l_info['peak_rss_bytes'])}, "
+            f"disk={pretty_bytes(l_info['disk_bytes'])}",
+            flush=True,
+        )
     else:
         print(f"    failed: exit={l_info.get('exit_code')}", flush=True)
 
     speedup = (
         l_info.get("wall_seconds", 0) / g_info["wall_seconds"]
-        if g_info.get("wall_seconds") and l_info.get("wall_seconds") else None
+        if g_info.get("wall_seconds") and l_info.get("wall_seconds")
+        else None
     )
 
     # ---- spatial routing ----
@@ -325,10 +338,12 @@ def run_one(corpus: Dict, args) -> Dict:
         regions = sample_regions_from_db(gffbase_db, n=args.n_spatial)
         if regions:
             spatial = bench_spatial(gffbase_db, regions)
-            print(f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
-                  f"qps={spatial['qps']:.0f}, "
-                  f"features_returned={spatial['total_features_returned']}",
-                  flush=True)
+            print(
+                f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
+                f"qps={spatial['qps']:.0f}, "
+                f"features_returned={spatial['total_features_returned']}",
+                flush=True,
+            )
         else:
             spatial = {"skipped": "no qualifying seqids"}
 
@@ -338,35 +353,46 @@ def run_one(corpus: Dict, args) -> Dict:
     if batched is None:
         batched = bench_batched(gffbase_db, n_genes=args.n_batched)
         if "skipped" not in batched:
-            print(f"    wall={pretty_seconds(batched['wall_seconds'])}, "
-                  f"anchors={batched['n_anchors']}, "
-                  f"descendants={batched['n_descendants']}",
-                  flush=True)
+            print(
+                f"    wall={pretty_seconds(batched['wall_seconds'])}, "
+                f"anchors={batched['n_anchors']}, "
+                f"descendants={batched['n_descendants']}",
+                flush=True,
+            )
 
     return {
-        "name":          name,
-        "key":           key,
-        "input":         str(inp),
-        "input_bytes":   inp.stat().st_size if inp.exists() else 0,
+        "name": name,
+        "key": key,
+        "input": str(inp),
+        "input_bytes": inp.stat().st_size if inp.exists() else 0,
         "feature_lines": n_lines,
-        "gffbase":       g_info,
-        "legacy":        l_info,
+        "gffbase": g_info,
+        "legacy": l_info,
         "ingest_speedup": speedup,
-        "spatial":       spatial,
-        "batched":       batched,
+        "spatial": spatial,
+        "batched": batched,
     }
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--legacy-timeout", type=int, default=900,
-                    help="seconds before legacy ingest is killed (default 900 = 15 min)")
-    ap.add_argument("--gffbase-timeout", type=int, default=1800,
-                    help="seconds before gffbase ingest is killed")
+    ap.add_argument(
+        "--legacy-timeout",
+        type=int,
+        default=900,
+        help="seconds before legacy ingest is killed (default 900 = 15 min)",
+    )
+    ap.add_argument(
+        "--gffbase-timeout", type=int, default=1800, help="seconds before gffbase ingest is killed"
+    )
     ap.add_argument("--n-spatial", type=int, default=5000)
     ap.add_argument("--n-batched", type=int, default=5000)
-    ap.add_argument("--only", action="append", default=None,
-                    help="restrict to specific corpus keys (repeatable)")
+    ap.add_argument(
+        "--only",
+        action="append",
+        default=None,
+        help="restrict to specific corpus keys (repeatable)",
+    )
     ap.add_argument("--out", default=str(OUT / "06_mega.json"))
     args = ap.parse_args()
 
@@ -385,10 +411,13 @@ def main() -> None:
             payload["corpora"].append(run_one(corpus, args))
         except Exception as exc:  # pragma: no cover - top-level guard
             print(f"  ERROR on {corpus['name']}: {exc}", flush=True)
-            payload["corpora"].append({
-                "name": corpus["name"], "key": corpus["key"],
-                "error": str(exc),
-            })
+            payload["corpora"].append(
+                {
+                    "name": corpus["name"],
+                    "key": corpus["key"],
+                    "error": str(exc),
+                }
+            )
 
     out_path = Path(args.out)
     out_path.write_text(json.dumps(payload, indent=2, default=str))
@@ -396,25 +425,28 @@ def main() -> None:
 
     # Compact summary table.
     print("\n" + "=" * 84, flush=True)
-    print(f"{'corpus':<28}  {'gffbase ingest':>16}  {'legacy ingest':>16}  "
-          f"{'speedup':>10}", flush=True)
+    print(
+        f"{'corpus':<28}  {'gffbase ingest':>16}  {'legacy ingest':>16}  {'speedup':>10}",
+        flush=True,
+    )
     print("-" * 84, flush=True)
     for c in payload["corpora"]:
         if "error" in c:
-            print(f"{c['name']:<28}  {'ERROR: '+c['error']:>16}", flush=True)
+            print(f"{c['name']:<28}  {'ERROR: ' + c['error']:>16}", flush=True)
             continue
         gw = c["gffbase"].get("wall_seconds")
         lw = c["legacy"].get("wall_seconds")
         sp = c.get("ingest_speedup")
         ext = "*" if c["legacy"].get("extrapolated") else " "
-        print(f"{c['name']:<28}  "
-              f"{(pretty_seconds(gw) if gw else 'fail'):>16}  "
-              f"{(pretty_seconds(lw) + ext if lw else 'fail'):>16}  "
-              f"{(f'{sp:.2f}×' if sp else 'n/a'):>10}",
-              flush=True)
+        print(
+            f"{c['name']:<28}  "
+            f"{(pretty_seconds(gw) if gw else 'fail'):>16}  "
+            f"{(pretty_seconds(lw) + ext if lw else 'fail'):>16}  "
+            f"{(f'{sp:.2f}×' if sp else 'n/a'):>10}",
+            flush=True,
+        )
     print("=" * 84, flush=True)
-    print("* = legacy was killed at timeout; wall extrapolated 2× per directive.",
-          flush=True)
+    print("* = legacy was killed at timeout; wall extrapolated 2× per directive.", flush=True)
 
 
 if __name__ == "__main__":
