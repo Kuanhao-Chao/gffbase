@@ -35,7 +35,7 @@ import pyarrow as pa
 from gffbase import parser as _parser
 from gffbase._dbutil import scalar
 from gffbase._options import IdSpecResolver, IngestOptions, _FeatureAdapter
-from gffbase.exceptions import DuplicateIDError
+from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
 from gffbase.feature import ParsedFeature
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
@@ -79,6 +79,9 @@ class IngestStats:
     warnings: list[dict] = None  # type: ignore[assignment]
     #: Records dropped by a `transform` callback or by `merge_strategy`.
     n_skipped: int = 0
+    #: Features assembled from more than one input line. Non-zero only under
+    #: `mode="strict"`, the only mode that fuses.
+    n_multipart: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +333,324 @@ def _unwrap_transformed(result, original):
     return inner if inner is not None else (result if result is not original else original)
 
 
+# ---------------------------------------------------------------------------
+# Multipart resolution.
+#
+# GFF3 lets one logical feature span several lines sharing an `ID` -- how NCBI
+# represents a split CDS. Under `mode="strict"` those lines are loaded with a
+# surrogate id each and then FUSED here into one logical feature carrying a
+# `segments` row per line.
+#
+# This runs before `EDGES_FROM_PARENT` and before GTF synthesis, so edges and
+# the closure are built once against final logical ids and never need
+# rewriting, and synthesized rows are never duplicate candidates.
+# ---------------------------------------------------------------------------
+
+#: Separator in the surrogate id a strict-mode duplicate is loaded under. 0x1F
+#: (ASCII unit separator) cannot appear in a GFF attribute value, so a
+#: surrogate can never collide with a real id -- and any that survives the
+#: resolve pass is a bug loud enough to assert on.
+_SURROGATE_SEP = "\x1f"
+
+
+def _surrogate_id(raw_id: str, occ: int) -> str:
+    return f"{raw_id}{_SURROGATE_SEP}{occ}"
+
+
+#: The columns GFF3 requires the segments of a discontinuous feature to share.
+#: Coordinates, score and phase deliberately may differ -- per-segment phase is
+#: the whole reason the `segments` table exists -- and attributes are unioned.
+_MULTIPART_KEY = ("seqid", "source", "featuretype", "strand")
+
+
+def _multipart_runs(con) -> list[tuple]:
+    """Groups of loaded rows sharing one `raw_id`, with the predicate evaluated.
+
+    One aggregate query rather than a query per candidate: the FlyBase 50k
+    fixture alone has 345 runs, and a real annotation file has thousands.
+    """
+    distinct = ", ".join(f"COUNT(DISTINCT {col}) AS n_{col}" for col in _MULTIPART_KEY)
+    return con.execute(
+        f"""
+        SELECT raw_id, COUNT(*) AS n, MIN(file_order) AS first_line, {distinct}
+        FROM features
+        WHERE raw_id IS NOT NULL AND is_synthetic = FALSE
+        GROUP BY raw_id
+        HAVING COUNT(*) > 1
+        ORDER BY MIN(file_order)
+        """
+    ).fetchall()
+
+
+def _describe_conflict(con, raw_id: str) -> str:
+    """Name the diverging column and both line numbers, for the exception.
+
+    A `MultipartConstraintError` is something the user has to act on -- fix the
+    file, or pass `on_multipart_conflict="split"` -- so "these lines conflict"
+    is not enough; it has to say which column and where.
+    """
+    rows = con.execute(
+        f"SELECT file_order, {', '.join(_MULTIPART_KEY)} FROM features "
+        "WHERE raw_id = ? ORDER BY file_order",
+        [raw_id],
+    ).fetchall()
+    first = rows[0]
+    for other in rows[1:]:
+        for i, col in enumerate(_MULTIPART_KEY, start=1):
+            if first[i] != other[i]:
+                return (
+                    f"{col} differs ({first[i]!r} on line {first[0]} vs "
+                    f"{other[i]!r} on line {other[0]})"
+                )
+    return "columns differ"  # pragma: no cover - only reachable if the predicate lied
+
+
+def _free_autoincrement(con, base: str, autoinc: dict) -> str:
+    """An autoincremented name that no loaded feature already claims.
+
+    `_autoincrement` only guarantees uniqueness against its own counters, and
+    this runs after the bulk load -- so a file that literally contains `x_1`
+    would otherwise get a second row claiming it and violate the primary key.
+    """
+    while True:
+        candidate = IdSpecResolver._autoincrement(base, autoinc)
+        taken = scalar(
+            con,
+            "SELECT COUNT(*) FROM features WHERE id = ? OR raw_id = ?",
+            [candidate, candidate],
+        )
+        if not taken:
+            return candidate
+
+
+def _split_conflicting_run(con, raw_id: str, autoinc: dict) -> int:
+    """Partition a conflicting run by its constraint key.
+
+    The lowest `file_order` keeps the bare id; every other distinct key gets an
+    autoincremented one. Rows that DO share a key stay together, so a file with
+    a genuine split CDS plus one stray line still fuses the CDS.
+    """
+    keys = con.execute(
+        f"SELECT {', '.join(_MULTIPART_KEY)}, MIN(file_order) AS first_line "
+        "FROM features WHERE raw_id = ? "
+        f"GROUP BY {', '.join(_MULTIPART_KEY)} ORDER BY MIN(file_order)",
+        [raw_id],
+    ).fetchall()
+    renamed = 0
+    for pos, row in enumerate(keys):
+        if pos == 0:
+            continue  # lowest file_order keeps the bare id
+        new_raw = _free_autoincrement(con, raw_id, autoinc)
+        predicate = " AND ".join(f"{col} = ?" for col in _MULTIPART_KEY)
+        con.execute(
+            f"UPDATE features SET raw_id = ? WHERE raw_id = ? AND {predicate}",
+            [new_raw, raw_id, *row[: len(_MULTIPART_KEY)]],
+        )
+        renamed += 1
+    return renamed
+
+
+def _canonicalize_surrogates(con) -> None:
+    """Give the first row of every `raw_id` group its bare id back.
+
+    Duplicate rows are loaded under a surrogate id so they can coexist under
+    the primary key until the resolve pass can see the whole run. Fusion then
+    deletes all but the first row of each group -- but only the ORIGINAL first
+    row already held the bare id. After a split, a group's new first row is
+    still wearing a surrogate, and fusing would make that surrogate the logical
+    id of a real feature.
+
+    So this runs before fusion. Anything still surrogate afterwards is a row
+    fusion is about to delete.
+    """
+    renames = con.execute(
+        """
+        SELECT id, raw_id FROM (
+            SELECT id, raw_id,
+                   ROW_NUMBER() OVER (PARTITION BY raw_id ORDER BY file_order, id) AS rn
+            FROM features
+        )
+        WHERE rn = 1 AND id <> raw_id
+        """
+    ).fetchall()
+    for surrogate, bare in renames:
+        con.execute("UPDATE features SET id = ? WHERE id = ?", [bare, surrogate])
+        con.execute("UPDATE attributes SET feature_id = ? WHERE feature_id = ?", [bare, surrogate])
+
+
+def _fuse_multipart(con, raw_ids: list[str], has_spatial: bool) -> int:
+    """Collapse each run into one logical feature plus its `segments` rows.
+
+    Set-based over every run at once. The surviving row is the one with the
+    lowest `file_order`; it keeps the bare id, and its coordinates widen to the
+    envelope so the existing R-tree and every v1 query shape stay correct.
+    """
+    con.execute("DROP TABLE IF EXISTS __mp_rows")
+    con.execute(
+        """
+        CREATE TEMP TABLE __mp_rows AS
+        SELECT
+            f.id, f.raw_id, f.start, f."end", f.score, f.frame,
+            f.attributes_blob, f.extra_blob, f.file_order, f.seqid_y,
+            ROW_NUMBER() OVER w - 1                    AS seg_idx,
+            FIRST_VALUE(f.id)              OVER w      AS logical_id,
+            FIRST_VALUE(f.attributes_blob) OVER w      AS seg0_blob
+        FROM features f
+        JOIN (SELECT UNNEST(?::VARCHAR[]) AS raw_id) k ON k.raw_id = f.raw_id
+        WINDOW w AS (PARTITION BY f.raw_id ORDER BY f.file_order, f.id)
+        """,
+        [raw_ids],
+    )
+
+    # Segment 0 is stored too, even though `features` carries its blob: the
+    # feature row's coordinates become the envelope, so segment 0's own
+    # coordinates need somewhere to live.
+    con.execute(
+        """
+        INSERT INTO segments (feature_id, seg_idx, start, "end", score, frame,
+                              attributes_blob, extra_blob, file_order,
+                              attrs_same_as_seg0, seqid_y)
+        SELECT logical_id, seg_idx, start, "end", score, frame,
+               COALESCE(attributes_blob, ''::BLOB), extra_blob, file_order,
+               attributes_blob IS NOT DISTINCT FROM seg0_blob, seqid_y
+        FROM __mp_rows
+        """
+    )
+
+    # Widen the survivor to the envelope.
+    con.execute(
+        """
+        UPDATE features SET
+            start      = agg.min_start,
+            "end"      = agg.max_end,
+            n_segments = agg.n
+        FROM (
+            SELECT logical_id, MIN(start) AS min_start, MAX("end") AS max_end,
+                   COUNT(*) AS n
+            FROM __mp_rows GROUP BY logical_id
+        ) agg
+        WHERE features.id = agg.logical_id
+        """
+    )
+    if has_spatial:
+        con.execute(
+            """
+            UPDATE features SET bbox = CASE
+                WHEN start IS NULL OR "end" IS NULL THEN NULL
+                ELSE ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) END
+            WHERE id IN (SELECT DISTINCT logical_id FROM __mp_rows)
+            """
+        )
+
+    # Attribute rows. Where a segment repeats segment 0's column 9 byte for
+    # byte -- which NCBI does on every CDS line -- its rows are redundant and
+    # are dropped, so the table stays the size it was in v1. Where it differs,
+    # they are re-pointed at the logical id and tagged with the owning segment.
+    con.execute(
+        """
+        DELETE FROM attributes WHERE feature_id IN (
+            SELECT id FROM __mp_rows
+            WHERE seg_idx > 0 AND attributes_blob IS NOT DISTINCT FROM seg0_blob
+        )
+        """
+    )
+    con.execute(
+        """
+        UPDATE attributes SET feature_id = r.logical_id, seg_idx = r.seg_idx
+        FROM __mp_rows r
+        WHERE attributes.feature_id = r.id AND r.seg_idx > 0
+        """
+    )
+
+    con.execute("DELETE FROM features WHERE id IN (SELECT id FROM __mp_rows WHERE seg_idx > 0)")
+    n = scalar(con, "SELECT COUNT(DISTINCT logical_id) FROM __mp_rows")
+    con.execute("DROP TABLE __mp_rows")
+    return int(n)
+
+
+def _record_id_conflicts(con, rows: list[tuple]) -> None:
+    if not rows:
+        return
+    con.executemany(
+        "INSERT INTO id_conflicts (raw_id, resolved_id, kind, file_order, detail) "
+        "VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+
+
+def resolve_multipart(con, options, autoinc: dict, has_spatial: bool) -> int:
+    """Fuse duplicate-id runs into discontinuous features. Returns the count.
+
+    Skipped entirely when no `raw_id` collided -- the case for every GTF corpus
+    and for GENCODE GFF3 -- so the cost on a file without discontinuous
+    features is one aggregate query that returns no rows.
+    """
+    # Compat mode must not fuse anything, ever. `merge_strategy` has already
+    # had the final say there, and gffutils' own `merge` requires all eight
+    # non-attribute columns to match -- so it never merges a genuine split
+    # feature, and neither may we while claiming to be a drop-in.
+    #
+    # Without this guard, `merge_strategy="create_unique"` fused the very rows
+    # it had just been asked to keep separate: `dup`, `dup_1` and `dup_2` all
+    # still share `raw_id = 'dup'`, which is exactly what the resolve pass
+    # groups on.
+    if not options.fuses_multipart:
+        return 0
+
+    runs = _multipart_runs(con)
+    if not runs:
+        return 0
+
+    fuse: list[str] = []
+    conflicts: list[str] = []
+    for raw_id, _n, _first_line, *distinct_counts in runs:
+        if all(c == 1 for c in distinct_counts):
+            fuse.append(raw_id)
+        else:
+            conflicts.append(raw_id)
+
+    if conflicts and options.on_multipart_conflict == "error":
+        raw_id = conflicts[0]
+        raise MultipartConstraintError(
+            f"lines sharing ID {raw_id!r} cannot form one discontinuous feature: "
+            f"{_describe_conflict(con, raw_id)}. GFF3 requires the segments of a "
+            "discontinuous feature to share seqid, source, featuretype and strand. "
+            'Pass on_multipart_conflict="split" to keep them as separate features.'
+        )
+
+    conflict_rows: list[tuple] = []
+    for raw_id in conflicts:
+        detail = _describe_conflict(con, raw_id)
+        n_new = _split_conflicting_run(con, raw_id, autoinc)
+        conflict_rows.append((raw_id, raw_id, "strict_split", None, detail))
+        _log.info("split %d conflicting id group(s) for %r: %s", n_new, raw_id, detail)
+
+    # Splitting reshuffles the groups: some become singletons, and the ones
+    # that remain runs may now satisfy the predicate. Re-derive both.
+    if conflicts:
+        _canonicalize_surrogates(con)
+        fuse = [
+            raw_id
+            for raw_id, _n, _fl, *counts in _multipart_runs(con)
+            if all(c == 1 for c in counts)
+        ]
+
+    n_fused = _fuse_multipart(con, fuse, has_spatial) if fuse else 0
+    conflict_rows.extend((raw_id, raw_id, "multipart", None, None) for raw_id in fuse)
+    _record_id_conflicts(con, conflict_rows)
+
+    # A surrogate id is an internal artifact of loading duplicates under a
+    # primary key. Every one of them must have been either renamed back or
+    # deleted by now; one that escaped would reach users as a feature id with a
+    # control character in it.
+    leaked = scalar(con, "SELECT COUNT(*) FROM features WHERE id LIKE '%' || chr(31) || '%'")
+    if leaked:  # pragma: no cover - defensive; a leak is a bug in this pass
+        raise AssertionError(
+            f"{leaked} surrogate id(s) survived multipart resolution; this is a gffbase bug"
+        )
+    return n_fused
+
+
 def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y, fmt):
     """Apply `merge` / `replace` to rows held back during the bulk load.
 
@@ -539,6 +860,7 @@ def from_file(
     resolver = None
     strategy = options.merge_strategy
     transform = options.transform
+    fuse_multipart = options.fuses_multipart
 
     for feat in it:
         file_order += 1
@@ -570,13 +892,22 @@ def from_file(
         occ = seen_ids.get(fid, 0)
 
         if occ:
-            if strategy == "error":
+            if fuse_multipart:
+                # Strict mode: a duplicate id is a CANDIDATE discontinuous
+                # feature, not yet an error. Load it under a surrogate id and
+                # let the resolve pass decide, once it can see the whole run.
+                # The surrogate deliberately does not go through
+                # `_autoincrement`: these rows are either deleted (fused) or
+                # renamed (split), so polluting the `autoincrements` table with
+                # counters that get undone would misinform a later `update()`.
+                fid = _surrogate_id(raw_id, occ)
+            elif strategy == "error":
                 raise DuplicateIDError(f"Duplicate ID {fid}")
-            if strategy == "warning":
+            elif strategy == "warning":
                 _log.warning("Duplicate lines in file for id '%s'; ignoring all but the first", fid)
                 n_skipped += 1
                 continue
-            if strategy == "create_unique":
+            elif strategy == "create_unique":
                 # Note: NO `duplicates` row here. gffutils only records a
                 # rename when `merge` falls back to create_unique, because
                 # that table exists to let a later merge find the sibling
@@ -622,6 +953,13 @@ def from_file(
             "SELECT original_id, new_id FROM __staging_dups"
         )
         con.unregister("__staging_dups")
+
+    # Multipart resolution, BEFORE edges, GTF synthesis and the
+    # `autoincrements` write: edges and the closure are then built once against
+    # final logical ids and never need rewriting, synthesized rows are never
+    # duplicate candidates, and a `split` resolution's renames are reflected in
+    # the counters that get persisted below.
+    n_multipart = resolve_multipart(con, options, autoinc, has_spatial)
 
     # `autoincrements` records the counters so a later `update()` does not
     # reissue an id this build already handed out.
@@ -714,6 +1052,7 @@ def from_file(
         directives=directives,
         warnings=list(getattr(it, "warnings", []) or []),
         n_skipped=n_skipped,
+        n_multipart=n_multipart,
     )
 
 

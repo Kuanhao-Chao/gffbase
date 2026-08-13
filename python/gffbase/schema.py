@@ -241,10 +241,14 @@ CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id, seg_idx);
 # 1. Edges from GFF3 `Parent=` attributes.
 EDGES_FROM_PARENT = """
 INSERT INTO edges (parent, child)
-SELECT a.value AS parent, a.feature_id AS child
+SELECT DISTINCT a.value AS parent, a.feature_id AS child
 FROM attributes a
 WHERE a.key = 'Parent';
 """
+# DISTINCT because a fused discontinuous feature takes the UNION of its
+# segments' `Parent` values, and NCBI repeats `Parent=` on every segment line.
+# It also fixes a latent v1 defect: `Parent=a,a` on a single line produced two
+# identical edges and therefore duplicate closure rows.
 
 # 2. Edges from GTF gene_id / transcript_id (after gene/transcript rows have
 #    been synthesized). The transcript->child edge is for any feature with a

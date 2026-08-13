@@ -35,10 +35,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gffbase.feature import _drop_lone_empty_values
-from gffbase.modes import ResolvedMode, resolve_mode
+from gffbase.modes import MODE_STRICT, ResolvedMode, resolve_mode
 
 #: The five duplicate-ID policies gffutils accepts.
 MERGE_STRATEGIES = ("error", "warning", "merge", "create_unique", "replace")
+
+#: What `mode="strict"` does when lines sharing one `ID` cannot be one
+#: discontinuous feature -- when they disagree on seqid, source, featuretype
+#: or strand, which GFF3 requires them to share.
+MULTIPART_CONFLICT_ACTIONS = ("error", "split")
 
 #: Non-attribute fields that ``force_merge_fields`` may name. `start` and `end`
 #: are deliberately absent: merging them would mean joining integers into a
@@ -251,6 +256,10 @@ class IngestOptions:
     mode: str = "compat"
     validation: str | None = None
     on_error: str | None = None
+    #: What to do when lines sharing an `ID` disagree on a column GFF3 requires
+    #: the segments of a discontinuous feature to share. Consulted only under
+    #: `mode="strict"`, which is the only mode that fuses at all.
+    on_multipart_conflict: str = "error"
     resolved_mode: ResolvedMode = field(init=False)
 
     def __post_init__(self) -> None:
@@ -260,6 +269,12 @@ class IngestOptions:
 
         if self.merge_strategy not in MERGE_STRATEGIES:
             raise ValueError(f"Invalid merge strategy '{self.merge_strategy}'")
+
+        if self.on_multipart_conflict not in MULTIPART_CONFLICT_ACTIONS:
+            raise ValueError(
+                f"Invalid on_multipart_conflict '{self.on_multipart_conflict}'; "
+                f"expected one of {MULTIPART_CONFLICT_ACTIONS}"
+            )
 
         self.force_merge_fields = list(self.force_merge_fields or [])
         for name in self.force_merge_fields:
@@ -294,6 +309,18 @@ class IngestOptions:
             )
             self.disable_infer_genes = True
             self.disable_infer_transcripts = True
+
+    @property
+    def fuses_multipart(self) -> bool:
+        """Whether duplicate ids may become one discontinuous feature.
+
+        Strict mode only, deliberately. gffutils' `merge_strategy="merge"`
+        requires all eight non-attribute columns to match, so it never merges a
+        genuine discontinuous feature -- it routes them to `create_unique`.
+        Fusing is therefore NEW behaviour, not a change to gffutils behaviour,
+        and compat mode must not do it.
+        """
+        return self.mode == MODE_STRICT
 
     def id_spec_for(self, fmt: str):
         """The effective id_spec, filling in gffutils' per-dialect default."""
