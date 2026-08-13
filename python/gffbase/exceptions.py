@@ -53,14 +53,34 @@ class FeatureNotFoundError(Exception):
         self.feature_id = feature_id
 
 
-class DuplicateIDError(Exception):
-    """Raised during ingestion when a duplicate ID is encountered with
-    ``merge_strategy='error'`` (Phase 6 will wire `merge_strategy`)."""
+# ---------------------------------------------------------------------------
+# The three exceptions below subclass `ValueError`, where gffutils subclasses
+# plain `Exception`. That is deliberate, and it makes gffbase catchable *both*
+# ways rather than one.
+#
+# gffutils exports `DuplicateIDError` and documents it, but the code path that
+# should raise it -- `_do_merge` under `merge_strategy="error"` -- raises a
+# bare `ValueError("Duplicate ID ...")` instead. Real callers therefore write
+# `except ValueError`. Raising a `DuplicateIDError` that *is* a `ValueError`
+# satisfies those callers and the documented type at once, instead of forcing
+# a choice between compatibility and correctness.
+#
+# `FeatureNotFoundError` is deliberately NOT rebased: gffutils raises it from
+# `__getitem__`, where callers reach for `KeyError`-shaped handling, and
+# making it a `ValueError` would be a gratuitous change.
+# ---------------------------------------------------------------------------
 
 
-class AttributeStringError(Exception):
+class DuplicateIDError(ValueError):
+    """Two features resolved to the same primary key.
+
+    Raised during ingestion under ``merge_strategy="error"`` (the default).
+    """
+
+
+class AttributeStringError(ValueError):
     """Raised on malformed col-9 attributes."""
 
 
-class EmptyInputError(Exception):
+class EmptyInputError(ValueError):
     """Raised when an input file or iterable yields no features."""

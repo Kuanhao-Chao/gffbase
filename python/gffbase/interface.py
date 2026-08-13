@@ -196,8 +196,13 @@ class FeatureDB:
     # Properties
     # ------------------------------------------------------------------
 
-    @property
     def schema(self) -> str:
+        """The database schema as SQL text.
+
+        A METHOD, not a property: gffutils documents `db.schema()` and callers
+        write it that way. Exposing it as a property meant the documented call
+        raised `TypeError: 'str' object is not callable`.
+        """
         rows = self.conn.execute("""
             SELECT sql FROM duckdb_tables() WHERE database_name = current_database()
             UNION ALL
@@ -220,7 +225,12 @@ class FeatureDB:
         ).fetchone()
         if row is None:
             raise FeatureNotFoundError(target_id)
-        return feature_from_row(row, dialect=self.dialect)
+        return feature_from_row(
+            row,
+            dialect=self.dialect,
+            keep_order=self.keep_order,
+            sort_attribute_values=self.sort_attribute_values,
+        )
 
     def __contains__(self, key) -> bool:
         target_id = key.id if isinstance(key, Feature) else key
@@ -1619,4 +1629,9 @@ class FeatureDB:
             if not rows:
                 return
             for row in rows:
-                yield feature_from_row(row, dialect=self.dialect)
+                yield feature_from_row(
+                    row,
+                    dialect=self.dialect,
+                    keep_order=self.keep_order,
+                    sort_attribute_values=self.sort_attribute_values,
+                )

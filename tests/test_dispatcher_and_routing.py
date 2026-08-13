@@ -215,10 +215,16 @@ def test_region_filter_featuretype_list(hier_db):
 # ---------------------------------------------------------------------------
 
 
-def test_schema_property_returns_string(hier_db):
-    s = hier_db.schema
+def test_schema_is_a_method_returning_sql_text(hier_db):
+    """`db.schema()` -- a method, matching gffutils.
+
+    It was a property here, so the documented call raised
+    `TypeError: 'str' object is not callable`.
+    """
+    assert callable(hier_db.schema)
+    s = hier_db.schema()
     assert isinstance(s, str)
-    assert "features" in s.lower() or "table" in s.lower() or s == ""
+    assert "features" in s.lower()
 
 
 def test_analyze_marks_db_analyzed(hier_db):

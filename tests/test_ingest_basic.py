@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 from gffbase import ingest
+from gffbase._options import IngestOptions
 
 DATA = Path(__file__).parent / "data"
 
@@ -194,30 +195,105 @@ def test_force_overwrites(tmp_path, hier_path):
     assert n == 8
 
 
-def test_duplicate_ids_create_unique(tmp_path):
-    """RefSeq emits multiple GFF3 rows with the same ``ID=cds-…`` (the
-    segments of one CDS feature). The ingest pipeline must mirror
-    ``gffutils.merge_strategy='create_unique'``: the first row keeps
-    the bare id, subsequent rows are suffixed ``__2``, ``__3``, … and
-    the mapping is recorded in the ``duplicates`` table.
-    """
+_DUP_GFF3 = (
+    "##gff-version 3\n"
+    "chr1\trs\tgene\t1\t1000\t.\t+\t.\tID=g1\n"
+    "chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
+    "chr1\trs\tCDS\t100\t200\t.\t+\t0\tID=cds-x;Parent=t1\n"
+    "chr1\trs\tCDS\t300\t400\t.\t+\t0\tID=cds-x;Parent=t1\n"
+    "chr1\trs\tCDS\t500\t600\t.\t+\t0\tID=cds-x;Parent=t1\n"
+)
+
+
+def _dup_source(tmp_path):
     src = tmp_path / "dup.gff3"
+    src.write_text(_DUP_GFF3)
+    return str(src)
+
+
+def test_duplicate_ids_raise_by_default(tmp_path):
+    """The default `merge_strategy="error"` must actually raise.
+
+    RefSeq emits multiple GFF3 rows sharing one `ID=cds-...`. gffbase used to
+    rename them to `cds-x__2` unconditionally, which meant the documented
+    default strategy was unreachable and a corrupt file loaded silently.
+    """
+    from gffbase import DuplicateIDError
+
+    with pytest.raises(DuplicateIDError, match="Duplicate ID cds-x"):
+        ingest.from_file(_dup_source(tmp_path))
+
+    # gffutils raises a bare ValueError here, so callers written against it
+    # use `except ValueError`. That has to keep working.
+    with pytest.raises(ValueError, match="Duplicate ID cds-x"):
+        ingest.from_file(_dup_source(tmp_path))
+
+
+def test_duplicate_ids_create_unique(tmp_path):
+    """`create_unique` autoincrements on the ID, matching gffutils.
+
+    The suffix is `_1`, `_2`, ... from `_increment_featuretype_autoid(f.id)` --
+    not the `__2`, `__3` gffbase previously invented -- and only the renamed
+    rows are recorded in `duplicates`.
+    """
+    con, _ = ingest.from_file(
+        _dup_source(tmp_path),
+        options=IngestOptions(merge_strategy="create_unique"),
+    )
+    ids = sorted(
+        r[0] for r in con.execute("SELECT id FROM features WHERE featuretype = 'CDS'").fetchall()
+    )
+    assert ids == ["cds-x", "cds-x_1", "cds-x_2"]
+    # No `duplicates` rows: gffutils records a rename only when `merge` falls
+    # back to create_unique, since the table exists so a later merge can find
+    # the sibling rows.
+    assert con.execute("SELECT COUNT(*) FROM duplicates").fetchone()[0] == 0
+
+
+def test_duplicate_ids_warning_keeps_only_the_first(tmp_path):
+    con, _ = ingest.from_file(
+        _dup_source(tmp_path), options=IngestOptions(merge_strategy="warning")
+    )
+    rows = con.execute("SELECT id, start FROM features WHERE featuretype = 'CDS'").fetchall()
+    assert rows == [("cds-x", 100)]
+
+
+def test_duplicate_ids_replace_keeps_only_the_last(tmp_path):
+    con, _ = ingest.from_file(
+        _dup_source(tmp_path), options=IngestOptions(merge_strategy="replace")
+    )
+    rows = con.execute("SELECT id, start FROM features WHERE featuretype = 'CDS'").fetchall()
+    assert rows == [("cds-x", 500)]
+
+
+def test_duplicate_ids_merge_falls_back_when_coordinates_differ(tmp_path):
+    """`merge` only fuses rows whose other eight columns match.
+
+    These three CDS rows have different coordinates, so gffutils routes them
+    to `create_unique` and records each rename in `duplicates`.
+    """
+    con, _ = ingest.from_file(_dup_source(tmp_path), options=IngestOptions(merge_strategy="merge"))
+    ids = sorted(
+        r[0] for r in con.execute("SELECT id FROM features WHERE featuretype = 'CDS'").fetchall()
+    )
+    assert ids == ["cds-x", "cds-x_1", "cds-x_2"]
+    dups = con.execute("SELECT original_id, new_id FROM duplicates ORDER BY new_id").fetchall()
+    assert dups == [("cds-x", "cds-x_1"), ("cds-x", "cds-x_2")]
+
+
+def test_duplicate_ids_merge_unions_attributes_when_rows_agree(tmp_path):
+    """Identical rows differing only in attributes are fused into one."""
+    src = tmp_path / "same.gff3"
     src.write_text(
         "##gff-version 3\n"
-        "chr1\trs\tgene\t1\t1000\t.\t+\t.\tID=g1\n"
-        "chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
-        "chr1\trs\tCDS\t100\t200\t.\t+\t0\tID=cds-x;Parent=t1\n"
-        "chr1\trs\tCDS\t300\t400\t.\t+\t0\tID=cds-x;Parent=t1\n"
-        "chr1\trs\tCDS\t500\t600\t.\t+\t0\tID=cds-x;Parent=t1\n"
+        "chr1\trs\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=first\n"
+        "chr1\trs\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=second;Extra=yes\n"
     )
-    con, _ = ingest.from_file(str(src))
-    ids = sorted(
-        r[0]
-        for r in con.execute(
-            "SELECT id FROM features WHERE featuretype = 'CDS' ORDER BY id"
-        ).fetchall()
-    )
-    # Three CDS rows: bare + __2 + __3.
-    assert ids == ["cds-x", "cds-x__2", "cds-x__3"]
-    dups = con.execute("SELECT original_id, new_id FROM duplicates ORDER BY new_id").fetchall()
-    assert dups == [("cds-x", "cds-x__2"), ("cds-x", "cds-x__3")]
+    con, _ = ingest.from_file(str(src), options=IngestOptions(merge_strategy="merge"))
+    assert con.execute("SELECT COUNT(*) FROM features").fetchone()[0] == 1
+    attrs = con.execute(
+        "SELECT key, value FROM attributes WHERE feature_id = 'c1' ORDER BY key, value"
+    ).fetchall()
+    assert ("Note", "first") in attrs
+    assert ("Note", "second") in attrs
+    assert ("Extra", "yes") in attrs

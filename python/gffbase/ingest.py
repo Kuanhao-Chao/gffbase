@@ -25,6 +25,7 @@ or pure SQL.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 
@@ -33,6 +34,8 @@ import pyarrow as pa
 
 from gffbase import parser as _parser
 from gffbase._dbutil import scalar
+from gffbase._options import IdSpecResolver, IngestOptions, _FeatureAdapter
+from gffbase.exceptions import DuplicateIDError
 from gffbase.feature import ParsedFeature
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
@@ -47,6 +50,8 @@ from gffbase.schema import (
     POST_LOAD_INDEXES,
     SCHEMA_VERSION,
 )
+
+_log = logging.getLogger("gffbase.ingest")
 
 DEFAULT_BATCH_SIZE = 50_000
 DEFAULT_MAX_DEPTH = 8
@@ -265,6 +270,115 @@ def _derive_id(feat: ParsedFeature, dialect_fmt: str, autoincrement: dict) -> st
 
 
 # ---------------------------------------------------------------------------
+# Duplicate-ID resolution.
+# ---------------------------------------------------------------------------
+
+#: The eight non-attribute GFF columns `merge_strategy="merge"` compares.
+#: Column 9 is excluded by definition -- merging attributes is the point.
+_MERGE_COMPARE_FIELDS = (
+    "seqid",
+    "source",
+    "featuretype",
+    "start",
+    "end",
+    "score",
+    "strand",
+    "frame",
+)
+
+
+def _unwrap_transformed(result, original):
+    """Return the ParsedFeature a transform callback produced.
+
+    gffutils transforms mutate and return the Feature they were handed. Ours
+    are handed a `_FeatureAdapter` view, so unwrap it back to the underlying
+    ParsedFeature; anything else is returned as-is so a transform may also
+    build a feature from scratch.
+    """
+    inner = getattr(result, "_parsed", None)
+    return inner if inner is not None else (result if result is not original else original)
+
+
+def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y):
+    """Apply `merge` / `replace` to rows held back during the bulk load.
+
+    Both strategies need to see the row already in the database, so they
+    cannot be decided while streaming. Duplicates are a small fraction of any
+    real corpus, so resolving them row-by-row here is cheap; the bulk path
+    stays set-based.
+
+    Returns the (original_id, new_id) pairs to record in `duplicates`.
+    """
+    new_duplicates: list[tuple[str, str]] = []
+    strategy = options.merge_strategy
+    compare = [f for f in _MERGE_COMPARE_FIELDS if f not in options.force_merge_fields]
+
+    for fid, feat, file_order in deferred:
+        if strategy == "replace":
+            # Last one wins: drop the incumbent and insert this row under the
+            # same id.
+            con.execute("DELETE FROM attributes WHERE feature_id = ?", [fid])
+            con.execute("DELETE FROM features WHERE id = ?", [fid])
+            _insert_single(con, builder, seqid_to_y, fid, feat, file_order)
+            continue
+
+        # strategy == "merge"
+        row = con.execute(
+            f"SELECT {', '.join(_quote(f) for f in _MERGE_COMPARE_FIELDS)} "
+            "FROM features WHERE id = ?",
+            [fid],
+        ).fetchone()
+        existing = dict(zip(_MERGE_COMPARE_FIELDS, row, strict=True)) if row else {}
+
+        same = bool(existing) and all(
+            _as_text(existing[f]) == _as_text(getattr(feat, f)) for f in compare
+        )
+        if not same:
+            # gffutils falls back to create_unique when the other columns
+            # differ, and records the rename in `duplicates`.
+            new_id = IdSpecResolver._autoincrement(fid, autoinc)
+            _insert_single(con, builder, seqid_to_y, new_id, feat, file_order)
+            new_duplicates.append((fid, new_id))
+            continue
+
+        # Same everywhere else: fold this row's attributes into the incumbent.
+        for key, value, idx in feat.attributes_pairs:
+            already = scalar(
+                con,
+                "SELECT COUNT(*) FROM attributes WHERE feature_id = ? AND key = ? AND value = ?",
+                [fid, key, value],
+            )
+            if not already:
+                con.execute(
+                    "INSERT INTO attributes (feature_id, key, value, idx) VALUES (?, ?, ?, ?)",
+                    [fid, key, value, idx],
+                )
+        # `force_merge_fields` collapse to a sorted comma-joined string.
+        for fld in options.force_merge_fields:
+            merged = sorted({_as_text(existing[fld]), _as_text(getattr(feat, fld))})
+            con.execute(
+                f"UPDATE features SET {_quote(fld)} = ? WHERE id = ?",
+                [",".join(merged), fid],
+            )
+    return new_duplicates
+
+
+def _quote(field: str) -> str:
+    """`end` is reserved in SQL, so it always needs quoting."""
+    return '"end"' if field == "end" else field
+
+
+def _as_text(value) -> str:
+    return "" if value is None else str(value)
+
+
+def _insert_single(con, builder, seqid_to_y, fid, feat, file_order):
+    """Insert one feature through the same Arrow path as the bulk load."""
+    builder.append(fid, feat, file_order)
+    builder.flush_into(con)
+
+
+# ---------------------------------------------------------------------------
 # Public entry point.
 # ---------------------------------------------------------------------------
 
@@ -273,6 +387,7 @@ def from_file(
     path: str,
     dbfn: str = ":memory:",
     *,
+    options: IngestOptions | None = None,
     force: bool = False,
     batch_size: int = DEFAULT_BATCH_SIZE,
     max_depth: int = DEFAULT_MAX_DEPTH,
@@ -285,8 +400,24 @@ def from_file(
     """Ingest a GFF3 or GTF file into a DuckDB database.
 
     Returns the open connection plus an `IngestStats` summary. The connection
-    is the canonical handle the (Phase 5) `FeatureDB` will wrap.
+    is the canonical handle `FeatureDB` wraps.
+
+    `options` carries the full `create_db` policy (id_spec, merge_strategy,
+    transform, ...). The individual keyword arguments are the older, narrower
+    interface and are folded into `options` when it is not supplied.
     """
+    if options is None:
+        options = IngestOptions(
+            force=force,
+            disable_infer_genes=disable_infer_genes,
+            disable_infer_transcripts=disable_infer_transcripts,
+            gtf_subfeature=gtf_subfeature,
+        )
+    force = options.force
+    disable_infer_genes = options.disable_infer_genes
+    disable_infer_transcripts = options.disable_infer_transcripts
+    gtf_subfeature = options.gtf_subfeature
+
     if dbfn != ":memory:":
         if os.path.exists(dbfn) and not force:
             raise ValueError(f"{dbfn} already exists. Pass force=True to overwrite.")
@@ -307,46 +438,91 @@ def from_file(
         con.execute("ALTER TABLE features ADD COLUMN IF NOT EXISTS bbox GEOMETRY")
 
     # Drive the parser.
-    it = _parser.parse_gff(path, engine=engine)
+    it = _parser.parse_gff(
+        path,
+        engine=engine,
+        checklines=options.checklines,
+        force_dialect_check=options.force_dialect_check,
+        force_gff=options.force_gff,
+    )
     seqid_to_y: dict = {}
     builder = _ArrowBatchBuilder(seqid_to_y, has_spatial=has_spatial)
+    # Autoincrement counters, keyed by base. gffutils keeps the same table:
+    # `<featuretype>_<n>` for a feature whose id_spec yields nothing, and
+    # `<id>_<n>` for a `create_unique` collision.
     autoinc: dict = {}
-    # NCBI RefSeq emits multiple GFF3 rows that share an `ID=cds-…` (a CDS
-    # is "split" across exon-segments). Our schema has `id` as a primary
-    # key, so we mimic gffutils' `merge_strategy="create_unique"`: track
-    # how many times we've seen each base id and append `__N` (N >= 2)
-    # when needed. The first occurrence keeps the bare id.
-    id_counts: dict = {}
-    duplicate_pairs: list = []  # (base_id, new_id)
+    seen_ids: dict = {}
+    duplicate_pairs: list = []  # (original_id, new_id) for the duplicates table
+    # Rows held back for a post-load pass. Only `merge` and `replace` need
+    # this -- the other three strategies decide at the point of collision --
+    # so the memory cost is opt-in.
+    deferred: list = []
     file_order = 0
     n_raw = 0
+    n_skipped = 0
     # Resolve the dialect format ONCE — calling `it.dialect()` per record
     # is a Rust↔Python boundary cost we shouldn't pay 5 M times. The
     # parser commits to a dialect during the peek phase, so the value is
     # stable from the first yielded record onward.
     _fmt_cache: str | None = None
+    resolver = None
+    strategy = options.merge_strategy
+    transform = options.transform
 
     for feat in it:
         file_order += 1
         n_raw += 1
-        if _fmt_cache is None:
+        if resolver is None:
+            # The dialect is only knowable once the parser has committed to
+            # one, which the Python engine does on first yield -- so this is
+            # resolved on the first record and then reused, rather than paying
+            # a Rust/Python boundary crossing per row.
             _fmt_cache = _dialect_fmt_safe(it)
-        fid = _derive_id(feat, _fmt_cache, autoinc)
-        seen = id_counts.get(fid, 0)
-        if seen:
-            new_fid = f"{fid}__{seen + 1}"
-            duplicate_pairs.append((fid, new_fid))
-            id_counts[fid] = seen + 1
-            fid = new_fid
-        else:
-            id_counts[fid] = 1
+            resolver = options.resolver_for(_fmt_cache)
+
+        if transform is not None:
+            # gffutils semantics: the transform may return a replacement
+            # feature, or anything falsy to drop the record entirely.
+            result = transform(_FeatureAdapter(feat))
+            if not result:
+                n_skipped += 1
+                continue
+            if result is not True:
+                feat = _unwrap_transformed(result, feat)
+
+        fid, _origin = resolver.resolve(feat, autoinc)
+
+        if fid in seen_ids:
+            if strategy == "error":
+                raise DuplicateIDError(f"Duplicate ID {fid}")
+            if strategy == "warning":
+                _log.warning("Duplicate lines in file for id '%s'; ignoring all but the first", fid)
+                n_skipped += 1
+                continue
+            if strategy == "create_unique":
+                # Note: NO `duplicates` row here. gffutils only records a
+                # rename when `merge` falls back to create_unique, because
+                # that table exists to let a later merge find the sibling
+                # rows -- and under plain create_unique there is nothing to
+                # merge. Recording it anyway made `duplicates` disagree with
+                # the oracle on every deduplicated file.
+                fid = IdSpecResolver._autoincrement(fid, autoinc)
+            else:
+                # merge / replace: resolved after the bulk load, against the
+                # row that is already in the database.
+                deferred.append((fid, feat, file_order))
+                continue
+        seen_ids[fid] = True
         builder.append(fid, feat, file_order)
         if len(builder) >= batch_size:
             builder.flush_into(con)
     builder.flush_into(con)
 
-    # Record duplicate-id remappings (informational; the schema already has
-    # this table — Phase 5).
+    if deferred:
+        duplicate_pairs.extend(
+            _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y)
+        )
+
     if duplicate_pairs:
         dup_tbl = pa.table(
             {
@@ -360,6 +536,14 @@ def from_file(
             "SELECT original_id, new_id FROM __staging_dups"
         )
         con.unregister("__staging_dups")
+
+    # `autoincrements` records the counters so a later `update()` does not
+    # reissue an id this build already handed out.
+    if autoinc:
+        ai_tbl = pa.table({"base": list(autoinc.keys()), "n": [int(v) for v in autoinc.values()]})
+        con.register("__staging_autoinc", ai_tbl)
+        con.execute("INSERT INTO autoincrements (base, n) SELECT base, n FROM __staging_autoinc")
+        con.unregister("__staging_autoinc")
 
     dialect = it.dialect()
     directives = list(it.directives())
