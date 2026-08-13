@@ -49,6 +49,7 @@ from gffbase.schema import (
     GTF_SYNTHESIZE_TRANSCRIPTS,
     POST_LOAD_INDEXES,
     SCHEMA_VERSION,
+    SEGMENTS_ALL_VIEW,
 )
 
 _log = logging.getLogger("gffbase.ingest")
@@ -113,6 +114,9 @@ class _ArrowBatchBuilder:
             ("extra_blob", pa.binary()),
             ("file_order", pa.int64()),
             ("is_synthetic", pa.bool_()),
+            ("raw_id", pa.string()),
+            ("occ", pa.int32()),
+            ("id_origin", pa.string()),
             ("seqid_y", pa.int64()),
         ]
     )
@@ -148,6 +152,9 @@ class _ArrowBatchBuilder:
         self.f_extra: list = []
         self.f_order: list = []
         self.f_synth: list = []
+        self.f_raw_id: list = []
+        self.f_occ: list = []
+        self.f_id_origin: list = []
         self.f_seqid_y: list = []
         # Attribute columns
         self.a_fid: list = []
@@ -155,7 +162,22 @@ class _ArrowBatchBuilder:
         self.a_val: list = []
         self.a_idx: list = []
 
-    def append(self, feat_id: str, feat: ParsedFeature, file_order: int):
+    def append(
+        self,
+        feat_id: str,
+        feat: ParsedFeature,
+        file_order: int,
+        raw_id: str | None = None,
+        occ: int = 0,
+        id_origin: str = "attribute",
+    ):
+        """Stage one feature.
+
+        `raw_id` is the id as derived from column 9 *before* duplicate
+        resolution renamed it; it defaults to `feat_id`, which is correct
+        whenever no rename happened. `(raw_id, occ)` is the surrogate identity
+        the multipart resolve pass groups on.
+        """
         seqid = feat.seqid
         # Lazy y-band assignment: each new seqid gets the next slot.
         # `dict.get` + assignment is faster than `setdefault` here because
@@ -179,6 +201,9 @@ class _ArrowBatchBuilder:
         self.f_extra.append(("\t".join(feat.extra)).encode("utf-8") if feat.extra else b"")
         self.f_order.append(file_order)
         self.f_synth.append(False)
+        self.f_raw_id.append(feat_id if raw_id is None else raw_id)
+        self.f_occ.append(occ)
+        self.f_id_origin.append(id_origin)
         self.f_seqid_y.append(y)
         for k, v, idx in feat.attributes_pairs:
             self.a_fid.append(feat_id)
@@ -205,6 +230,9 @@ class _ArrowBatchBuilder:
                 "extra_blob": self.f_extra,
                 "file_order": self.f_order,
                 "is_synthetic": self.f_synth,
+                "raw_id": self.f_raw_id,
+                "occ": self.f_occ,
+                "id_origin": self.f_id_origin,
                 "seqid_y": self.f_seqid_y,
             },
             schema=self.FEATURES_SCHEMA,
@@ -221,6 +249,18 @@ class _ArrowBatchBuilder:
             schema=self.ATTRIBUTES_SCHEMA,
         )
 
+    @classmethod
+    def _staging_columns(cls, schema: pa.Schema) -> str:
+        """The staged column list, quoted for SQL, in Arrow field order.
+
+        Derived from the Arrow schema rather than written out again, so adding
+        a column in one place cannot silently misalign the INSERT. The
+        `SELECT *` this replaced was purely positional: `raw_id`, `occ` and
+        `id_origin` landing in the wrong order would have written an id into
+        `seqid_y` without any error.
+        """
+        return ", ".join(_quote(name) for name in schema.names)
+
     def flush_into(self, con: duckdb.DuckDBPyConnection):
         if not self.f_id:
             return
@@ -232,15 +272,11 @@ class _ArrowBatchBuilder:
         # (no UPDATE pass over the table).
         con.register("__staging_features", feats)
         con.register("__staging_attributes", attrs)
+        fcols = self._staging_columns(self.FEATURES_SCHEMA)
         if self._has_spatial:
             con.execute(
-                "INSERT INTO features ("
-                'id, seqid, source, featuretype, start, "end", '
-                "score, strand, frame, attributes_blob, extra_blob, "
-                "file_order, is_synthetic, seqid_y, bbox"
-                ') SELECT id, seqid, source, featuretype, start, "end", '
-                "score, strand, frame, attributes_blob, extra_blob, "
-                "file_order, is_synthetic, seqid_y, "
+                f"INSERT INTO features ({fcols}, bbox) "
+                f"SELECT {fcols}, "
                 # A null coordinate yields a null envelope rather than
                 # failing the insert; such rows are then absent from R-tree
                 # results, which matches gffutils (where `NULL <= ?` is
@@ -250,17 +286,9 @@ class _ArrowBatchBuilder:
                 "FROM __staging_features"
             )
         else:
-            con.execute(
-                "INSERT INTO features ("
-                'id, seqid, source, featuretype, start, "end", '
-                "score, strand, frame, attributes_blob, extra_blob, "
-                "file_order, is_synthetic, seqid_y"
-                ") SELECT * FROM __staging_features"
-            )
-        con.execute(
-            "INSERT INTO attributes (feature_id, key, value, idx) "
-            "SELECT feature_id, key, value, idx FROM __staging_attributes"
-        )
+            con.execute(f"INSERT INTO features ({fcols}) SELECT {fcols} FROM __staging_features")
+        acols = self._staging_columns(self.ATTRIBUTES_SCHEMA)
+        con.execute(f"INSERT INTO attributes ({acols}) SELECT {acols} FROM __staging_attributes")
         con.unregister("__staging_features")
         con.unregister("__staging_attributes")
         self._reset()
@@ -533,9 +561,15 @@ def from_file(
             if result is not True:
                 feat = _unwrap_transformed(result, feat)
 
-        fid, _origin = resolver.resolve(feat, autoinc)
+        fid, origin = resolver.resolve(feat, autoinc)
+        # `(raw_id, occ)` is the schema-v2 surrogate identity: the id column 9
+        # yielded, plus how many lines before this one yielded the same. It is
+        # what the multipart resolve pass groups on, and it is free here --
+        # `seen_ids` already had to know, it just recorded a bare `True`.
+        raw_id = fid
+        occ = seen_ids.get(fid, 0)
 
-        if fid in seen_ids:
+        if occ:
             if strategy == "error":
                 raise DuplicateIDError(f"Duplicate ID {fid}")
             if strategy == "warning":
@@ -555,8 +589,15 @@ def from_file(
                 # row that is already in the database.
                 deferred.append((fid, feat, file_order))
                 continue
-        seen_ids[fid] = True
-        builder.append(fid, feat, file_order)
+        # Count occurrences of the *raw* id, and separately mark any renamed id
+        # as taken. Both entries matter: the count drives `occ`, and without the
+        # second one a later line literally named `g1_1` would not be seen as
+        # colliding with the rename that produced `g1_1`, which is a primary-key
+        # violation rather than a resolution.
+        seen_ids[raw_id] = occ + 1
+        if fid != raw_id:
+            seen_ids[fid] = 1
+        builder.append(fid, feat, file_order, raw_id, occ, origin)
         if len(builder) >= batch_size:
             builder.flush_into(con)
     builder.flush_into(con)
@@ -647,6 +688,8 @@ def from_file(
         rtree_built = _finalize_rtree(con, seqid_to_y)
 
     # SQLite-compat views (must run after closure has been populated).
+    # `segments_all` first -- `features_compat` is defined on top of it.
+    con.execute(SEGMENTS_ALL_VIEW)
     con.execute(COMPAT_VIEWS_SQL)
 
     # Stats.
@@ -802,6 +845,12 @@ def _write_meta(
     # pick the cache vs. dynamic CTE without a per-call query.
     row = con.execute("SELECT MAX(depth) FROM closure").fetchone()
     closure_max_depth = int(row[0]) if row and row[0] is not None else 0
+    # How many features were built from more than one input line. Stored rather
+    # than computed per query because it gates whether the query builders emit
+    # the segment-overlap conjunct at all: at zero -- the case for every GTF
+    # corpus, all of GENCODE, and every database migrated from v1 -- they emit
+    # SQL byte-identical to v1 and the segment machinery costs nothing.
+    n_multipart = scalar(con, "SELECT COUNT(*) FROM features WHERE n_segments > 1")
     rows = [
         ("schema_version", SCHEMA_VERSION),
         ("dialect", json.dumps(dialect or {})),
@@ -809,5 +858,6 @@ def _write_meta(
         ("rtree_built", "true" if rtree_built else "false"),
         ("max_depth", str(int(max_depth))),
         ("closure_max_depth", str(closure_max_depth)),
+        ("n_multipart", str(int(n_multipart))),
     ]
     con.executemany("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", rows)
