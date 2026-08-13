@@ -257,7 +257,10 @@ class _ArrowBatchBuilder:
                 "file_order, is_synthetic, seqid_y"
                 ") SELECT * FROM __staging_features"
             )
-        con.execute("INSERT INTO attributes SELECT * FROM __staging_attributes")
+        con.execute(
+            "INSERT INTO attributes (feature_id, key, value, idx) "
+            "SELECT feature_id, key, value, idx FROM __staging_attributes"
+        )
         con.unregister("__staging_features")
         con.unregister("__staging_attributes")
         self._reset()
