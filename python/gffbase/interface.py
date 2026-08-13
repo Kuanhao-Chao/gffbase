@@ -83,6 +83,10 @@ class FeatureDB:
         text_factory=str,
     ):
         self.default_encoding = default_encoding
+        #: Specification violations tolerated while building this database.
+        #: Populated under `mode="compat"`; empty for a reopened database,
+        #: which has no record of how it was built.
+        self.warnings: list[dict] = []
         self.keep_order = keep_order
         self.sort_attribute_values = sort_attribute_values
         self.text_factory = text_factory
@@ -100,6 +104,7 @@ class FeatureDB:
             # (con, IngestStats) — used internally by `create_db`.
             self.conn = dbfn[0]
             self.dbfn = ":existing-connection:"
+            self.warnings = list(getattr(dbfn[1], "warnings", []) or [])
         elif isinstance(dbfn, str):
             self.dbfn = dbfn
             self.conn = duckdb.connect(dbfn, read_only=False)

@@ -209,14 +209,32 @@ def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
         ) from err
 
 
-def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
+def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
+    """Parse one line into a ParsedFeature.
+
+    Returns ``(feature, violation_or_None)``. Under the ``ncbi`` profile a
+    violation is raised; under ``gffutils`` it is returned alongside the
+    feature, because the compatibility contract is to keep the record and
+    annotate it. Mirrors `parser.rs` exactly -- the two engines are diffed
+    against each other by `test_engine_equivalence`.
+    """
+    rejects = profile == "ncbi"
+    violation = None
     fields = line.split("\t")
     if len(fields) < 9:
-        raise _make_error(
+        violation = _make_error(
             f"line {line_no}: expected at least 9 tab-separated fields, found {len(fields)}",
             line_no,
             "TooFewFields",
         )
+        if rejects:
+            raise violation
+        # Compat: gffutils never errors here. `feature_from_line` splits on
+        # tab and `zip(_gffkeys, fields)` truncates, so the missing columns
+        # take their defaults and a space-delimited line becomes one feature
+        # whose seqid is the whole line.
+        while len(fields) < 9:
+            fields.append("" if len(fields) == 8 else ".")
     seqid, source, featuretype, start_s, end_s, score, strand, frame = fields[:8]
     blob = fields[8]
     extra = fields[9:]
@@ -236,7 +254,9 @@ def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
         blob=blob,
     )
     if err is not None:
-        raise err
+        if rejects:
+            raise err
+        violation = violation or err
     return ParsedFeature(
         seqid=seqid,
         source=source,
@@ -249,7 +269,7 @@ def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
         attributes_blob=blob.encode("utf-8"),
         attributes_pairs=pairs,
         extra=extra,
-    )
+    ), violation
 
 
 def _stream_features(
@@ -260,6 +280,7 @@ def _stream_features(
     strict: bool,
     warnings: list[dict],
     directives: list[str],
+    profile: str = "ncbi",
 ):
     """Two-pass iteration: collect the first `checklines` features and their
     dialect observations, then continue streaming. Behaves identically when the
@@ -270,10 +291,23 @@ def _stream_features(
     fasta_reached = False
     line_no = 0
 
+    def _record(err) -> None:
+        warnings.append(
+            {
+                "line_no": getattr(err, "line_no", 0),
+                "kind": getattr(err, "kind", ""),
+                "message": getattr(err, "message", str(err)),
+            }
+        )
+
     def _maybe_handle(err) -> bool:
-        """Return True when caller should skip the line, False when caller
-        should propagate (i.e., raise)."""
-        if strict:
+        """Return True when the caller should skip the line, False when it
+        should propagate (i.e. raise).
+
+        Under the compat profile nothing propagates: a record that cannot be
+        parsed at all is dropped with a warning rather than killing the load.
+        """
+        if strict and profile == "ncbi":
             return False
         warnings.append(
             {
@@ -299,12 +333,19 @@ def _stream_features(
             continue
         if line.startswith("#"):
             continue
+        if line.startswith(">"):
+            # A bare `>` starts an embedded FASTA section even without a
+            # preceding `##FASTA` directive; gffutils stops at either.
+            fasta_reached = True
+            break
         try:
-            feat = _parse_line_into_feature(line, line_no)
+            feat, violation = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
+        if violation is not None:
+            _record(violation)
         _, obs = parse_attributes(feat.attributes_blob.decode("utf-8", errors="replace"))
         samples.append(obs)
         buffered.append(feat)
@@ -336,12 +377,17 @@ def _stream_features(
             continue
         if line.startswith("#"):
             continue
+        if line.startswith(">"):
+            # See above: a bare `>` ends the feature section.
+            return
         try:
-            feat = _parse_line_into_feature(line, line_no)
+            feat, violation = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
+        if violation is not None:
+            _record(violation)
         yield feat, directives, dialect
 
 
@@ -360,6 +406,7 @@ class _FallbackIterator:
         force_dialect_check: bool,
         force_gff: bool,
         strict: bool = True,
+        validation: str = "ncbi",
     ):
         self._warnings: list[dict] = []
         self._directives: list[str] = []
@@ -371,6 +418,7 @@ class _FallbackIterator:
             strict=strict,
             warnings=self._warnings,
             directives=self._directives,
+            profile=validation,
         )
         self._dialect = None
         self._exhausted = False
@@ -427,9 +475,10 @@ def parse_file(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
 ) -> _FallbackIterator:
     stream = _open(path)
-    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict)
+    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
 def parse_bytes(
@@ -438,14 +487,16 @@ def parse_bytes(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
 ) -> _FallbackIterator:
     stream = io.StringIO(data.decode("utf-8", errors="replace"))
-    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict)
+    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
 def detect_dialect(path: str, checklines: int = 10) -> dict:
-    # Dialect detection is non-strict by design.
-    it = parse_file(path, checklines=checklines, strict=False)
+    # Dialect detection is non-strict by design, and uses the permissive
+    # profile so a malformed line in the sample cannot poison detection.
+    it = parse_file(path, checklines=checklines, strict=False, validation="gffutils")
     drained: list[ParsedFeature] = []
     try:
         for _ in range(checklines):

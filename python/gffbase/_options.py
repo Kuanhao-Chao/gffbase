@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gffbase.feature import _drop_lone_empty_values
+from gffbase.modes import ResolvedMode, resolve_mode
 
 #: The five duplicate-ID policies gffutils accepts.
 MERGE_STRATEGIES = ("error", "warning", "merge", "create_unique", "replace")
@@ -245,8 +246,18 @@ class IngestOptions:
     infer_gene_extent: bool = True
     disable_infer_genes: bool = False
     disable_infer_transcripts: bool = False
+    #: Compatibility vs standards. `create_db` defaults to "compat", which is
+    #: what lets it read the files gffutils reads.
+    mode: str = "compat"
+    validation: str | None = None
+    on_error: str | None = None
+    resolved_mode: ResolvedMode = field(init=False)
 
     def __post_init__(self) -> None:
+        self.resolved_mode = resolve_mode(
+            self.mode, validation=self.validation, on_error=self.on_error
+        )
+
         if self.merge_strategy not in MERGE_STRATEGIES:
             raise ValueError(f"Invalid merge strategy '{self.merge_strategy}'")
 
