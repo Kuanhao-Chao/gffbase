@@ -107,8 +107,8 @@ end-to-end pipelines.
 pip install gffbase
 ```
 
-Universal `abi3-py39` wheels — one binary per arch covers CPython
-3.9 → 3.13.
+Universal `abi3-py310` wheels — one binary per arch covers CPython
+3.10 → 3.14.
 
 ---
 
@@ -155,7 +155,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 - **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
   `DataIterator`, `GFFWriter`, `merge_criteria`, `bed12`,
   `execute()`, `export_sqlite()`.
-- **abi3 wheels** — single binary per arch covers CPython 3.9–3.13.
+- **abi3 wheels** — single binary per arch covers CPython 3.10-3.14.
 
 ---
 
@@ -180,13 +180,13 @@ pytest --cov=gffbase --cov-report=term     # coverage report
 ```
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
-B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+B-tree fallback paths, on Python 3.10 / 3.12 / 3.14.
 
 ## 🤝 Contributing
 
 Pull requests welcome. See
 [`CONTRIBUTING.md`](https://github.com/Kuanhao-Chao/gffbase/blob/main/CONTRIBUTING.md)
-for development setup (Rust ≥ 1.69, Python 3.9–3.13,
+for development setup (Rust >= 1.83, Python 3.10-3.14,
 `maturin develop --release`), the test-and-coverage gates, and the
 full PR checklist.
 

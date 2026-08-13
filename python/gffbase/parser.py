@@ -21,13 +21,11 @@ are required by tests to produce identical output.
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from gffbase._pyfallback import parser as _pyparser
 from gffbase.feature import ParsedFeature
 
 try:  # pragma: no cover - import availability is env-dependent
-    from gffbase import _native as _rust  # type: ignore[attr-defined]
+    from gffbase import _native as _rust
 
     _NATIVE = True
 except ImportError:
@@ -72,7 +70,7 @@ class _Iterator:
         return list(self._inner.directives())
 
     @property
-    def warnings(self) -> List[dict]:
+    def warnings(self) -> list[dict]:
         """Errors that were demoted to warnings during a non-strict run.
 
         Each item is a dict with keys ``line_no``, ``kind``, and
@@ -84,7 +82,7 @@ class _Iterator:
         return []
 
 
-def _resolve_engine(engine: Optional[str]) -> str:
+def _resolve_engine(engine: str | None) -> str:
     if engine is None or engine == "auto":
         return "rust" if _NATIVE else "python"
     if engine == "rust" and not _NATIVE:
@@ -103,7 +101,7 @@ def parse_gff(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
-    engine: Optional[str] = "auto",
+    engine: str | None = "auto",
 ) -> _Iterator:
     """Parse a GFF3/GTF file (plain text or ``.gz``).
 
@@ -119,7 +117,7 @@ def parse_gff(
     """
     eng = _resolve_engine(engine)
     if eng == "rust":
-        it = _rust.parse_file(  # type: ignore[union-attr]
+        it = _rust.parse_file(
             path,
             checklines=checklines,
             force_dialect_check=force_dialect_check,
@@ -144,11 +142,11 @@ def parse_bytes(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
-    engine: Optional[str] = "auto",
+    engine: str | None = "auto",
 ) -> _Iterator:
     eng = _resolve_engine(engine)
     if eng == "rust":
-        it = _rust.parse_bytes(  # type: ignore[union-attr]
+        it = _rust.parse_bytes(
             data,
             checklines=checklines,
             force_dialect_check=force_dialect_check,
@@ -166,8 +164,8 @@ def parse_bytes(
     return _Iterator(it, native=False)
 
 
-def detect_dialect(path: str, *, checklines: int = 10, engine: Optional[str] = "auto") -> dict:
+def detect_dialect(path: str, *, checklines: int = 10, engine: str | None = "auto") -> dict:
     eng = _resolve_engine(engine)
     if eng == "rust":
-        return _rust.detect_dialect(path, checklines=checklines)  # type: ignore[union-attr]
+        return _rust.detect_dialect(path, checklines=checklines)
     return _pyparser.detect_dialect(path, checklines=checklines)

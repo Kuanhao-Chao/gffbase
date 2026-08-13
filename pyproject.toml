@@ -7,7 +7,7 @@ name = "gffbase"
 version = "0.1.1"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Kuan-Hao Chao", email = "kuanhao.chao@gmail.com" },
@@ -40,11 +40,11 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering",
@@ -57,8 +57,12 @@ classifiers = [
 # Runtime dependencies. DuckDB and PyArrow are required: the storage engine
 # is DuckDB and the Rust→Python→DuckDB hand-off goes through PyArrow.
 dependencies = [
-    "duckdb>=1.0",
-    "pyarrow>=14",
+    # Floors are the oldest versions CI actually tests (see the `minimum-deps`
+    # job). Both projects dropped Python 3.9 before these releases, so a single
+    # dependency set covers the whole supported 3.10-3.14 range -- no split
+    # environment markers are needed.
+    "duckdb>=1.4.1",
+    "pyarrow>=18.1",
 ]
 
 [project.optional-dependencies]
@@ -120,7 +124,7 @@ module-name    = "gffbase._native"
 python-source  = "python"
 features       = ["pyo3/extension-module"]
 strip          = true
-# Build an abi3 wheel so a single artifact works for CPython 3.9–3.13.
+# Build an abi3 wheel so a single artifact works for CPython 3.10-3.14.
 bindings       = "pyo3"
 # Maturin's sdist builder uses its own include rules (it does NOT honor
 # MANIFEST.in). Bundle the test fixtures + LICENSE so users can rebuild
@@ -195,26 +199,40 @@ skip_covered = false
 show_missing = true
 precision = 1
 
+[tool.mypy]
+python_version = "3.10"
+files = ["python/gffbase"]
+mypy_path = "python"
+namespace_packages = true
+explicit_package_bases = true
+# Start honest rather than aspirational: these are the checks the code passes
+# today and that CI enforces. The strictness dial is turned up per-module as
+# annotations land, rather than being declared globally and then silenced with
+# a wall of per-error ignores.
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The compiled extension has no stubs; `native_available()` guards every use.
+module = ["gffbase._native"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Optional integrations, imported lazily inside try/except ImportError.
+module = ["polars.*", "pandas.*", "pyfaidx.*", "duckdb.*", "pyarrow.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-ignore = [
-    "E501",
-    # Every module carries `from __future__ import annotations`, so ruff's
-    # pyupgrade rules propose PEP 585/604 rewrites (`list[str]`, `X | None`)
-    # regardless of `target-version`. Those are correct *in annotations* on
-    # 3.9, but not in the runtime positions this codebase also uses them in
-    # (e.g. `typing.get_type_hints`, `TypeAlias` values), so applying them
-    # wholesale while 3.9 is still supported is not safe.
-    # These four are re-enabled in 0.2.0, where the floor moves to 3.10.
-    "UP006",  # non-pep585-annotation      -> List[x] to list[x]
-    "UP007",  # non-pep604-annotation-union -> Union[a, b] to a | b
-    "UP035",  # deprecated-import           -> typing.List etc.
-    "UP045",  # non-pep604-annotation-optional -> Optional[x] to x | None
-]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # The benchmark and bench scripts are standalone entry points meant to be run

@@ -50,10 +50,10 @@ migrate by changing one import line.
 pip install gffbase
 ```
 
-Universal `abi3-py39` wheels — single binary per arch covers CPython
-3.9 → 3.13. No Rust toolchain required at install time.
+Universal `abi3-py310` wheels — single binary per arch covers CPython
+3.10 → 3.14. No Rust toolchain required at install time.
 
-For source/dev installs (Rust ≥ 1.69 + maturin):
+For source/dev installs (Rust >= 1.83 + maturin):
 
 ```bash
 pip install -e .[dev]
@@ -229,7 +229,7 @@ zero-copy contract for spatial and parent workloads.
 - **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
   `DataIterator`, `GFFWriter`, `merge_criteria`, `interfeatures`,
   `bed12`, `execute()` SQL escape hatch, `export_sqlite()`.
-- **abi3 wheels** — single binary per arch covers CPython 3.9–3.13.
+- **abi3 wheels** — single binary per arch covers CPython 3.10-3.14.
 
 ---
 
@@ -269,7 +269,7 @@ than fail — CI runs dedicated jobs where a missing capability is an error, so
 those paths cannot silently go unexercised.
 
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
-B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+B-tree fallback paths, on Python 3.10 / 3.12 / 3.14.
 
 ---
 

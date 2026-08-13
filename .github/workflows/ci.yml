@@ -43,6 +43,13 @@ jobs:
       - name: ruff format --check
         run: ruff format --check python/gffbase tests bench benchmarks
 
+      # `Typing :: Typed` is a promise to downstream type checkers; this is
+      # what keeps it true. The package ships py.typed and mypy runs clean.
+      - name: mypy
+        run: |
+          pip install 'mypy==2.3.0' duckdb pyarrow
+          mypy
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.83
         with:
@@ -55,9 +62,11 @@ jobs:
 
   # ------------------------------------------------------------------------
   # Test matrix — exhaustive over the *routing* axis (rtree vs btree).
-  #   3 OS × 3 Python × 2 spatial paths = 18 cells.
-  #   Excludes trim Windows down to the 3.9 cells (Windows 3.11 / 3.13
-  #   provide no additional Rust- or DuckDB-specific signal beyond 3.9).
+  #   3 OS x 3 Python x 2 spatial paths, minus 4 Windows excludes = 14 cells.
+  #   Python is sampled at the floor (3.10), a middle version (3.12), and the
+  #   newest supported (3.14). Windows keeps only the floor: the extra Windows
+  #   cells exercise the same abi3 wheel and add no Rust- or DuckDB-specific
+  #   signal.
   # ------------------------------------------------------------------------
   test:
     name: Test ${{ matrix.os }} • py${{ matrix.python-version }} • ${{ matrix.spatial }}
@@ -66,13 +75,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.9", "3.11", "3.13"]
+        python-version: ["3.10", "3.12", "3.14"]
         spatial: [rtree, btree]
         exclude:
           - os: windows-latest
-            python-version: "3.11"
+            python-version: "3.12"
           - os: windows-latest
-            python-version: "3.13"
+            python-version: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -149,9 +158,9 @@ jobs:
             htmlcov/
 
       - name: Smoke-test pip install . (PyPI build path)
-        # Only on the ubuntu-3.11-rtree cell — running this on every cell
+        # Only on the ubuntu-3.12-rtree cell — running this on every cell
         # would triple CI wall time without adding signal.
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && matrix.spatial == 'rtree'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && matrix.spatial == 'rtree'
         shell: bash
         run: |
           python -m venv /tmp/_install_smoke

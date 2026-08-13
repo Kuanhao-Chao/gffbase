@@ -31,7 +31,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Optional
 
 import psutil
 
@@ -62,9 +61,9 @@ def run_subprocess(
     script: str,
     *,
     label: str,
-    timeout: Optional[int] = None,
-    env_extra: Optional[Dict[str, str]] = None,
-) -> Dict:
+    timeout: int | None = None,
+    env_extra: dict[str, str] | None = None,
+) -> dict:
     """Run a Python -c snippet in a fresh subprocess. Polls RSS at 50ms.
     Discards stderr (DuckDB progress bars) but captures stdout's last
     JSON line."""
@@ -109,7 +108,7 @@ def run_subprocess(
             out, _ = proc.communicate()
 
     text = out.decode("utf-8", errors="replace").strip()
-    info: Dict = {
+    info: dict = {
         "label": label,
         "peak_rss_bytes": peak,
         "peak_rss_mb": peak / (1024 * 1024),
@@ -174,7 +173,7 @@ def pretty_qps(qps: float) -> str:
 # ---------------------------------------------------------------------------
 
 
-def load_phase6_legacy_ingest_numbers() -> Optional[Dict]:
+def load_phase6_legacy_ingest_numbers() -> dict | None:
     """Return the legacy gffutils ingest wall+RSS captured in Phase 6, or None
     if the cache files aren't present."""
     if not PHASE6_LEGACY_LOG.exists() or not PHASE6_LEGACY_RSS.exists():
@@ -204,7 +203,7 @@ def load_phase6_legacy_ingest_numbers() -> Optional[Dict]:
         return None
 
 
-def write_results(stage: str, payload: Dict) -> Path:
+def write_results(stage: str, payload: dict) -> Path:
     """Write a stage's results to benchmarks/out/<stage>.json."""
     OUT.mkdir(parents=True, exist_ok=True)
     p = OUT / f"{stage}.json"

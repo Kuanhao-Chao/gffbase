@@ -29,7 +29,6 @@ import statistics
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -45,7 +44,7 @@ from benchmarks.common import (
 )
 
 
-def sample_regions(n: int, seed: int = 20260501) -> List[Tuple[str, int, int]]:
+def sample_regions(n: int, seed: int = 20260501) -> list[tuple[str, int, int]]:
     """Sample regions grounded in the gffbase DuckDB feature spans so we never
     query off the end of a chromosome."""
     con = duckdb.connect(str(GFFBASE_DB), read_only=True)

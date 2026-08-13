@@ -36,9 +36,9 @@ from gffbase.exceptions import (
 # the pure-Python definition otherwise. Both inherit from `ValueError`
 # so legacy `pytest.raises(ValueError)` callers keep working.
 try:  # pragma: no cover — import-time branch
-    from gffbase._native import GFFFormatError  # type: ignore[attr-defined]
+    from gffbase._native import GFFFormatError
 except ImportError:
-    GFFFormatError = _PyGFFFormatError  # type: ignore[assignment]
+    GFFFormatError = _PyGFFFormatError
 from gffbase import ingest, merge_criteria
 from gffbase.create_db import create_db
 from gffbase.feature import Feature, ParsedFeature

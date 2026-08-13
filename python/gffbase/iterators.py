@@ -22,7 +22,7 @@ that consumes the iterator and prints features Just Works.
 
 from __future__ import annotations
 
-from typing import Iterator, List
+from collections.abc import Iterator
 
 from gffbase import parser as _parser
 from gffbase.feature import Feature, ParsedFeature
@@ -85,7 +85,7 @@ class _DataIterator:
         return self._inner.dialect() or {"fmt": "gff3"}
 
     @property
-    def directives(self) -> List[str]:
+    def directives(self) -> list[str]:
         return list(self._inner.directives())
 
 

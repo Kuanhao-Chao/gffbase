@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-from typing import Optional
 
 from gffbase import ingest as _ingest
 from gffbase.interface import FeatureDB
@@ -54,9 +53,9 @@ def create_db(
     infer_gene_extent: bool = True,
     keep_order: bool = False,
     text_factory=str,
-    pragmas: Optional[dict] = None,
+    pragmas: dict | None = None,
     sort_attribute_values: bool = False,
-    dialect: Optional[dict] = None,
+    dialect: dict | None = None,
     _keep_tempfiles: bool = False,
     **kwargs,
 ) -> FeatureDB:
@@ -67,7 +66,7 @@ def create_db(
     ``disable_infer_transcripts``, ``gtf_subfeature``. The rest are accepted
     for signature compatibility and will be wired up in Phase 6.
     """
-    cleanup_path: Optional[str] = None
+    cleanup_path: str | None = None
     if from_string:
         # Materialize to a temp file so the parser can mmap-style read it.
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".gff3", delete=False, encoding="utf-8")

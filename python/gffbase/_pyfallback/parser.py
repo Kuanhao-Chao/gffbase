@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import gzip
 import io
-from typing import Iterator, List, Optional
+from collections.abc import Iterator
 
 from gffbase._pyfallback.attributes import parse_attributes
 from gffbase.dialect import merge_dialects
@@ -44,7 +44,7 @@ def _gff_format_error_class():
     the Python fallback raised.
     """
     try:
-        from gffbase._native import GFFFormatError as _C  # type: ignore
+        from gffbase._native import GFFFormatError as _C
 
         return _C
     except Exception:
@@ -98,7 +98,7 @@ def _iter_lines(stream) -> Iterator[str]:
         yield line
 
 
-def _parse_coord(s: str) -> Optional[int]:
+def _parse_coord(s: str) -> int | None:
     if s == "." or s == "":
         return None
     return int(s)
@@ -109,14 +109,14 @@ def _validate(
     line_no: int,
     seqid: str,
     featuretype: str,
-    start: Optional[int],
-    end: Optional[int],
+    start: int | None,
+    end: int | None,
     score: str,
     strand: str,
     frame: str,
     n_pairs: int,
     blob: str,
-) -> Optional[GFFFormatError]:
+) -> Exception | None:
     """Mirror of `validate.rs::validate_fields` + `validate_attributes_pairs`."""
     if not seqid:
         return _make_error(
@@ -195,7 +195,7 @@ def _validate(
     return None
 
 
-def _coord_or_error(s: str, line_no: int, which: str) -> Optional[int]:
+def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
     """Returns the int, or raises GFFFormatError with structured info."""
     if s == "." or s == "":
         return None
@@ -258,15 +258,15 @@ def _stream_features(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
-    warnings: List[dict],
-    directives: List[str],
+    warnings: list[dict],
+    directives: list[str],
 ):
     """Two-pass iteration: collect the first `checklines` features and their
     dialect observations, then continue streaming. Behaves identically when the
     file is shorter than `directives`. ``directives`` is mutated in place so
     callers can read it even if the file contains zero feature rows."""
-    samples: List[dict] = []
-    buffered: List[ParsedFeature] = []
+    samples: list[dict] = []
+    buffered: list[ParsedFeature] = []
     fasta_reached = False
     line_no = 0
 
@@ -355,8 +355,8 @@ class _FallbackIterator:
         force_gff: bool,
         strict: bool = True,
     ):
-        self._warnings: List[dict] = []
-        self._directives: List[str] = []
+        self._warnings: list[dict] = []
+        self._directives: list[str] = []
         self._gen = _stream_features(
             stream,
             checklines,
@@ -405,13 +405,13 @@ class _FallbackIterator:
             self._drain_for_metadata()
         return self._dialect or {}
 
-    def directives(self) -> List[str]:
+    def directives(self) -> list[str]:
         if not self._directives:
             self._drain_for_metadata()
         return list(self._directives)
 
     @property
-    def warnings(self) -> List[dict]:
+    def warnings(self) -> list[dict]:
         return list(self._warnings)
 
 
@@ -440,7 +440,7 @@ def parse_bytes(
 def detect_dialect(path: str, checklines: int = 10) -> dict:
     # Dialect detection is non-strict by design.
     it = parse_file(path, checklines=checklines, strict=False)
-    drained: List[ParsedFeature] = []
+    drained: list[ParsedFeature] = []
     try:
         for _ in range(checklines):
             drained.append(next(it))

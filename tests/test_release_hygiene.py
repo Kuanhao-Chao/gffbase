@@ -177,3 +177,77 @@ def test_cargo_lock_is_committed():
     """Without a lock file the published wheel's dependency graph varies by
     build host, which makes the declared MSRV unverifiable."""
     assert (REPO_ROOT / "rust" / "Cargo.lock").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Null-coordinate handling. A GFF row may legally carry `.` in columns 4/5.
+# Several code paths did unguarded arithmetic on those, producing
+# `TypeError: unsupported operand type(s) for -: 'NoneType' and 'int'`
+# instead of anything a caller could act on.
+# ---------------------------------------------------------------------------
+
+
+def test_sequence_on_null_coordinate_feature_raises_actionably():
+    from gffbase import Feature
+
+    f = Feature(seqid="chr1", source="s", featuretype="gene", start=None, end=None)
+    with pytest.raises(ValueError, match="no start/end coordinates"):
+        f.sequence({})
+
+
+def test_bed12_on_null_coordinate_feature_raises_actionably():
+    """The guard itself, exercised on a Feature that really has null coords."""
+    from gffbase import Feature, FeatureDB
+
+    f = Feature(seqid="chr1", source="rs", featuretype="gene", start=None, end=None, id="g_null")
+    with pytest.raises(ValueError, match="no start/end coordinates"):
+        FeatureDB.bed12(_NoChildrenDB(), f)
+
+
+class _NoChildrenDB:
+    """Minimal stand-in so `bed12`'s coordinate guard can be reached without
+    building a database -- ingestion currently cannot store a null coordinate
+    (see the xfail below)."""
+
+    def children(self, *_args, **_kwargs):
+        return iter(())
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Ingestion coerces a `.` coordinate to 0 in the Arrow batch builder "
+        "(ingest.py `_ArrowBatchBuilder.append`), and the `features` DDL "
+        "declares start/end NOT NULL, so a null coordinate cannot round-trip "
+        "through the database yet. Fixed by the nullable-coordinate work; when "
+        "this starts passing, delete the xfail."
+    ),
+)
+def test_null_coordinates_survive_a_database_round_trip(tmp_path):
+    from gffbase import create_db
+
+    src = tmp_path / "nullcoord.gff3"
+    src.write_text(
+        "##gff-version 3\nchr1\trs\tgene\t.\t.\t.\t+\t.\tID=g_null\n"
+        "chr1\trs\tgene\t1\t100\t.\t+\t.\tID=g_ok\n"
+    )
+    db = create_db(str(src), ":memory:")
+    assert db["g_null"].start is None
+    assert db["g_null"].end is None
+
+
+def test_query_with_idless_feature_reports_the_mistake(tmp_path):
+    """A hand-built Feature has `id is None`. Passing one to a query used to
+    bind NULL and silently match nothing."""
+    from gffbase import Feature, create_db
+
+    src = tmp_path / "small.gff3"
+    src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t100\t.\t+\t.\tID=g1\n")
+    db = create_db(str(src), ":memory:")
+
+    orphan = Feature(seqid="chr1", source="rs", featuretype="gene", start=1, end=100)
+    assert orphan.id is None
+    with pytest.raises(ValueError, match="no database id"):
+        db[orphan]
+    with pytest.raises(ValueError, match="no database id"):
+        list(db.children(orphan))
