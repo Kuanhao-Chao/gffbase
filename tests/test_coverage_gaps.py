@@ -627,7 +627,7 @@ def test_finalize_rtree_with_empty_seqid_to_y_skips_seqid_map():
 
 def test_ingest_gff3_row_without_id_falls_through_loop(tmp_path):
     """`ingest.py` branches 246→250 / 247→246 — GFF3 row whose attrs
-    don't contain `ID=` (only Parent=) must fall through `_derive_id`'s
+    do not contain `ID=` (only Parent=) must fall through the id_spec resolver's
     inner loop without finding a match. Synthetic ID is then assigned."""
     src = tmp_path / "no_id.gff3"
     # First row has ID=g1; second row has Parent only — its derive_id

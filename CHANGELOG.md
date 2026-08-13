@@ -159,6 +159,35 @@ transactional storage, and a release pipeline gated on validation.
   pure-Python fallback kept it -- a silent, engine-dependent difference in
   which records exist. `wormbase_gff2.txt` exercises it.
 
+### Fixed (continued)
+
+- **Null coordinates now round-trip.** `features.start`/`"end"` were declared
+  `NOT NULL`, so the Arrow batch builder coerced a `.` column to `0`: the
+  feature reopened as `0..0` and serialized zeros where the source said `.`.
+  The columns are nullable, the coercion is gone, and the R-tree envelope is
+  CASE-guarded so a null coordinate yields a null bbox instead of failing the
+  insert. Verified that the R-tree and B-tree paths agree on which rows a
+  region query returns -- they reach that answer by different routes (a null
+  envelope never intersects; a null comparison is never true), so agreement
+  was not automatic.
+- Six coordinate-space operations raised
+  `TypeError: '<' not supported between instances of 'int' and 'NoneType'`
+  once coordinates could be null: `merge`, `merge_all`, `interfeatures`,
+  `create_introns`, `create_splice_sites` and `bed12`. They now skip features
+  that have no position, via one shared `_with_coordinates` filter -- a
+  feature outside coordinate space is not in the input domain of a coordinate
+  operation, and raising instead would make `merge_all()` unusable on any file
+  containing such a row (WormBase emits them).
+- `bed12` filtered null-coordinate block children *after* sorting them, so the
+  guard added earlier in this release was unreachable and the sort raised
+  `TypeError` first.
+- **`merge_strategy="merge"` did not actually merge, as far as any caller
+  could tell.** It folded the incoming attributes into the `attributes` table
+  but never regenerated `attributes_blob`, and `Feature.attributes` reads the
+  blob -- so the table held both values and the feature reported one. Merged
+  attributes now match the oracle exactly.
+- Removed `ingest._derive_id`, dead since the id_spec work replaced it.
+
 ### Intentional deviations
 
 - **Attribute keys are stripped of surrounding whitespace, and the empty key a

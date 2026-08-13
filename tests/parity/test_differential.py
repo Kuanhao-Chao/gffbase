@@ -106,13 +106,6 @@ _RAW_VS_NORMALIZED = (
     "separately, or keep raw bytes and document the deviation."
 )
 
-_NULL_COORDS = (
-    "Null coordinates are coerced to 0. A GFF row may legally carry `.` in "
-    "columns 4 and 5; the oracle preserves that as `None`, but gffbase's Arrow "
-    "batch builder maps it to 0 and the `features` DDL declares start/end NOT "
-    "NULL, so the information cannot round-trip. Fixed by the nullable-"
-    "coordinate work."
-)
 
 _DIALECT_VOTE_WEIGHTING = (
     "Dialect vote weighting differs. The oracle weights each sampled line by "
@@ -200,9 +193,7 @@ def test_gff3_feature_ids_match(name):
     assert not diff, diff.report()
 
 
-@pytest.mark.parametrize(
-    "name", _params(SHARED_GFF3, {"c_elegans_WS199_ann_gff.txt": _NULL_COORDS})
-)
+@pytest.mark.parametrize("name", _params(SHARED_GFF3, {}))
 def test_gff3_feature_fields_match(name):
     """All eight scalar GFF columns, per feature."""
     oracle, ours = D.build_both(D.fixture(name))
@@ -351,7 +342,6 @@ _SERIALIZE_UNTOUCHED_KNOWN = {
     "jgi_gff2.txt": _RAW_VS_NORMALIZED,
     "keyval_sep_in_attrs.gff": _RAW_VS_NORMALIZED,
     "hybrid1.gff3": _RAW_VS_NORMALIZED,
-    "c_elegans_WS199_ann_gff.txt": _RAW_VS_NORMALIZED,
 }
 
 
@@ -386,7 +376,6 @@ _SERIALIZE_READ_KNOWN = {
     "wormbase_gff2_alt.txt": _ATTR_KEY_WHITESPACE,
     "mouse_extra_comma.gff3": _EMPTY_VALUE_RENDERING,
     "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
-    "c_elegans_WS199_ann_gff.txt": _LOST_ESCAPING,
     "keyval_sep_in_attrs.gff": _LOST_ESCAPING,
     "nonascii": _LOST_ESCAPING,
 }
