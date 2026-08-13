@@ -292,7 +292,10 @@ def _stream_features(
             if line.startswith("##FASTA"):
                 fasta_reached = True
                 break
-            directives.append(line)
+            # Strip the leading `##`, matching gffutils' `_directive_handler`.
+            # `db.directives` is a documented attribute, so the stored form is
+            # part of the compatibility contract.
+            directives.append(line[2:])
             continue
         if line.startswith("#"):
             continue
@@ -326,7 +329,10 @@ def _stream_features(
         if line.startswith("##"):
             if line.startswith("##FASTA"):
                 return
-            directives.append(line)
+            # Strip the leading `##`, matching gffutils' `_directive_handler`.
+            # `db.directives` is a documented attribute, so the stored form is
+            # part of the compatibility contract.
+            directives.append(line[2:])
             continue
         if line.startswith("#"):
             continue

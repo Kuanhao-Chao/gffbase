@@ -225,7 +225,10 @@ impl RecordIter {
                     self.fasta_reached = true;
                     return None;
                 }
-                self.directives.push(s);
+                // Strip the leading `##`, matching gffutils' directive
+                // handler: `db.directives` is a documented attribute, so the
+                // stored form is part of the compatibility contract.
+                self.directives.push(s[2..].to_string());
                 continue;
             }
             if line.starts_with(b"#") {

@@ -38,11 +38,62 @@ transactional storage, and a release pipeline gated on validation.
 - Roughly a dozen `con.execute(...).fetchone()[0]` call sites would raise
   `TypeError: 'NoneType' object is not subscriptable` on an empty result.
   They now go through `gffbase._dbutil.scalar` / `scalar_or`.
+- **Dialect inference was nondeterministic.** Both engines resolved a tied
+  plurality vote over the attribute field separator through a randomly-seeded
+  hash container -- `HashMap` in Rust, `set()` in Python -- so the winner
+  varied between processes. Since that separator is what a re-serialized
+  feature is written with, *the same annotation file could round-trip to
+  different text on different runs of identical code*. Measured at 3 of 20
+  runs disagreeing on `gms2_example.gff3`. Both now tally in insertion order
+  and break ties by first appearance. Guarded by
+  `tests/test_dialect_determinism.py`, which compares across fresh
+  interpreters because a single-process test cannot see this class of bug.
+- **Directives kept their `##` prefix.** `db.directives` is a documented
+  attribute and the oracle stores directives with the prefix stripped
+  (`gff-version 3`, not `##gff-version 3`), so every consumer reading them
+  saw the wrong strings.
 
 ### Added
 
 - `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
   `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
+- **A gffutils parity harness**, pinned to upstream commit `6b84330`:
+  - `tools/gen_parity_manifest.py` generates a machine-readable inventory of
+    the oracle's 19 modules and 90 public symbols, committed as
+    `tests/parity/gffutils_manifest.json` so the structural checks run without
+    gffutils installed. `--check` verifies it has not drifted.
+  - `tests/parity/deviations.toml` records every difference, enforced in both
+    directions: an undeclared gap fails, and so does a declaration that
+    outlives the work it describes. Current state: **26 of 90 symbols (29%)**,
+    with the remaining 10 modules and 30 symbols each declared and attributed
+    to a delivering phase.
+  - `tests/parity/test_differential.py` runs 30 vendored upstream fixtures
+    through both libraries and compares feature ids, all nine GFF columns,
+    attributes, dialect, directives, relations at every level, query results,
+    serialization and failure modes. Known failures are `xfail(strict=True)`
+    per fixture, so a fix cannot land unnoticed.
+  - `tests/data/upstream/` vendors the upstream corpus with full MIT
+    attribution and provenance.
+
+### Known gaps recorded by the new harness
+
+Not yet fixed, but now measured and pinned rather than unknown:
+
+- **gffbase rejects 6 of the 23 fixtures the oracle ingests**, including
+  `FBgn0031208.gff`, the canonical gffutils fixture. The parser validates to
+  the NCBI GFF3 spec unconditionally, but `create_db()` is the drop-in entry
+  point and real files violate that spec routinely. Four rules are too strict
+  for the compatibility path: `InvalidPhase` (a CDS row with `.` phase, which
+  FlyBase and WormBase both emit), `TooFewFields` (space-delimited GFF),
+  `InvalidCoordinate` (`end < start` -- which is exactly what the sanitize
+  tooling exists to repair, so rejecting it makes sanitize impossible), and
+  `InvalidAttribute` (GFF2 `key value` attributes with no `=`).
+- A `ID=` with an empty value yields an empty-string primary key where the
+  oracle autoincrements (`protein_1`).
+- GTF identity: `gencode-v19.gtf` yields 26 features against the oracle's 21.
+- Attribute escaping is lost once attributes are materialized.
+- The oracle weights its dialect vote by attribute count; gffbase weights all
+  sampled lines equally.
 
 ---
 

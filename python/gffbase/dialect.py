@@ -46,8 +46,18 @@ def merge_dialects(samples: list[dict]) -> dict:
     fmt = "gtf" if n_gtf > len(samples) - n_gtf else "gff3"
     keyval = " " if fmt == "gtf" else "="
 
+    # Plurality vote, ties broken by first appearance.
+    #
+    # `max(set(...), key=...)` looks equivalent but is not: iteration order of
+    # a `set` of strings depends on PYTHONHASHSEED, which is randomized per
+    # process, so a tie resolved this way picks a different winner on
+    # different runs -- and the separator chosen here is the one used when a
+    # feature is re-serialized. The same file could round-trip to different
+    # text run to run. Counting over the ordered list keeps the result a
+    # function of the input alone. (The Rust engine had the same defect via
+    # HashMap iteration order; both are fixed the same way.)
     field_seps = [s.get("field separator", ";") for s in samples]
-    field_sep = max(set(field_seps), key=field_seps.count)
+    field_sep = max(dict.fromkeys(field_seps), key=field_seps.count)
 
     out = default_dialect()
     out["fmt"] = fmt

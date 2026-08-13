@@ -35,7 +35,11 @@ def test_data_iterator_dialect_and_directives(tmp_path):
     it = DataIterator(str(DATA / "simple.gff3"))
     list(it)
     assert it.dialect["fmt"] == "gff3"
-    assert any(d.startswith("##gff-version") for d in it.directives)
+    # Directives are stored with the leading `##` stripped, matching
+    # gffutils' `_directive_handler`. `db.directives` is a documented
+    # attribute, so the stored form is part of the compatibility contract.
+    assert any(d.startswith("gff-version") for d in it.directives)
+    assert not any(d.startswith("#") for d in it.directives)
 
 
 def test_data_iterator_from_string():

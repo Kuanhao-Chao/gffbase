@@ -44,7 +44,7 @@ def test_directive_collected():
     text = b"##gff-version 3\nchr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\n"
     it = parse_bytes(text)
     list(it)
-    assert any(d.startswith("##gff-version") for d in it.directives())
+    assert any(d.startswith("gff-version") for d in it.directives())
 
 
 def test_fasta_terminator_halts_iteration():
