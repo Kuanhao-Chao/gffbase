@@ -38,14 +38,12 @@ import duckdb
 
 from gffbase._dbutil import scalar, scalar_or
 from gffbase.exceptions import FeatureNotFoundError
-from gffbase.feature import Feature, feature_from_row
+from gffbase.feature import Feature, db_row_projection, feature_from_row
 
-# Selection clause for FeatureDB → Feature reconstruction. Mirrors
-# `_DB_ROW_FIELDS`.
-_SELECT_FEATURE = (
-    'id, seqid, source, featuretype, start, "end", '
-    "score, strand, frame, attributes_blob, extra_blob, file_order"
-)
+# Selection clause for FeatureDB -> Feature reconstruction. Derived from
+# `feature._DB_ROW_FIELDS` rather than restated, so the projection and the
+# positional unpacking in `feature_from_row` cannot drift apart.
+_SELECT_FEATURE = db_row_projection()
 
 
 def _with_coordinates(features):
@@ -1153,21 +1151,8 @@ class FeatureDB:
 
     @staticmethod
     def _select_feature_aliased(alias: str) -> str:
-        cols = [
-            "id",
-            "seqid",
-            "source",
-            "featuretype",
-            "start",
-            '"end"',
-            "score",
-            "strand",
-            "frame",
-            "attributes_blob",
-            "extra_blob",
-            "file_order",
-        ]
-        return ", ".join(f"{alias}.{c}" if c != '"end"' else f'{alias}."end"' for c in cols)
+        """The same projection as `_SELECT_FEATURE`, qualified by `alias`."""
+        return db_row_projection(alias)
 
     @staticmethod
     def _featuretype_filter(featuretype, *, qualifier: str = "f"):

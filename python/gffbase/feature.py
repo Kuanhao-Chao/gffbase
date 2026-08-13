@@ -535,7 +535,15 @@ def _revcomp(seq: str) -> str:
 # Construction from a DuckDB row.
 # ---------------------------------------------------------------------------
 
-# Row column order produced by FeatureDB._yield_features.
+#: The database columns `feature_from_row` consumes, in the order it unpacks
+#: them. This is the SINGLE SOURCE OF TRUTH for the projection: `interface`
+#: builds both its SQL column lists from it via `db_row_projection`.
+#:
+#: It used to be written out three times independently -- here, as
+#: `interface._SELECT_FEATURE`, and again inside
+#: `interface._select_feature_aliased`. Since `feature_from_row` unpacks
+#: positionally, getting one of the three wrong did not raise; it silently
+#: shifted every field by one.
 _DB_ROW_FIELDS = (
     "id",
     "seqid",
@@ -550,6 +558,21 @@ _DB_ROW_FIELDS = (
     "extra_blob",
     "file_order",
 )
+
+#: Row fields that collide with SQL reserved words and need quoting.
+_SQL_RESERVED_FIELDS = frozenset({"end"})
+
+
+def db_row_projection(alias: str | None = None) -> str:
+    """The SELECT column list that :func:`feature_from_row` expects.
+
+    Pass ``alias`` to qualify each column for a joined query.
+    """
+    parts = []
+    for name in _DB_ROW_FIELDS:
+        column = f'"{name}"' if name in _SQL_RESERVED_FIELDS else name
+        parts.append(f"{alias}.{column}" if alias else column)
+    return ", ".join(parts)
 
 
 def feature_from_row(
