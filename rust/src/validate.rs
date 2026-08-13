@@ -29,6 +29,32 @@
 
 use std::fmt;
 
+/// Which rule set to apply.
+///
+/// `Gffutils` is the compatibility profile used by `create_db()`. It exists
+/// because real annotation files violate the GFF3 specification routinely, and
+/// gffutils reads them anyway -- validating to the spec on the drop-in path
+/// meant refusing 6 of the 23 upstream fixtures the oracle ingests, including
+/// its own canonical one. Under this profile every rule below still *runs*,
+/// but a violation is recorded as a warning and the record is kept rather than
+/// rejected, so a caller gets exactly gffutils' data plus a diagnostic
+/// gffutils never offered.
+///
+/// `Ncbi` is the full specification, used by `parse_gff()` and by
+/// `mode="strict"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidationProfile {
+    Gffutils,
+    Ncbi,
+}
+
+impl ValidationProfile {
+    /// Whether a violation should reject the record rather than annotate it.
+    pub fn rejects(&self) -> bool {
+        matches!(self, ValidationProfile::Ncbi)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     TooFewFields,

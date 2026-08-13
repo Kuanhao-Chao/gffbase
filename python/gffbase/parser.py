@@ -101,19 +101,27 @@ def parse_gff(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
     engine: str | None = "auto",
 ) -> _Iterator:
     """Parse a GFF3/GTF file (plain text or ``.gz``).
 
     Returns an iterator of ``ParsedFeature`` plus ``.dialect()``,
-    ``.directives()``, and (Phase 16) ``.warnings`` accessors.
+    ``.directives()`` and ``.warnings`` accessors.
 
     Parameters
     ----------
+    validation : {"ncbi", "gffutils"}
+        Which rule set to apply. ``"ncbi"`` (default here) is the full GFF3
+        specification. ``"gffutils"`` is the compatibility profile used by
+        `create_db`: every rule still runs, but a violation annotates the
+        record instead of rejecting it, because real annotation files break
+        the spec routinely and gffutils reads them anyway.
     strict : bool
-        When True (default), the iterator raises ``GFFFormatError`` on
-        the first malformed line. When False, malformed lines are
-        skipped silently and recorded in ``iterator.warnings``.
+        What a *rejection* does. True (default) raises ``GFFFormatError`` on
+        the first offending line; False skips it and records it in
+        ``iterator.warnings``. Under ``validation="gffutils"`` nothing is
+        rejected, so this only affects lines that cannot be parsed at all.
     """
     eng = _resolve_engine(engine)
     if eng == "rust":
@@ -123,6 +131,7 @@ def parse_gff(
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
             strict=strict,
+            validation=validation,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_file(
@@ -131,6 +140,7 @@ def parse_gff(
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
         strict=strict,
+        validation=validation,
     )
     return _Iterator(it, native=False)
 
@@ -142,6 +152,7 @@ def parse_bytes(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
     engine: str | None = "auto",
 ) -> _Iterator:
     eng = _resolve_engine(engine)
@@ -152,6 +163,7 @@ def parse_bytes(
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
             strict=strict,
+            validation=validation,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_bytes(
@@ -160,6 +172,7 @@ def parse_bytes(
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
         strict=strict,
+        validation=validation,
     )
     return _Iterator(it, native=False)
 

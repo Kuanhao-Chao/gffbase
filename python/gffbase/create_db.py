@@ -56,6 +56,7 @@ def create_db(
     infer_gene_extent=True,
     disable_infer_genes=False,
     disable_infer_transcripts=False,
+    mode="compat",
     **kwargs,
 ) -> FeatureDB:
     """Create a database from a GFF3/GTF source.
@@ -111,6 +112,11 @@ def create_db(
         Deprecated. ``False`` sets both ``disable_infer_*`` flags.
     disable_infer_genes, disable_infer_transcripts :
         Skip synthesizing GTF gene/transcript rows from their children.
+    mode : {"compat", "strict"}
+        ``"compat"`` (default) applies gffutils' rule set, so files that break
+        the GFF3 specification load exactly as they do under gffutils, with
+        every violation recorded in ``FeatureDB.warnings``. ``"strict"``
+        applies the full NCBI specification and rejects violations.
 
     Returns
     -------
@@ -144,6 +150,7 @@ def create_db(
         infer_gene_extent=infer_gene_extent,
         disable_infer_genes=disable_infer_genes,
         disable_infer_transcripts=disable_infer_transcripts,
+        mode=mode,
     )
 
     cleanup_path: str | None = None
