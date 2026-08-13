@@ -22,7 +22,8 @@ import io
 import os
 import shutil
 import tempfile
-from typing import Iterable, Optional, Union
+from collections.abc import Iterable
+from typing import IO
 
 
 class GFFWriter:
@@ -30,17 +31,18 @@ class GFFWriter:
 
     def __init__(
         self,
-        out: Union[str, os.PathLike, io.IOBase],
+        out: str | os.PathLike | io.IOBase,
         with_header: bool = True,
         in_place: bool = False,
     ):
         self.with_header = with_header
         self.in_place = in_place
-        self._opened_path: Optional[str] = None
-        self._target_path: Optional[str] = None
+        self._opened_path: str | None = None
+        self._target_path: str | None = None
+        self._fh: IO[str]
 
         if hasattr(out, "write"):
-            self._fh = out
+            self._fh = out  # type: ignore[assignment]
         elif in_place:
             # Atomic write via tempfile, swap on close.
             self._target_path = str(out)

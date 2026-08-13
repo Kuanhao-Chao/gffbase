@@ -27,12 +27,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import duckdb
 import pyarrow as pa
 
 from gffbase import parser as _parser
+from gffbase._dbutil import scalar
 from gffbase.feature import ParsedFeature
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
@@ -65,7 +65,7 @@ class IngestStats:
     rtree_built: bool = False
     fmt: str = "gff3"
     dialect: dict = None  # type: ignore[assignment]
-    directives: List[str] = None  # type: ignore[assignment]
+    directives: list[str] = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -279,9 +279,9 @@ def from_file(
     disable_infer_genes: bool = False,
     disable_infer_transcripts: bool = False,
     gtf_subfeature: str = "exon",
-    engine: Optional[str] = "auto",
+    engine: str | None = "auto",
     build_rtree: bool = True,
-) -> Tuple[duckdb.DuckDBPyConnection, IngestStats]:
+) -> tuple[duckdb.DuckDBPyConnection, IngestStats]:
     """Ingest a GFF3 or GTF file into a DuckDB database.
 
     Returns the open connection plus an `IngestStats` summary. The connection
@@ -324,7 +324,7 @@ def from_file(
     # is a Rust↔Python boundary cost we shouldn't pay 5 M times. The
     # parser commits to a dialect during the peek phase, so the value is
     # stable from the first yielded record onward.
-    _fmt_cache: Optional[str] = None
+    _fmt_cache: str | None = None
 
     for feat in it:
         file_order += 1
@@ -421,9 +421,9 @@ def from_file(
     con.execute(COMPAT_VIEWS_SQL)
 
     # Stats.
-    n_attributes = con.execute("SELECT COUNT(*) FROM attributes").fetchone()[0]
-    n_edges = con.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
-    n_closure = con.execute("SELECT COUNT(*) FROM closure").fetchone()[0]
+    n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
+    n_edges = scalar(con, "SELECT COUNT(*) FROM edges")
+    n_closure = scalar(con, "SELECT COUNT(*) FROM closure")
 
     # Meta — record dialect, fmt, and the rtree availability so a re-opened
     # DB can route queries correctly without probing.

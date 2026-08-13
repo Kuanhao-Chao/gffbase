@@ -11,6 +11,39 @@ Work toward 0.2.0: genuine `gffutils` 0.14 API/CLI parity, first-class support
 for discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
 transactional storage, and a release pipeline gated on validation.
 
+### Changed (breaking)
+
+- **Minimum Python is now 3.10** (was 3.9), and 3.14 is supported. The wheel
+  tag moves from `abi3-py39` to `abi3-py310`. This removes the split
+  dependency story: current DuckDB and PyArrow both require 3.10+, so one
+  dependency set now covers the whole supported range. Dependency floors were
+  raised to the versions actually tested (`duckdb>=1.4.1`, `pyarrow>=18.1`)
+  from the previously untested `duckdb>=1.0`, `pyarrow>=14`.
+- **PyO3 0.22 → 0.29.** Migrated off the removed `*_bound` constructors,
+  `into_py`, `value_bound`, and `get_type_bound`.
+
+### Fixed
+
+- `FeatureDB.bed12()` emitted a `blockCount` that counted *all* block
+  children while `blockSizes`/`blockStarts` silently dropped any child with a
+  missing coordinate, producing a BED12 line whose three block fields
+  disagreed. All three now derive from the same filtered list.
+- `Feature.sequence()` and `FeatureDB.bed12()` did unguarded arithmetic on
+  nullable coordinates, raising `TypeError: unsupported operand type(s) for -:
+  'NoneType' and 'int'` instead of something actionable. Both now raise a
+  `ValueError` naming the feature.
+- Passing a hand-built `Feature` (which has `id is None`) to `db[...]`,
+  `children()`, `parents()`, `delete()` or `update()` bound SQL NULL and
+  silently matched nothing. It now raises.
+- Roughly a dozen `con.execute(...).fetchone()[0]` call sites would raise
+  `TypeError: 'NoneType' object is not subscriptable` on an empty result.
+  They now go through `gffbase._dbutil.scalar` / `scalar_or`.
+
+### Added
+
+- `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
+  `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
+
 ---
 
 ## [0.1.1] — unreleased

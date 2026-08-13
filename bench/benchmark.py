@@ -52,7 +52,6 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import psutil
 
@@ -78,7 +77,7 @@ def measure(label: str):
     DuckDB peaks during index build.
     """
     proc = psutil.Process()
-    result: Dict = {"label": label}
+    result: dict = {"label": label}
     stop = threading.Event()
     peaks = {"rss_bytes": proc.memory_info().rss}
 
@@ -126,9 +125,9 @@ def run_subprocess(
     script: str,
     *,
     label: str,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     quiet_stderr: bool = True,
-) -> Dict:
+) -> dict:
     """Run a Python -c script and stream the final JSON line back."""
     proc = subprocess.Popen(
         [sys.executable, "-u", "-c", script],
@@ -166,7 +165,7 @@ def run_subprocess(
             out, _ = proc.communicate()
 
     text = out.decode("utf-8", errors="replace").strip()
-    info: Dict = {
+    info: dict = {
         "label": label,
         "peak_rss_bytes": peak,
         "peak_rss_mb": peak / (1024 * 1024),
@@ -188,7 +187,7 @@ def run_subprocess(
 # ---------------------------------------------------------------------------
 
 
-def ingest_gffbase_inproc(gtf_path: Path, dbfn: Path, *, skip_if_exists: bool = False) -> Dict:
+def ingest_gffbase_inproc(gtf_path: Path, dbfn: Path, *, skip_if_exists: bool = False) -> dict:
     """In-process measurement: gives us reliable wall + peak RSS without
     subprocess boundary issues."""
     if dbfn.exists() and skip_if_exists:
@@ -236,7 +235,7 @@ def ingest_gffbase_inproc(gtf_path: Path, dbfn: Path, *, skip_if_exists: bool = 
     return m
 
 
-def ingest_legacy_subproc(gtf_path: Path, dbfn: Path, max_seconds: int) -> Dict:
+def ingest_legacy_subproc(gtf_path: Path, dbfn: Path, max_seconds: int) -> dict:
     """Subprocess: run legacy gffutils.create_db. Killed after `max_seconds`."""
     if dbfn.exists():
         dbfn.unlink()
@@ -260,7 +259,7 @@ print(json.dumps({{"wall_seconds": elapsed, "n_features": db.count_features_of_t
 # ---------------------------------------------------------------------------
 
 
-def sample_regions(con, n: int, seed: int = 20260501) -> List[Tuple[str, int, int]]:
+def sample_regions(con, n: int, seed: int = 20260501) -> list[tuple[str, int, int]]:
     rows = con.execute("""
         SELECT seqid, MIN(start) AS lo, MAX("end") AS hi
         FROM features
@@ -279,7 +278,7 @@ def sample_regions(con, n: int, seed: int = 20260501) -> List[Tuple[str, int, in
     return out
 
 
-def bench_region(db, regions, *, force_btree: bool) -> Dict:
+def bench_region(db, regions, *, force_btree: bool) -> dict:
     saved = db._rtree_built
     if force_btree:
         db._rtree_built = False
@@ -299,7 +298,7 @@ def bench_region(db, regions, *, force_btree: bool) -> Dict:
     }
 
 
-def bench_children(db, ids, *, force_dynamic: bool, level=None) -> Dict:
+def bench_children(db, ids, *, force_dynamic: bool, level=None) -> dict:
     """force_dynamic=True drops `_max_depth` to 0 so every traversal trips
     the overflow-detection branch and runs the dynamic recursive CTE."""
     saved_md = db._max_depth
@@ -340,7 +339,7 @@ def slice_gtf(src: Path, dst: Path, n_lines: int) -> int:
     return n
 
 
-def diff_correctness(slice_path: Path, tmpdir: Path) -> Dict:
+def diff_correctness(slice_path: Path, tmpdir: Path) -> dict:
     """Ingest the slice with both engines, write the row dump to a JSON file
     (avoids the parent's poll-without-drain deadlock on a 64KB pipe), then
     diff the two multisets.
@@ -423,7 +422,7 @@ def main():
         print(f"ERROR: {gtf} does not exist", file=sys.stderr)
         sys.exit(2)
 
-    results: Dict = {
+    results: dict = {
         "input": {
             "path": str(gtf),
             "compressed_bytes": gtf.stat().st_size,

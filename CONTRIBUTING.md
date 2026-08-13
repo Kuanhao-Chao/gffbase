@@ -32,8 +32,8 @@ By participating in this project, you agree to abide by our
 
 You will need:
 
-- **Python 3.9 – 3.13** (any one of them; CI matrix tests 3.9 / 3.11 / 3.13)
-- **Rust ≥ 1.69** with `cargo` on `$PATH`. Install via
+- **Python 3.10 – 3.14** (any one of them; the CI matrix tests 3.10 / 3.12 / 3.14)
+- **Rust >= 1.83** with `cargo` on `$PATH`. Install via
   [`rustup`](https://rustup.rs/).
 - **maturin ≥ 1.5** for building the Rust extension.
 - **git**, **make** (optional, for convenience targets), and a working
@@ -42,8 +42,8 @@ You will need:
 Verify:
 
 ```bash
-python --version          # 3.9–3.13
-rustc --version           # ≥ 1.69
+python --version          # 3.10-3.14
+rustc --version           # >= 1.83
 maturin --version         # ≥ 1.5
 ```
 
@@ -94,7 +94,7 @@ maturin develop --release
 ### 3.4 Verify your install
 
 ```bash
-python -c "import gffbase; print(gffbase.__version__)"      # 0.1.0
+python -c "import gffbase; print(gffbase.__version__)"      # 0.1.1
 python -c "from gffbase import native_available; print(native_available())"   # True
 ```
 
@@ -105,12 +105,14 @@ build — check `maturin develop` output for compilation errors.
 
 | Extra | When you need it |
 |---|---|
+| `pandas` | If you want to test the `format="df"` path. |
 | `polars` | If you want to test the `format="polars"` zero-copy path. |
-| `pyfaidx` | If you want to test `Feature.sequence(fasta=str_path)`. |
+| `fasta` | pyfaidx, for `Feature.sequence(fasta=str_path)`. |
+| `all` | All three at once. |
 | `gffutils>=0.13` | If you're running `benchmarks/06_mega.py` or any differential-correctness test against the legacy library. |
 
 ```bash
-pip install polars pyfaidx gffutils
+pip install -e '.[all]' gffutils
 ```
 
 ---

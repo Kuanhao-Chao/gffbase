@@ -38,7 +38,6 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -59,7 +58,7 @@ DATA = ROOT / "benchmarks" / "data"
 # Corpus registry
 # ---------------------------------------------------------------------------
 
-CORPORA: List[Dict] = [
+CORPORA: list[dict] = [
     {
         "name": "GENCODE v49 (GTF)",
         "key": "gencode-gtf",
@@ -152,7 +151,7 @@ print(json.dumps({{
 """
 
 
-def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_lines: int) -> Dict:
+def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_lines: int) -> dict:
     """Run legacy gffutils ingest. If the process exceeds `timeout`, kill
     it and extrapolate the wall time linearly from the lines processed
     so far. Returns a dict ready to merge into the result payload."""
@@ -186,7 +185,7 @@ def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_
 
 def sample_regions_from_db(
     db_path: Path, n: int = 5000, seed: int = 20260501
-) -> List[Tuple[str, int, int]]:
+) -> list[tuple[str, int, int]]:
     import duckdb
 
     con = duckdb.connect(str(db_path), read_only=True)
@@ -209,7 +208,7 @@ def sample_regions_from_db(
     return out
 
 
-def bench_spatial(db_path: Path, regions) -> Dict:
+def bench_spatial(db_path: Path, regions) -> dict:
     import gffbase
 
     db = gffbase.FeatureDB(str(db_path))
@@ -227,7 +226,7 @@ def bench_spatial(db_path: Path, regions) -> Dict:
     }
 
 
-def bench_batched(db_path: Path, n_genes: int = 5000) -> Dict:
+def bench_batched(db_path: Path, n_genes: int = 5000) -> dict:
     import gffbase
 
     db = gffbase.FeatureDB(str(db_path))
@@ -267,7 +266,7 @@ def bench_batched(db_path: Path, n_genes: int = 5000) -> Dict:
 # ---------------------------------------------------------------------------
 
 
-def run_one(corpus: Dict, args) -> Dict:
+def run_one(corpus: dict, args) -> dict:
     name = corpus["name"]
     key = corpus["key"]
     inp = corpus["input"]
@@ -399,7 +398,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     selected = set(args.only) if args.only else {c["key"] for c in CORPORA}
 
-    payload: Dict = {
+    payload: dict = {
         "schema_version": "1",
         "legacy_timeout_sec": args.legacy_timeout,
         "corpora": [],

@@ -28,9 +28,8 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import Iterator, List, Mapping, Optional, Tuple, Union
 
 # `slots=True` landed in Python 3.10. `ParsedFeature` is instantiated once per
 # parsed line — millions of times on a GENCODE-scale file — so the per-instance
@@ -44,8 +43,8 @@ class ParsedFeature:
     seqid: str
     source: str
     featuretype: str
-    start: Optional[int]
-    end: Optional[int]
+    start: int | None
+    end: int | None
     score: str
     strand: str
     frame: str
@@ -54,16 +53,16 @@ class ParsedFeature:
     # Long-form (key, value, multivalue_index) triples. `idx` preserves
     # the order of multi-valued attributes (e.g., Parent=a,b,c becomes
     # three rows with idx 0,1,2).
-    attributes_pairs: List[Tuple[str, str, int]] = field(default_factory=list)
+    attributes_pairs: list[tuple[str, str, int]] = field(default_factory=list)
     # Tab-separated columns past column 9, if any.
-    extra: List[str] = field(default_factory=list)
+    extra: list[str] = field(default_factory=list)
 
     @property
     def chrom(self) -> str:
         return self.seqid
 
     @property
-    def stop(self) -> Optional[int]:
+    def stop(self) -> int | None:
         return self.end
 
     def attributes_dict(self) -> dict:
@@ -125,7 +124,7 @@ _FIELD_ORDER = (
 )
 
 
-def _coord_to_int(v) -> Optional[int]:
+def _coord_to_int(v) -> int | None:
     """Normalize a coordinate. Legacy accepts int, '.', '', or None."""
     if v is None or v == "" or v == ".":
         return None
@@ -146,8 +145,8 @@ class _LazyAttributes(MutableMapping):
 
     def __init__(
         self,
-        initial: Union[Mapping, List[Tuple[str, str, int]], None] = None,
-        blob: Optional[bytes] = None,
+        initial: Mapping | list[tuple[str, str, int]] | None = None,
+        blob: bytes | None = None,
         dialect_fmt: str = "gff3",
     ):
         self._d: dict = {}
@@ -284,10 +283,10 @@ class Feature:
         frame: str = ".",
         attributes=None,
         extra=None,
-        bin: Optional[int] = None,
-        id: Optional[str] = None,
-        dialect: Optional[dict] = None,
-        file_order: Optional[int] = None,
+        bin: int | None = None,
+        id: str | None = None,
+        dialect: dict | None = None,
+        file_order: int | None = None,
         keep_order: bool = False,
         sort_attribute_values: bool = False,
     ):
@@ -306,7 +305,9 @@ class Feature:
         self.keep_order = keep_order
         self.sort_attribute_values = sort_attribute_values
         self._attributes_blob = None
-        self.children = None
+        # Transient: populated by FeatureDB.merge() to expose the component
+        # features that were merged into this one. Not persisted.
+        self.children: list[Feature] | None = None
 
         fmt = (self.dialect or {}).get("fmt", "gff3")
         if isinstance(attributes, _LazyAttributes):
@@ -340,7 +341,7 @@ class Feature:
         self.seqid = v
 
     @property
-    def stop(self) -> Optional[int]:
+    def stop(self) -> int | None:
         return self.end
 
     @stop.setter
@@ -473,7 +474,7 @@ class Feature:
             self.bin if self.bin is not None else self.calc_bin(),
         )
 
-    def calc_bin(self, _bin=None) -> Optional[int]:
+    def calc_bin(self, _bin=None) -> int | None:
         if _bin is not None:
             self.bin = _bin
             return _bin
@@ -488,7 +489,7 @@ class Feature:
         """Extract sequence from a FASTA path or a pyfaidx-style mapping."""
         if isinstance(fasta, str):  # pragma: no cover - pyfaidx is optional
             try:
-                import pyfaidx  # type: ignore
+                import pyfaidx
             except ImportError as e:
                 raise ImportError(
                     "Feature.sequence(path=...) requires the optional `pyfaidx` package"
@@ -496,6 +497,10 @@ class Feature:
             fa = pyfaidx.Fasta(fasta)
         else:
             fa = fasta
+        if self.start is None or self.end is None:
+            raise ValueError(
+                f"cannot extract sequence for {self.id!r}: feature has no start/end coordinates"
+            )
         seq = str(fa[self.seqid][self.start - 1 : self.end])
         if use_strand and self.strand == "-":
             seq = _revcomp(seq)
@@ -530,7 +535,7 @@ _DB_ROW_FIELDS = (
 )
 
 
-def feature_from_row(row, dialect: Optional[dict] = None) -> Feature:
+def feature_from_row(row, dialect: dict | None = None) -> Feature:
     """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes."""
     (
         fid,
