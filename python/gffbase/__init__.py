@@ -43,7 +43,7 @@ except ImportError:
     GFFFormatError = _PyGFFFormatError
 from gffbase import ingest, merge_criteria
 from gffbase.create_db import create_db
-from gffbase.feature import Feature, ParsedFeature
+from gffbase.feature import Feature, FeatureSegment, MultipartFeature, ParsedFeature
 from gffbase.gffwriter import GFFWriter
 from gffbase.helpers import example_filename
 from gffbase.interface import FeatureDB
@@ -56,6 +56,8 @@ __all__ = [
     "create_db",
     "FeatureDB",
     "Feature",
+    "FeatureSegment",
+    "MultipartFeature",
     "DataIterator",
     "GFFWriter",
     "example_filename",
