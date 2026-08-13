@@ -30,6 +30,7 @@ import json
 import sys
 from collections.abc import Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 # `slots=True` landed in Python 3.10. `ParsedFeature` is instantiated once per
 # parsed line — millions of times on a GENCODE-scale file — so the per-instance
@@ -267,6 +268,19 @@ class Feature:
     attributes, dialect-faithful ``__str__`` round-trip.
     """
 
+    #: False for every ordinary feature. `MultipartFeature` overrides it.
+    #: A ClassVar rather than an instance attribute so the singleton case --
+    #: which is every feature in almost every file -- costs nothing per object.
+    is_multipart: ClassVar[bool] = False
+
+    #: How many physical input lines this feature was built from.
+    #:
+    #: A class attribute, so an ordinary feature carries no per-instance cost
+    #: for it -- but deliberately NOT a `ClassVar`, because `MultipartFeature`
+    #: shadows it with a real slot and assigns per instance. Declaring it
+    #: `ClassVar` would make that assignment a type error.
+    n_segments: int = 1
+
     __slots__ = (
         "seqid",
         "source",
@@ -411,22 +425,38 @@ class Feature:
 
     # ----- formatting -----
 
-    def _format_attributes(self) -> str:
+    def _format_attributes(self, normalized: bool = False) -> str:
         # If we have the original col-9 bytes and the user hasn't materialized
         # / mutated the attributes mapping, re-emit them verbatim. This is the
         # byte-faithful round-trip path.
-        if (
-            self._attributes_blob is not None
+        blob = self._attributes_blob
+        blob_is_authoritative = (
+            blob is not None
             and isinstance(self.attributes, _LazyAttributes)
             and not self.attributes._parsed
-        ):
-            return self._attributes_blob.decode("utf-8", errors="replace")
+        )
+        if blob is not None and blob_is_authoritative and not normalized:
+            return blob.decode("utf-8", errors="replace")
+
+        if blob is not None and blob_is_authoritative:
+            # `normalized=True` re-renders from the parsed pairs -- but reading
+            # `self.attributes` would materialize the lazy mapping, and that
+            # permanently invalidates the blob fast-path above. Asking for the
+            # normalized form once would then silently change what `str()`
+            # returns forever after. Parse into a throwaway instead.
+            scratch = _LazyAttributes(
+                blob=blob,
+                dialect_fmt=(self.dialect or {}).get("fmt", "gff3"),
+            )
+            source = scratch
+        else:
+            source = self.attributes
 
         fmt = (self.dialect or {}).get("fmt", "gff3")
         sep = "; " if (self.dialect or {}).get("field separator") == "; " else ";"
         kv_sep = (self.dialect or {}).get("keyval separator") or ("=" if fmt == "gff3" else " ")
         multival = (self.dialect or {}).get("multival separator", ",")
-        items = list(self.attributes.items())
+        items = list(source.items())
         if self.sort_attribute_values:
             items = [(k, sorted(v)) for k, v in items]
 
@@ -451,7 +481,7 @@ class Feature:
             s = ";" + s
         return s
 
-    def _format_line(self) -> str:
+    def _format_line(self, normalized: bool = False) -> str:
         start_s = "." if self.start is None else str(self.start)
         end_s = "." if self.end is None else str(self.end)
         cols = [
@@ -463,10 +493,46 @@ class Feature:
             self.score,
             self.strand,
             self.frame,
-            self._format_attributes(),
+            self._format_attributes(normalized),
         ]
         cols.extend(self.extra)
         return "\t".join(cols)
+
+    # ----- segments -----
+
+    @property
+    def segments(self) -> tuple[FeatureSegment, ...]:
+        """This feature's physical input lines.
+
+        An ordinary feature is its own sole segment, so callers can write
+        ``for seg in feature.segments`` without first asking whether the
+        feature is discontinuous.
+        """
+        return (_segment_from(self, 0),)
+
+    def to_line(self, normalized: bool = False) -> str:
+        """Render this feature as one GFF line.
+
+        By default this is byte-faithful: if the original column 9 was never
+        parsed or mutated, its bytes are re-emitted verbatim, so a file that
+        round-trips through gffbase comes back unchanged. That is what
+        ``str(feature)`` does too.
+
+        ``normalized=True`` instead re-renders column 9 from the parsed
+        attribute mapping, applying the dialect's separators and the
+        ``sort_attribute_values`` setting. This is what gffutils always does,
+        so it is the form to use when comparing against the oracle -- at the
+        cost of losing whatever the source file's exact spacing was.
+
+        (One known gap: gffbase has no percent-encoding path yet, so a value
+        containing a reserved character is not re-escaped on the normalized
+        path. Tracked as a deviation against `gffutils.parser.Quoter`.)
+        """
+        return self._format_line(normalized)
+
+    def to_lines(self, normalized: bool = False) -> list[str]:
+        """Every physical line of this feature. One, unless it is multipart."""
+        return [self.to_line(normalized)]
 
     # ----- legacy methods -----
 
@@ -529,6 +595,142 @@ _COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
 def _revcomp(seq: str) -> str:
     return seq.translate(_COMPLEMENT)[::-1]
+
+
+# ---------------------------------------------------------------------------
+# Discontinuous (multipart) features.
+#
+# GFF3 lets one logical feature span several lines sharing an `ID` -- how NCBI
+# represents a split CDS. Both classes SUBCLASS `Feature`, and the reason is
+# concrete rather than stylistic: `isinstance(x, Feature)` is load-bearing at
+# nine call sites inside gffbase alone (`__getitem__`, `__contains__`,
+# `children`, `parents`, `_coerce_ids`, `_coerce_id_list`,
+# `_normalize_region_args`, `update`, `merge`), and `Feature.__eq__` returns
+# `NotImplemented` for a non-`Feature` operand, so a sibling class would
+# compare unequal to an otherwise identical `Feature`.
+#
+# Subclassing also lets both classes override NOTHING of `__str__`, `__len__`,
+# `__hash__`, `__eq__`, `__getitem__`, `astuple`, `_format_line` or
+# `_format_attributes`. The compatibility surface is preserved by inaction,
+# which is the only way to preserve it reliably.
+# ---------------------------------------------------------------------------
+
+
+class FeatureSegment(Feature):
+    """One physical input line of a discontinuous feature.
+
+    Carries its OWN coordinates, score, phase and column 9 -- per-segment CDS
+    phase is the main reason the storage exists -- while `seqid`, `source`,
+    `featuretype` and `strand` come from the logical feature, which by
+    definition shares them.
+
+    ``self.id`` is the LOGICAL id, so `db[seg.id]` finds the whole feature.
+    The segment's own ``ID=`` is preserved byte-for-byte in the attributes
+    blob, so `str(segment)` reproduces the input line exactly.
+    """
+
+    __slots__ = ("seg_idx",)
+
+    def __init__(self, *args, seg_idx: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        #: 0-based position in FILE order, not coordinate order. GFF3 does not
+        #: require segments to be sorted, and `to_lines()` has to reproduce the
+        #: input.
+        self.seg_idx = seg_idx
+
+    def __repr__(self) -> str:
+        return (
+            f"<FeatureSegment {self.featuretype}[{self.seg_idx}] "
+            f"({self.seqid}:{self.start}-{self.end}[{self.strand}]) at {hex(id(self))}>"
+        )
+
+
+class MultipartFeature(Feature):
+    """A logical feature assembled from more than one input line.
+
+    Its own `start`/`end` are the ENVELOPE -- `MIN(segment.start)` and
+    `MAX(segment.end)` -- and every inherited method operates on that envelope,
+    so a caller that knows nothing about discontinuous features sees exactly
+    the gffutils behaviour for a feature spanning that range.
+
+    Consequently ``len(f)`` is the envelope span, matching `Feature`.
+    `covered_length` is the different, new quantity.
+    """
+
+    # `n_segments` is a slot here, shadowing `Feature`'s class attribute. A
+    # read-only property would not do: it cannot override a writeable
+    # attribute, and a slot descriptor is cheaper to read anyway.
+    __slots__ = ("n_segments", "_segments", "_segment_loader")
+
+    is_multipart: ClassVar[bool] = True
+
+    def __init__(self, *args, n_segments: int = 1, segments=None, segment_loader=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.n_segments = n_segments
+        self._segments = tuple(segments) if segments is not None else None
+        # Called with no arguments to fetch this feature's segments, for the
+        # case where they were not prefetched. `_yield_features` prefetches one
+        # chunk at a time so the common path never calls this -- without that,
+        # iterating a multipart corpus would be an N+1.
+        self._segment_loader = segment_loader
+
+    @property
+    def segments(self) -> tuple[FeatureSegment, ...]:
+        if self._segments is None:
+            if self._segment_loader is None:
+                raise RuntimeError(
+                    f"segments for {self.id!r} were neither prefetched nor loadable; "
+                    "this feature was built without a database connection"
+                )
+            self._segments = tuple(self._segment_loader())
+        return self._segments
+
+    @property
+    def covered_length(self) -> int:
+        """Total length actually covered, with the gaps excluded.
+
+        Differs from ``len(self)``, which is the envelope span. For a CDS split
+        across two 100 bp exons 700 bp apart, `len` is 900 and this is 200.
+
+        Segments of a discontinuous feature must not overlap; if a malformed
+        file provides overlapping ones, the shared bases are counted twice.
+        """
+        return sum(len(seg) for seg in self.segments)
+
+    def to_lines(self, normalized: bool = False) -> list[str]:
+        """Every input line of this feature, in file order."""
+        return [seg.to_line(normalized) for seg in self.segments]
+
+    def __repr__(self) -> str:
+        return (
+            f"<MultipartFeature {self.featuretype} x{self.n_segments} "
+            f"({self.seqid}:{self.start}-{self.end}[{self.strand}]) at {hex(id(self))}>"
+        )
+
+
+def _segment_from(feature: Feature, seg_idx: int) -> FeatureSegment:
+    """View an ordinary `Feature` as its own sole segment."""
+    seg = FeatureSegment(
+        seqid=feature.seqid,
+        source=feature.source,
+        featuretype=feature.featuretype,
+        start=feature.start,
+        end=feature.end,
+        score=feature.score,
+        strand=feature.strand,
+        frame=feature.frame,
+        attributes=feature._attributes_blob
+        if feature._attributes_blob is not None
+        else feature.attributes,
+        extra=list(feature.extra),
+        id=feature.id,
+        dialect=feature.dialect,
+        file_order=feature.file_order,
+        keep_order=feature.keep_order,
+        sort_attribute_values=feature.sort_attribute_values,
+        seg_idx=seg_idx,
+    )
+    return seg
 
 
 # ---------------------------------------------------------------------------
