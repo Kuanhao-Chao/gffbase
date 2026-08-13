@@ -31,8 +31,12 @@ CREATE TABLE IF NOT EXISTS features (
     seqid           VARCHAR NOT NULL,
     source          VARCHAR,
     featuretype     VARCHAR NOT NULL,
-    start           BIGINT  NOT NULL,
-    "end"           BIGINT  NOT NULL,
+    -- NULLABLE on purpose. A GFF row may legally carry `.` in columns 4 and 5,
+    -- and gffutils preserves that as None. Declaring these NOT NULL forced the
+    -- Arrow builder to coerce a missing coordinate to 0, so the feature
+    -- reopened as 0..0 and serialized zeros where the source said `.`.
+    start           BIGINT,
+    "end"           BIGINT,
     score           VARCHAR,
     strand          VARCHAR,
     frame           VARCHAR,

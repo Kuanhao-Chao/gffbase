@@ -48,6 +48,24 @@ _SELECT_FEATURE = (
 )
 
 
+def _with_coordinates(features):
+    """Drop features that have no coordinates.
+
+    A GFF row may legally carry `.` in columns 4 and 5, so `start`/`end` are
+    nullable. Every caller of this helper performs a *coordinate-space*
+    operation -- sorting by position, computing a gap, merging overlaps -- and
+    a feature outside coordinate space is simply not in the input domain of
+    those operations. Filtering here keeps the whole database usable when a
+    single row lacks coordinates; the alternative, raising, would make
+    `merge_all()` unusable on any file containing one (WormBase emits them).
+
+    Without this, each of these paths raised
+    `TypeError: '<' not supported between instances of 'int' and 'NoneType'`
+    from deep inside a sort key.
+    """
+    return [f for f in features if f.start is not None and f.end is not None]
+
+
 def _require_feature_id(obj) -> str:
     """Coerce a `Feature`-or-id argument to a primary-key string.
 
@@ -1346,7 +1364,7 @@ class FeatureDB:
         attribute_func=None,
         update_attributes=None,
     ):
-        feats = list(features)
+        feats = _with_coordinates(features)
         if not feats:
             return
         for prev, cur in zip(feats[:-1], feats[1:], strict=True):
@@ -1383,7 +1401,7 @@ class FeatureDB:
 
         if merge_criteria is None:
             merge_criteria = (mc.seqid, mc.overlap_end_inclusive, mc.strand, mc.feature_type)
-        feats = sorted(features, key=lambda f: (f.seqid, f.start, f.end))
+        feats = sorted(_with_coordinates(features), key=lambda f: (f.seqid, f.start, f.end))
         if not feats:
             return
         accum = None
@@ -1429,9 +1447,9 @@ class FeatureDB:
     ) -> list[Feature]:
         out: list[Feature] = []
         for group in featuretypes_groups:
-            feats = list(self.all_features(featuretype=group))
+            feats = _with_coordinates(self.all_features(featuretype=group))
             for k in reversed(merge_order):
-                feats.sort(key=lambda f: getattr(f, k) if k != "start" else (f.start or 0))
+                feats.sort(key=lambda f: getattr(f, k))
             out.extend(self.merge(feats, merge_criteria=merge_criteria))
         return out
 
@@ -1451,7 +1469,7 @@ class FeatureDB:
         anchor_type: str = grandparent_featuretype or parent_featuretype  # type: ignore[assignment]
         for anchor in self.features_of_type(anchor_type):
             exons = sorted(
-                (e for e in self.children(anchor, featuretype=exon_featuretype)),
+                _with_coordinates(self.children(anchor, featuretype=exon_featuretype)),
                 key=lambda f: (f.start, f.end),
             )
             if len(exons) < 2:
@@ -1528,7 +1546,7 @@ class FeatureDB:
         if isinstance(feature, str):
             feature = self[feature]
         blocks = sorted(
-            self.children(feature, featuretype=list(block_featuretype)),
+            _with_coordinates(self.children(feature, featuretype=list(block_featuretype))),
             key=lambda f: (f.start, f.end),
         )
         cds = list(self.children(feature, featuretype=list(thick_featuretype)))
