@@ -57,6 +57,36 @@ transactional storage, and a release pipeline gated on validation.
 
 - `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
   `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
+- **Full `create_db` option fidelity.** Twelve parameters were previously
+  accepted and ignored; every one now changes behaviour or raises.
+  - `gffbase._options.IngestOptions` validates the whole option set before any
+    work starts -- in particular before the destination database is touched.
+  - `id_spec` in all four shapes (attribute name, ordered list, per-featuretype
+    mapping, callable), plus `autoincrement:BASE` and the `:seqid:` syntax for
+    keying on a GFF column instead of an attribute. Defaults follow the
+    dialect: `"ID"` for GFF3, `{"gene": "gene_id", "transcript":
+    "transcript_id"}` for GTF -- which is what fixes `gencode-v19.gtf`
+    yielding 26 features against the oracle's 21, and `ID=` yielding an
+    empty-string primary key instead of `protein_1`.
+  - All five `merge_strategy` values, and `force_merge_fields` with the
+    oracle's `ValueError` on `start`/`end` and its warning on `frame`/`strand`.
+  - `transform` (a falsy return drops the feature, and mutations are
+    persisted), `checklines`, `force_gff`, `force_dialect_check`,
+    `from_string`, `dialect`, `_keep_tempfiles`, `pragmas`, `text_factory`,
+    `verbose`, and `infer_gene_extent` (deprecated: warns, then sets both
+    `disable_infer_*` flags).
+  - `keep_order` and `sort_attribute_values` now reach materialized features.
+    They were stored on `FeatureDB` and never passed on, so both were inert.
+  - Positional arguments work again, in the oracle's exact order. Every option
+    had been made keyword-only, so any positional call written against
+    gffutils raised `TypeError`.
+  - An unrecognized keyword raises `TypeError`, matching the oracle's
+    `deprecation_handler`, rather than being absorbed by `**kwargs`.
+- Attribute values now follow the oracle's empty-value rule exactly: a wholly
+  empty value (`ID=`) yields the key with *no* values, while a multi-valued
+  attribute keeps its empty parts (`Parent=x,` stays `["x", ""]`). This
+  matters because callers write `if f.attributes["ID"]:`, and `[""]` is truthy
+  where `[]` is not.
 - **A gffutils parity harness**, pinned to upstream commit `6b84330`:
   - `tools/gen_parity_manifest.py` generates a machine-readable inventory of
     the oracle's 19 modules and 90 public symbols, committed as
@@ -75,10 +105,34 @@ transactional storage, and a release pipeline gated on validation.
   - `tests/data/upstream/` vendors the upstream corpus with full MIT
     attribution and provenance.
 
+### Changed (breaking)
+
+- **`FeatureDB.schema` is a method again**, not a property. gffutils documents
+  `db.schema()` and callers write it that way; as a property the documented
+  call raised `TypeError: 'str' object is not callable`.
+- **`merge_strategy="error"` is now the real default**, so a file with
+  duplicate IDs raises instead of loading with silently renamed rows.
+  Ingestion previously renamed every duplicate to `<id>__2` unconditionally,
+  which made the documented default unreachable. `create_unique` now produces
+  the oracle's `<id>_1`, `<id>_2` rather than `<id>__2`, `<id>__3`, and no
+  longer writes `duplicates` rows -- the oracle records a rename only when
+  `merge` falls back to `create_unique`, because that table exists so a later
+  merge can find the sibling rows.
+- **`DuplicateIDError`, `AttributeStringError` and `EmptyInputError` now
+  subclass `ValueError`.** gffutils exports `DuplicateIDError` but raises a
+  bare `ValueError("Duplicate ID ...")`, so real callers write
+  `except ValueError`. Subclassing satisfies both the documented type and
+  those callers instead of forcing a choice. `FeatureNotFoundError` is
+  deliberately left on `Exception`.
+
 ### Known gaps recorded by the new harness
 
 Not yet fixed, but now measured and pinned rather than unknown:
 
+- **GTF synthesis ignores `id_spec`.** The oracle applies the id_spec to
+  inferred gene/transcript rows as well as authored ones; gffbase keys
+  inferred rows on the `transcript_id` attribute unconditionally, so a custom
+  scalar id_spec over a GTF yields extra rows.
 - **gffbase rejects 6 of the 23 fixtures the oracle ingests**, including
   `FBgn0031208.gff`, the canonical gffutils fixture. The parser validates to
   the NCBI GFF3 spec unconditionally, but `create_db()` is the drop-in entry
@@ -88,9 +142,6 @@ Not yet fixed, but now measured and pinned rather than unknown:
   `InvalidCoordinate` (`end < start` -- which is exactly what the sanitize
   tooling exists to repair, so rejecting it makes sanitize impossible), and
   `InvalidAttribute` (GFF2 `key value` attributes with no `=`).
-- A `ID=` with an empty value yields an empty-string primary key where the
-  oracle autoincrements (`protein_1`).
-- GTF identity: `gencode-v19.gtf` yields 26 features against the oracle's 21.
 - Attribute escaping is lost once attributes are materialized.
 - The oracle weights its dialect vote by attribute count; gffbase weights all
   sampled lines equally.

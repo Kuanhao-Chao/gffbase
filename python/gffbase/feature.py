@@ -72,6 +72,7 @@ class ParsedFeature:
         out: dict = {}
         for k, v, _idx in self.attributes_pairs:
             out.setdefault(k, []).append(v)
+        _drop_lone_empty_values(out)
         return out
 
     @classmethod
@@ -133,6 +134,20 @@ def _coord_to_int(v) -> int | None:
     return int(v)
 
 
+def _drop_lone_empty_values(mapping: dict) -> None:
+    """Normalize `{key: [""]}` to `{key: []}`, in place.
+
+    gffutils' rule, which user code depends on: a wholly empty value string
+    (`ID=`) yields the key with NO values, while a multi-valued attribute keeps
+    its empty parts (`Parent=x,` -> `["x", ""]`). It matters because callers
+    write `if f.attributes["ID"]:`, and `[""]` is truthy where `[]` is not. The
+    raw col-9 bytes are untouched, so serialization still round-trips `ID=`.
+    """
+    for key, values in mapping.items():
+        if values == [""]:
+            mapping[key] = []
+
+
 class _LazyAttributes(MutableMapping):
     """Dict-like attribute store. Values are always lists.
 
@@ -177,6 +192,7 @@ class _LazyAttributes(MutableMapping):
                 else:
                     k, v = triple
                 self._d.setdefault(k, []).append(v)
+            _drop_lone_empty_values(self._d)
             return
         raise TypeError(f"unsupported attributes init type: {type(initial)!r}")
 
@@ -194,6 +210,7 @@ class _LazyAttributes(MutableMapping):
         pairs, _obs = parse_attributes(text)
         for k, v, _idx in pairs:
             self._d.setdefault(k, []).append(v)
+        _drop_lone_empty_values(self._d)
         self._parsed = True
         self._blob = None
 
@@ -535,8 +552,20 @@ _DB_ROW_FIELDS = (
 )
 
 
-def feature_from_row(row, dialect: dict | None = None) -> Feature:
-    """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes."""
+def feature_from_row(
+    row,
+    dialect: dict | None = None,
+    *,
+    keep_order: bool = False,
+    sort_attribute_values: bool = False,
+) -> Feature:
+    """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes.
+
+    `keep_order` and `sort_attribute_values` are database-wide settings that
+    control how a feature renders itself, so they have to reach every feature
+    the database hands out. They used to be stored on `FeatureDB` and never
+    passed on, which made both options inert.
+    """
     (
         fid,
         seqid,
@@ -565,4 +594,6 @@ def feature_from_row(row, dialect: dict | None = None) -> Feature:
         id=fid,
         dialect=dialect or {"fmt": "gff3"},
         file_order=file_order,
+        keep_order=keep_order,
+        sort_attribute_values=sort_attribute_values,
     )
