@@ -213,17 +213,13 @@ class _NoChildrenDB:
         return iter(())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Ingestion coerces a `.` coordinate to 0 in the Arrow batch builder "
-        "(ingest.py `_ArrowBatchBuilder.append`), and the `features` DDL "
-        "declares start/end NOT NULL, so a null coordinate cannot round-trip "
-        "through the database yet. Fixed by the nullable-coordinate work; when "
-        "this starts passing, delete the xfail."
-    ),
-)
 def test_null_coordinates_survive_a_database_round_trip(tmp_path):
+    """A `.` in column 4/5 must survive ingest, reopen and re-serialization.
+
+    It previously could not: the Arrow builder coerced a missing coordinate to
+    0 because the `features` DDL declared start/end NOT NULL, so the feature
+    reopened as 0..0 and wrote zeros where the source said `.`.
+    """
     from gffbase import create_db
 
     src = tmp_path / "nullcoord.gff3"
@@ -251,3 +247,35 @@ def test_query_with_idless_feature_reports_the_mistake(tmp_path):
         db[orphan]
     with pytest.raises(ValueError, match="no database id"):
         list(db.children(orphan))
+
+
+# ---------------------------------------------------------------------------
+# `_dbutil` exists because `con.execute(...).fetchone()[0]` raises
+# `TypeError: 'NoneType' object is not subscriptable` on an empty result,
+# which tells a caller nothing. These are the branches that replace it.
+# ---------------------------------------------------------------------------
+
+
+def test_scalar_reports_an_empty_result_instead_of_subscripting_none():
+    import duckdb
+    from gffbase._dbutil import scalar
+
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE t (x INTEGER)")
+    assert scalar(con, "SELECT COUNT(*) FROM t") == 0
+    with pytest.raises(duckdb.Error, match="no rows where exactly one was expected"):
+        scalar(con, "SELECT x FROM t")
+
+
+def test_scalar_or_returns_the_default_for_no_row_and_for_a_null_row():
+    """`MAX(...)` over an empty table yields one NULL row, not zero rows --
+    the caller wants the default either way."""
+    import duckdb
+    from gffbase._dbutil import scalar_or
+
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE t (x INTEGER)")
+    assert scalar_or(con, "SELECT x FROM t", "fallback") == "fallback"
+    assert scalar_or(con, "SELECT MAX(x) FROM t", "fallback") == "fallback"
+    con.execute("INSERT INTO t VALUES (7)")
+    assert scalar_or(con, "SELECT MAX(x) FROM t", "fallback") == 7

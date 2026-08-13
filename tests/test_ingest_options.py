@@ -266,3 +266,54 @@ def test_infer_gene_extent_true_is_silent_and_changes_nothing():
         opts = IngestOptions(infer_gene_extent=True)
     assert not opts.disable_infer_genes
     assert not opts.disable_infer_transcripts
+
+
+# ---------------------------------------------------------------------------
+# force_merge_fields, end to end.
+#
+# `merge` normally requires all eight non-attribute columns to agree.
+# `force_merge_fields` exempts named ones and combines their values instead,
+# which is the only path that writes a merged scalar back to `features`.
+# ---------------------------------------------------------------------------
+
+
+def test_force_merge_fields_combines_the_named_column(tmp_path):
+    import gffbase
+
+    src = tmp_path / "fm.gff3"
+    # Identical but for `source`, which force_merge_fields exempts.
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrcA\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=first\n"
+        "chr1\tsrcB\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=second\n"
+    )
+    db = gffbase.create_db(
+        str(src), ":memory:", merge_strategy="merge", force_merge_fields=["source"]
+    )
+    (feature,) = list(db.all_features())
+    # Sorted and comma-joined, matching gffutils.
+    assert feature.source == "srcA,srcB"
+    assert set(feature.attributes["Note"]) == {"first", "second"}
+
+
+def test_without_force_merge_fields_a_differing_column_prevents_the_merge(tmp_path):
+    """The same input, unexempted, falls back to create_unique."""
+    import gffbase
+
+    src = tmp_path / "nofm.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrcA\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=first\n"
+        "chr1\tsrcB\tCDS\t100\t200\t.\t+\t0\tID=c1;Note=second\n"
+    )
+    db = gffbase.create_db(str(src), ":memory:", merge_strategy="merge")
+    assert sorted(f.id for f in db.all_features()) == ["c1", "c1_1"]
+
+
+def test_feature_adapter_supports_item_access():
+    """The adapter is handed to user callbacks, which may index it."""
+    from gffbase._options import _FeatureAdapter
+
+    adapter = _FeatureAdapter(make_feature(attrs=[("ID", "x"), ("Parent", "p")]))
+    assert adapter["ID"] == ["x"]
+    assert adapter.featuretype == "exon"

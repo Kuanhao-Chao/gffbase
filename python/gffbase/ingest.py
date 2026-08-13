@@ -168,8 +168,10 @@ class _ArrowBatchBuilder:
         self.f_seqid.append(seqid)
         self.f_source.append(feat.source)
         self.f_type.append(feat.featuretype)
-        self.f_start.append(feat.start if feat.start is not None else 0)
-        self.f_end.append(feat.end if feat.end is not None else 0)
+        # `None` is carried through, not coerced. A `.` coordinate is legal GFF
+        # and the distinction is only losable once.
+        self.f_start.append(feat.start)
+        self.f_end.append(feat.end)
         self.f_score.append(feat.score)
         self.f_strand.append(feat.strand)
         self.f_frame.append(feat.frame)
@@ -239,7 +241,12 @@ class _ArrowBatchBuilder:
                 ') SELECT id, seqid, source, featuretype, start, "end", '
                 "score, strand, frame, attributes_blob, extra_blob, "
                 "file_order, is_synthetic, seqid_y, "
-                'ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) '
+                # A null coordinate yields a null envelope rather than
+                # failing the insert; such rows are then absent from R-tree
+                # results, which matches gffutils (where `NULL <= ?` is
+                # unknown) and the B-tree path.
+                'CASE WHEN start IS NULL OR "end" IS NULL THEN NULL '
+                'ELSE ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) END '
                 "FROM __staging_features"
             )
         else:
@@ -260,20 +267,6 @@ class _ArrowBatchBuilder:
 # ID resolution. Pulled out so the bulk loop has zero branches that hit Python
 # attribute parsing twice.
 # ---------------------------------------------------------------------------
-
-
-def _derive_id(feat: ParsedFeature, dialect_fmt: str, autoincrement: dict) -> str:
-    """Compute the row's primary key. GFF3 prefers `ID=`; GTF synthesizes
-    `<featuretype>_<n>` so leaf rows still get unique IDs (gene/transcript
-    IDs are filled in by the synthesis pass)."""
-    if dialect_fmt == "gff3":
-        for k, v, _idx in feat.attributes_pairs:
-            if k == "ID":
-                return v
-    # Fall back: synthesize an auto-id by featuretype.
-    n = autoincrement.get(feat.featuretype, 0) + 1
-    autoincrement[feat.featuretype] = n
-    return f"{feat.featuretype}_{n}"
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +299,7 @@ def _unwrap_transformed(result, original):
     return inner if inner is not None else (result if result is not original else original)
 
 
-def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y):
+def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y, fmt):
     """Apply `merge` / `replace` to rows held back during the bulk load.
 
     Both strategies need to see the row already in the database, so they
@@ -367,7 +360,45 @@ def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid
                 f"UPDATE features SET {_quote(fld)} = ? WHERE id = ?",
                 [",".join(merged), fid],
             )
+        # The normalized rows are now the truth for this feature; bring the
+        # raw blob back in line with them.
+        _regenerate_attributes_blob(con, fid, fmt)
     return new_duplicates
+
+
+def _regenerate_attributes_blob(con, feature_id: str, fmt: str) -> None:
+    """Rebuild `features.attributes_blob` from the normalized attribute rows.
+
+    A merged feature is the one case where the raw column-9 bytes stop being
+    the truth: `merge_strategy="merge"` folds the incoming row's attributes
+    into the existing feature's `attributes` rows, but the blob still holds
+    only what the first line said. Since `Feature.attributes` reads the blob
+    (that is the whole point of the byte-faithful fast path), the merge was
+    invisible to every caller -- the table had both values and the feature
+    reported one.
+    """
+    rows = con.execute(
+        "SELECT key, value FROM attributes WHERE feature_id = ? ORDER BY rowid",
+        [feature_id],
+    ).fetchall()
+    if not rows:
+        return
+
+    # Preserve first-seen key order and collapse repeats into one multi-valued
+    # entry, which is how both engines' parsers present them.
+    grouped: dict[str, list[str]] = {}
+    for key, value in rows:
+        grouped.setdefault(key, []).append(value)
+
+    if fmt == "gtf":
+        parts = [f'{k} "{v}"' for k, values in grouped.items() for v in values]
+        blob = "; ".join(parts)
+    else:
+        blob = ";".join(f"{k}={','.join(values)}" for k, values in grouped.items())
+    con.execute(
+        "UPDATE features SET attributes_blob = ? WHERE id = ?",
+        [blob.encode("utf-8"), feature_id],
+    )
 
 
 def _quote(field: str) -> str:
@@ -529,7 +560,9 @@ def from_file(
 
     if deferred:
         duplicate_pairs.extend(
-            _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y)
+            _resolve_deferred_duplicates(
+                con, deferred, options, autoinc, builder, seqid_to_y, _fmt_cache or "gff3"
+            )
         )
 
     if duplicate_pairs:
