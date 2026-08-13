@@ -57,6 +57,7 @@ def create_db(
     disable_infer_genes=False,
     disable_infer_transcripts=False,
     mode="compat",
+    on_multipart_conflict="error",
     **kwargs,
 ) -> FeatureDB:
     """Create a database from a GFF3/GTF source.
@@ -118,6 +119,19 @@ def create_db(
         every violation recorded in ``FeatureDB.warnings``. ``"strict"``
         applies the full NCBI specification and rejects violations.
 
+        ``"strict"`` is also the only mode that fuses several lines sharing one
+        ``ID`` into a single discontinuous feature. That is deliberate: it is
+        new behaviour rather than gffutils behaviour, since gffutils'
+        ``merge_strategy="merge"`` requires all eight non-attribute columns to
+        match and so never merges a genuine split feature.
+    on_multipart_conflict : {"error", "split"}
+        Under ``mode="strict"``, what to do when lines sharing an ``ID``
+        disagree on seqid, source, featuretype or strand -- which GFF3 requires
+        the segments of a discontinuous feature to share. ``"error"`` (default)
+        raises :class:`~gffbase.exceptions.MultipartConstraintError` naming the
+        diverging column and both line numbers; ``"split"`` partitions the run
+        by those four columns, the lowest ``file_order`` keeping the bare id.
+
     Returns
     -------
     FeatureDB
@@ -133,6 +147,7 @@ def create_db(
         verbose=verbose,
         checklines=checklines,
         merge_strategy=merge_strategy,
+        on_multipart_conflict=on_multipart_conflict,
         transform=transform,
         gtf_transcript_key=gtf_transcript_key,
         gtf_gene_key=gtf_gene_key,
