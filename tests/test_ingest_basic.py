@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 from gffbase import ingest
 from gffbase._options import IngestOptions
+from gffbase.schema import SCHEMA_VERSION
 
 DATA = Path(__file__).parent / "data"
 
@@ -141,7 +142,11 @@ def test_indexes_built(hier_path):
 def test_meta_recorded(hier_path):
     con, _ = ingest.from_file(hier_path)
     rows = dict(con.execute("SELECT key, value FROM meta").fetchall())
-    assert rows.get("schema_version") == "1"
+    # Compared against the constant, not a literal: a new database must be
+    # stamped with whatever version the code currently writes. The *value* is
+    # pinned separately, in test_schema_v2.py, where changing it is the point
+    # of the test rather than incidental breakage.
+    assert rows.get("schema_version") == SCHEMA_VERSION
     assert rows.get("fmt") == "gff3"
 
 

@@ -21,31 +21,98 @@ Centralized so the ingestion engine and tests share one source of truth.
 
 from __future__ import annotations
 
-# Seven user-facing tables plus the bbox helper view if the spatial extension
-# is available. Schema version is recorded in `meta`.
-SCHEMA_VERSION = "1"
+# Schema version, recorded in `meta` and checked by `FeatureDB.__init__`.
+#
+# v2 adds the storage a *discontinuous* (multipart) GFF3 feature needs: several
+# input lines sharing one `ID`, which is how NCBI represents a split CDS. In v1
+# the second such line collided against the `features` primary key and every
+# merge strategy lost information.
+#
+# The shape that keeps the change small: `features` stays ONE ROW PER LOGICAL
+# FEATURE, with `start`/`end`/`bbox` widened to the *envelope* over its
+# segments; `segments` is a SPARSE side table carrying physical lines only for
+# features with `n_segments > 1`. So logical dedup stays structural (no
+# DISTINCT anywhere), the R-tree stays the primary access path, storage grows
+# only with duplicate lines rather than with corpus size, and a v1 -> v2
+# migration touches zero feature rows.
+SCHEMA_VERSION = "2"
 
 DDL = """
 CREATE TABLE IF NOT EXISTS features (
-    id              VARCHAR PRIMARY KEY,
-    seqid           VARCHAR NOT NULL,
-    source          VARCHAR,
-    featuretype     VARCHAR NOT NULL,
+    id              VARCHAR PRIMARY KEY,   -- LOGICAL key, post-resolution
+    seqid           VARCHAR NOT NULL,      -- logical: invariant across segments
+    source          VARCHAR,               -- logical
+    featuretype     VARCHAR NOT NULL,      -- logical
     -- NULLABLE on purpose. A GFF row may legally carry `.` in columns 4 and 5,
     -- and gffutils preserves that as None. Declaring these NOT NULL forced the
     -- Arrow builder to coerce a missing coordinate to 0, so the feature
     -- reopened as 0..0 and serialized zeros where the source said `.`.
+    --
+    -- For a multipart feature these are the ENVELOPE: MIN(start), MAX(end)
+    -- over its segments. For the singleton case -- every feature until a file
+    -- actually carries a split one -- the envelope IS the line, which is why
+    -- `features_rtree` stays valid across the v1 -> v2 migration.
     start           BIGINT,
     "end"           BIGINT,
+    -- Representative values, taken from segment 0. Per-segment score and
+    -- phase live in `segments`; carrying segment 0's here keeps every v1
+    -- query shape working unchanged.
     score           VARCHAR,
-    strand          VARCHAR,
+    strand          VARCHAR,               -- logical: one feature, one orientation
     frame           VARCHAR,
     attributes_blob BLOB,
     extra_blob      BLOB,
     file_order      BIGINT,
     is_synthetic    BOOLEAN DEFAULT FALSE,
+    -- v2. `id` as derived from column 9 BEFORE duplicate resolution renamed
+    -- it. Together with `occ` it forms the load-time surrogate identity
+    -- `(raw_id, occ)` that the multipart resolve pass groups on.
+    raw_id          VARCHAR,
+    -- v2. 0-based occurrence of `raw_id` at load time. Non-zero only where a
+    -- duplicate id was resolved by renaming.
+    occ             INTEGER NOT NULL DEFAULT 0,
+    -- v2. Number of physical input lines this feature was built from. 1 for
+    -- everything except a genuine discontinuous feature; the query builders
+    -- test `meta.n_multipart` so they can skip the segment machinery whenever
+    -- no feature in the database has more than one.
+    n_segments      INTEGER NOT NULL DEFAULT 1,
+    -- v2. Where `id` came from: 'attribute' when the data supplied it,
+    -- 'autoincrement' when it was generated. `IdSpecResolver.resolve` already
+    -- computed this; v1 discarded it.
+    id_origin       VARCHAR NOT NULL DEFAULT 'attribute',
     -- y-band populated post-load: each distinct seqid gets a unique band so
     -- the R-tree split heuristics segregate chromosomes (Phase 7 fix).
+    seqid_y         BIGINT
+);
+
+-- v2. Physical input lines for multipart features ONLY.
+--
+-- Invariant: a `feature_id` appears here iff its `features.n_segments > 1`,
+-- and when it appears, ALL of its segments 0 .. n-1 are present. Segment 0 is
+-- stored even though `features` carries its blob, because `features.start/end`
+-- is the envelope and segment 0's own coordinates need somewhere to live.
+--
+-- `frame` is the main reason this table exists: a split CDS carries a
+-- different phase on each line, and there is nowhere in `features` to put
+-- more than one of them.
+CREATE TABLE IF NOT EXISTS segments (
+    feature_id      VARCHAR NOT NULL,
+    -- 0-based, ordered by FILE APPEARANCE rather than coordinate: GFF3 does
+    -- not require segments to be sorted and `to_lines()` has to reproduce the
+    -- input order. Coordinate order is recovered with `ORDER BY start`.
+    seg_idx         INTEGER NOT NULL,
+    start           BIGINT,
+    "end"           BIGINT,
+    score           VARCHAR,
+    frame           VARCHAR,
+    attributes_blob BLOB NOT NULL,
+    extra_blob      BLOB,
+    file_order      BIGINT NOT NULL,
+    -- False when this segment's raw column 9 differs byte-for-byte from
+    -- segment 0's. NCBI repeats identical attributes on every CDS line, so
+    -- this is true almost always, and `attributes` rows are stored per-segment
+    -- only where it is false.
+    attrs_same_as_seg0 BOOLEAN NOT NULL DEFAULT TRUE,
     seqid_y         BIGINT
 );
 
@@ -58,10 +125,16 @@ CREATE TABLE IF NOT EXISTS seqid_map (
 );
 
 CREATE TABLE IF NOT EXISTS attributes (
-    feature_id      VARCHAR NOT NULL,
+    feature_id      VARCHAR NOT NULL,   -- LOGICAL id
     key             VARCHAR NOT NULL,
     value           VARCHAR NOT NULL,
-    idx             SMALLINT NOT NULL DEFAULT 0
+    idx             SMALLINT NOT NULL DEFAULT 0,  -- multivalue index (v1 meaning)
+    -- v2. Owning physical line. Rows with seg_idx > 0 exist only where that
+    -- segment's blob differs from segment 0's.
+    seg_idx         INTEGER NOT NULL DEFAULT 0,
+    -- v2. Pair position within its line. v1 relied on physical insertion order
+    -- to reproduce key order, which no SQL engine guarantees.
+    ord             INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -92,10 +165,53 @@ CREATE TABLE IF NOT EXISTS autoincrements (
     n               BIGINT
 );
 
+-- Must be byte-for-byte what gffutils writes: `export_sqlite` copies it
+-- verbatim and the oracle's `_candidate_merges` reads it. gffutils populates
+-- it ONLY from the merge -> create_unique fallback, so plain `create_unique`
+-- deliberately records nothing here.
 CREATE TABLE IF NOT EXISTS duplicates (
     original_id     VARCHAR NOT NULL,
     new_id          VARCHAR PRIMARY KEY
 );
+
+-- v2, gffbase-native. The full record `duplicates` cannot hold without
+-- breaking oracle compatibility: every id resolution, with its reason.
+-- `kind` is one of multipart / create_unique / merge / merge_fallback /
+-- warning_dropped / replaced / strict_split.
+CREATE TABLE IF NOT EXISTS id_conflicts (
+    raw_id          VARCHAR NOT NULL,
+    resolved_id     VARCHAR NOT NULL,
+    kind            VARCHAR NOT NULL,
+    file_order      BIGINT,
+    detail          VARCHAR
+);
+"""
+
+
+# ---------------------------------------------------------------------------
+# `segments_all` -- the uniform physical view: exactly one row per physical
+# input line, whether or not the owning feature is multipart.
+#
+# The `n_segments = 1` filter on the first branch is what makes the two
+# branches disjoint; without it, segment 0 of a multipart feature would be
+# counted twice. Every physical-level consumer reads this one name --
+# `explode_segments`, `export_sqlite`, `to_lines()`, the validator -- rather
+# than re-deriving the UNION.
+#
+# Created after the bulk load alongside the other views, so it is defined once
+# the conditional `bbox` column exists.
+# ---------------------------------------------------------------------------
+SEGMENTS_ALL_VIEW = """
+CREATE OR REPLACE VIEW segments_all AS
+    SELECT id AS feature_id, 0 AS seg_idx, seqid, source, featuretype, strand,
+           start, "end", score, frame, attributes_blob, extra_blob,
+           file_order, is_synthetic, seqid_y
+    FROM features WHERE n_segments = 1
+UNION ALL
+    SELECT s.feature_id, s.seg_idx, f.seqid, f.source, f.featuretype, f.strand,
+           s.start, s."end", s.score, s.frame, s.attributes_blob, s.extra_blob,
+           s.file_order, f.is_synthetic, s.seqid_y
+    FROM segments s JOIN features f ON f.id = s.feature_id;
 """
 
 
@@ -112,6 +228,7 @@ CREATE INDEX IF NOT EXISTS edges_parent      ON edges(parent);
 CREATE INDEX IF NOT EXISTS edges_child       ON edges(child);
 CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor, depth);
 CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant, depth);
+CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id, seg_idx);
 """
 # Phase 19: dropped redundant `features_seqid` — every (seqid)
 # predicate is satisfied by the leading prefix of `features_seqstart`.
@@ -159,7 +276,8 @@ WHERE a.key = 'gene_id'
 GTF_SYNTHESIZE_TRANSCRIPTS = """
 INSERT INTO features (id, seqid, source, featuretype, start, "end",
                       score, strand, frame,
-                      attributes_blob, extra_blob, file_order, is_synthetic)
+                      attributes_blob, extra_blob, file_order, is_synthetic,
+                      raw_id)
 SELECT
     a.value                    AS id,
     ANY_VALUE(f.seqid)         AS seqid,
@@ -173,7 +291,12 @@ SELECT
     NULL                       AS attributes_blob,
     NULL                       AS extra_blob,
     NULL                       AS file_order,
-    TRUE                       AS is_synthetic
+    TRUE                       AS is_synthetic,
+    -- A synthesized row's id came from a `transcript_id`/`gene_id`
+    -- attribute, so raw_id is that same value; leaving it NULL would
+    -- make the multipart resolve pass group every synthetic feature
+    -- together.
+    a.value                    AS raw_id
 FROM features f
 JOIN attributes a ON a.feature_id = f.id AND a.key = 'transcript_id'
 WHERE f.featuretype = ?                          -- subfeature, e.g. 'exon'
@@ -227,7 +350,8 @@ WHERE t.featuretype = 'transcript' AND t.is_synthetic = TRUE;
 GTF_SYNTHESIZE_GENES = """
 INSERT INTO features (id, seqid, source, featuretype, start, "end",
                       score, strand, frame,
-                      attributes_blob, extra_blob, file_order, is_synthetic)
+                      attributes_blob, extra_blob, file_order, is_synthetic,
+                      raw_id)
 SELECT
     a.value                    AS id,
     ANY_VALUE(f.seqid)         AS seqid,
@@ -241,7 +365,12 @@ SELECT
     NULL                       AS attributes_blob,
     NULL                       AS extra_blob,
     NULL                       AS file_order,
-    TRUE                       AS is_synthetic
+    TRUE                       AS is_synthetic,
+    -- A synthesized row's id came from a `transcript_id`/`gene_id`
+    -- attribute, so raw_id is that same value; leaving it NULL would
+    -- make the multipart resolve pass group every synthetic feature
+    -- together.
+    a.value                    AS raw_id
 FROM features f
 JOIN attributes a ON a.feature_id = f.id AND a.key = 'gene_id'
 WHERE f.featuretype IN ('transcript', ?)        -- transcript + subfeature
@@ -257,12 +386,18 @@ GROUP BY a.value;
 # ---------------------------------------------------------------------------
 COMPAT_VIEWS_SQL = """
 CREATE OR REPLACE VIEW features_compat AS
-    SELECT id, seqid, source, featuretype, start, "end",
+    -- Built on `segments_all`, not on `features`: gffutils' `features` table
+    -- holds one row per physical input line, because gffutils cannot represent
+    -- a discontinuous feature at all. While no feature is multipart the two
+    -- definitions are identical row-for-row (a test asserts it), and once one
+    -- is, the physical shape is the one a query written against gffutils
+    -- expects.
+    SELECT feature_id AS id, seqid, source, featuretype, start, "end",
            score, strand, frame,
            CAST(attributes_blob AS VARCHAR) AS attributes,
            CAST(extra_blob      AS VARCHAR) AS extra,
            0 AS bin
-    FROM features;
+    FROM segments_all;
 
 CREATE OR REPLACE VIEW relations_compat AS
     SELECT ancestor AS parent, descendant AS child, depth AS level
