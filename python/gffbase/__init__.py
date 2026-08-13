@@ -48,8 +48,10 @@ from gffbase.gffwriter import GFFWriter
 from gffbase.helpers import example_filename
 from gffbase.interface import FeatureDB
 from gffbase.iterators import DataIterator
+from gffbase.migrate import coalesce_multipart, migrate_v1_to_v2
 from gffbase.parser import detect_dialect, native_available, parse_bytes, parse_gff
 from gffbase.sqlite_export import export_sqlite
+from gffbase.validate import ValidationError, validate_db
 
 __all__ = [
     # Drop-in legacy surface
@@ -68,6 +70,10 @@ __all__ = [
     "GFFFormatError",
     "SchemaVersionError",
     "MultipartConstraintError",
+    "ValidationError",
+    "validate_db",
+    "migrate_v1_to_v2",
+    "coalesce_multipart",
     "merge_criteria",
     # gffbase extras
     "ParsedFeature",

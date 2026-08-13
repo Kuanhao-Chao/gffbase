@@ -341,7 +341,7 @@ def test_finalize_rtree_swallows_create_index_error():
     con.execute(DDL)  # No `bbox` column, no spatial extension loaded.
     # CREATE INDEX ... USING RTREE will fail because spatial isn't loaded
     # AND the `bbox` column doesn't exist. Helper must return False.
-    assert _finalize_rtree(con, {"chr1": 0}) is False
+    assert _finalize_rtree(con) is False
 
 
 def test_ingest_no_directives_path(tmp_path):
@@ -608,21 +608,36 @@ def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch):
     assert stats.n_features_raw == 1
 
 
-def test_finalize_rtree_with_empty_seqid_to_y_skips_seqid_map():
-    """`ingest.py` branch 541→550 — when `seqid_to_y` is empty, the
-    seqid_map population is skipped and we go straight to the
-    CREATE INDEX. Without the spatial extension this still returns False
-    (no R-tree index can be built), but the *empty-dict* branch is what
-    we're after, not a successful index build."""
-    con = duckdb.connect(":memory:")
+def test_persist_seqid_map_is_a_no_op_for_an_empty_map():
+    """The map population used to live inside `_finalize_rtree`, which runs
+    after GTF synthesis -- so the post-synthesis `UPDATE ... FROM seqid_map`
+    joined an empty table and every synthesized row kept a NULL bbox. It is now
+    its own step, called before synthesis; this covers its empty-input branch."""
+    from gffbase.ingest import _persist_seqid_map
     from gffbase.schema import DDL
 
+    con = duckdb.connect(":memory:")
     con.execute(DDL)
-    # Empty dict → goes through the (skipped) seqid_map block, then attempts
-    # CREATE INDEX, which fails without spatial. The early-skip branch is
-    # exercised regardless.
-    result = _finalize_rtree(con, {})
-    assert result is False
+    _persist_seqid_map(con, {})
+    assert con.execute("SELECT COUNT(*) FROM seqid_map").fetchone() == (0,)
+
+
+def test_persist_seqid_map_writes_the_bands_in_encounter_order():
+    """The first seqid must land on band 0 -- `_region_sql_rtree` translates
+    query bounds through this map, so a shifted band silently misses."""
+    from gffbase.ingest import _persist_seqid_map
+    from gffbase.schema import DDL
+
+    con = duckdb.connect(":memory:")
+    con.execute(DDL)
+    _persist_seqid_map(con, {"chr1": 0, "chr2": 1_000_000_000})
+    assert con.execute("SELECT seqid, seqid_y FROM seqid_map ORDER BY seqid_y").fetchall() == [
+        ("chr1", 0),
+        ("chr2", 1_000_000_000),
+    ]
+    # Idempotent: it clears before writing, so re-running cannot double up.
+    _persist_seqid_map(con, {"chr1": 0, "chr2": 1_000_000_000})
+    assert con.execute("SELECT COUNT(*) FROM seqid_map").fetchone() == (2,)
 
 
 def test_ingest_gff3_row_without_id_falls_through_loop(tmp_path):
