@@ -32,13 +32,17 @@ Two routing decisions are made dynamically:
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterator
 
 import duckdb
 
 from gffbase._dbutil import scalar, scalar_or
-from gffbase.exceptions import FeatureNotFoundError
+from gffbase.exceptions import FeatureNotFoundError, SchemaVersionError
 from gffbase.feature import Feature, db_row_projection, feature_from_row
+from gffbase.schema import SCHEMA_VERSION
+
+_log = logging.getLogger("gffbase.interface")
 
 # Selection clause for FeatureDB -> Feature reconstruction. Derived from
 # `feature._DB_ROW_FIELDS` rather than restated, so the projection and the
@@ -134,6 +138,7 @@ class FeatureDB:
 
         # Recover provenance from `meta`.
         meta = self._read_meta()
+        self._apply_schema_version(meta)
         self.dialect = self._parse_dialect(meta.get("dialect"))
         self.fmt = meta.get("fmt", "gff3")
         self._rtree_built = meta.get("rtree_built", "false").lower() == "true"
@@ -202,6 +207,71 @@ class FeatureDB:
             return {k: v for k, v in rows}
         except duckdb.Error:
             return {}
+
+    def _apply_schema_version(self, meta: dict) -> None:
+        """Classify the database's schema version and configure for it.
+
+        The version was written from the first release and never read, so until
+        now a mismatch surfaced as whatever the first query happened to hit --
+        a missing-column error, or a plausible wrong answer from a query that
+        did not touch the new columns. This is the gate.
+
+        * ``"2"`` -- current. Proceed.
+        * missing / ``"1"`` -- degrade to *v1 shim mode*. Every v2 addition is
+          additive, so a v1 database answers every v1 query correctly; the only
+          thing it cannot do is represent a multipart feature. Setting
+          ``_n_multipart = 0`` makes each query builder take exactly the branch
+          that emits v1 SQL, so the shim costs nothing and needs no special
+          cases downstream. `gffbase.migrate` (Stage D) upgrades in place.
+        * anything else -- ``SchemaVersionError``. A newer database may have
+          moved data this build would silently misread, and an unparseable
+          version cannot be reasoned about at all.
+        """
+        raw = meta.get("schema_version")
+        self._v1_shim = False
+
+        if raw is None or raw == "1":
+            # `None` covers both a genuine v1 database and one built before the
+            # version was recorded at all; neither has the v2 tables.
+            self._v1_shim = True
+            self._schema_version = 1
+            self._n_multipart = 0
+            _log.info(
+                "database %s uses schema v1; opening in compatibility mode. "
+                "Run gffbase.migrate.migrate_v1_to_v2() to upgrade in place.",
+                self.dbfn,
+            )
+            return
+
+        if raw != SCHEMA_VERSION:
+            raise SchemaVersionError(
+                f"{self.dbfn} has schema_version {raw!r}, but this gffbase "
+                f"reads version {SCHEMA_VERSION!r}. A database written by a "
+                "newer gffbase cannot be read safely; upgrade gffbase."
+            )
+
+        self._schema_version = int(SCHEMA_VERSION)
+        self._n_multipart = self._read_n_multipart(meta)
+
+    def _read_n_multipart(self, meta: dict) -> int:
+        """How many features span more than one input line.
+
+        Gates the segment-overlap conjunct in every query builder, so it is
+        read once at open rather than per query. Falls back to counting when
+        the meta row is absent -- a database built by an early v2 build, or one
+        a caller mutated directly -- because guessing zero there would silently
+        drop segments from `region()`.
+        """
+        recorded = meta.get("n_multipart")
+        if recorded is not None:
+            try:
+                return int(recorded)
+            except ValueError:
+                pass
+        try:
+            return int(scalar(self.conn, "SELECT COUNT(*) FROM features WHERE n_segments > 1"))
+        except duckdb.Error:
+            return 0
 
     def _has_rtree_index(self) -> bool:
         try:
