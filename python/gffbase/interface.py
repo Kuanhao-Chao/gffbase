@@ -32,10 +32,11 @@ Two routing decisions are made dynamically:
 from __future__ import annotations
 
 import json
-from typing import Iterator, List, Optional, Union
+from collections.abc import Iterator
 
 import duckdb
 
+from gffbase._dbutil import scalar, scalar_or
 from gffbase.exceptions import FeatureNotFoundError
 from gffbase.feature import Feature, feature_from_row
 
@@ -45,6 +46,24 @@ _SELECT_FEATURE = (
     'id, seqid, source, featuretype, start, "end", '
     "score, strand, frame, attributes_blob, extra_blob, file_order"
 )
+
+
+def _require_feature_id(obj) -> str:
+    """Coerce a `Feature`-or-id argument to a primary-key string.
+
+    A `Feature` built by hand (rather than loaded from a database) has
+    `id is None`. Passing one to a query used to reach SQL as a NULL bind and
+    silently match nothing; this reports the mistake instead.
+    """
+    fid = obj.id if isinstance(obj, Feature) else obj
+    if fid is None:
+        raise ValueError(
+            "feature has no database id -- pass an id string, or a Feature "
+            "obtained from this database"
+        )
+    if not isinstance(fid, str):
+        raise TypeError(f"expected a feature id string or Feature; got {type(obj)!r}")
+    return fid
 
 
 class FeatureDB:
@@ -59,7 +78,7 @@ class FeatureDB:
         dbfn,
         default_encoding: str = "utf-8",
         keep_order: bool = False,
-        pragmas: Optional[dict] = None,
+        pragmas: dict | None = None,
         sort_attribute_values: bool = False,
         text_factory=str,
     ):
@@ -195,7 +214,7 @@ class FeatureDB:
     # ------------------------------------------------------------------
 
     def __getitem__(self, key) -> Feature:
-        target_id = key.id if isinstance(key, Feature) else key
+        target_id = _require_feature_id(key)
         row = self.conn.execute(
             f"SELECT {_SELECT_FEATURE} FROM features WHERE id = ?", [target_id]
         ).fetchone()
@@ -214,12 +233,12 @@ class FeatureDB:
     # Counts and distinct-value iterators
     # ------------------------------------------------------------------
 
-    def count_features_of_type(self, featuretype: Optional[str] = None) -> int:
+    def count_features_of_type(self, featuretype: str | None = None) -> int:
         if featuretype is None:
-            return self.conn.execute("SELECT COUNT(*) FROM features").fetchone()[0]
-        return self.conn.execute(
-            "SELECT COUNT(*) FROM features WHERE featuretype = ?", [featuretype]
-        ).fetchone()[0]
+            return scalar(self.conn, "SELECT COUNT(*) FROM features")
+        return scalar(
+            self.conn, "SELECT COUNT(*) FROM features WHERE featuretype = ?", [featuretype]
+        )
 
     def featuretypes(self) -> Iterator[str]:
         for (ft,) in self.conn.execute(
@@ -240,8 +259,8 @@ class FeatureDB:
     def all_features(
         self,
         limit=None,
-        strand: Optional[str] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        strand: str | None = None,
+        featuretype: str | list[str] | None = None,
         order_by=None,
         reverse: bool = False,
         completely_within: bool = False,
@@ -260,9 +279,9 @@ class FeatureDB:
 
     def features_of_type(
         self,
-        featuretype: Union[str, List[str]],
+        featuretype: str | list[str],
         limit=None,
-        strand: Optional[str] = None,
+        strand: str | None = None,
         order_by=None,
         reverse: bool = False,
         completely_within: bool = False,
@@ -352,11 +371,11 @@ class FeatureDB:
     def region(
         self,
         region=None,
-        seqid: Optional[str] = None,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        strand: Optional[str] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        seqid: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        strand: str | None = None,
+        featuretype: str | list[str] | None = None,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
         rseqid, rstart, rend = self._normalize_region_args(region, seqid, start, end)
@@ -476,7 +495,7 @@ class FeatureDB:
     def region_batched(
         self,
         regions,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        featuretype: str | list[str] | None = None,
         completely_within: bool = False,
         format: str = "arrow",
     ):
@@ -641,14 +660,14 @@ class FeatureDB:
     def children(
         self,
         id,
-        level: Optional[int] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        level: int | None = None,
+        featuretype: str | list[str] | None = None,
         order_by=None,
         reverse: bool = False,
         limit=None,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
-        target_id = id.id if isinstance(id, Feature) else id
+        target_id = _require_feature_id(id)
         yield from self._relation_query(
             target_id,
             level,
@@ -663,14 +682,14 @@ class FeatureDB:
     def parents(
         self,
         id,
-        level: Optional[int] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        level: int | None = None,
+        featuretype: str | list[str] | None = None,
         order_by=None,
         reverse: bool = False,
         completely_within: bool = False,
         limit=None,
     ) -> Iterator[Feature]:
-        target_id = id.id if isinstance(id, Feature) else id
+        target_id = _require_feature_id(id)
         yield from self._relation_query(
             target_id,
             level,
@@ -697,8 +716,8 @@ class FeatureDB:
     def children_batched(
         self,
         feature_ids,
-        level: Optional[int] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        level: int | None = None,
+        featuretype: str | list[str] | None = None,
         format: str = "arrow",
     ):
         """Bulk children lookup. Returns the descendants of ALL `feature_ids`
@@ -731,8 +750,8 @@ class FeatureDB:
     def parents_batched(
         self,
         feature_ids,
-        level: Optional[int] = None,
-        featuretype: Optional[Union[str, List[str]]] = None,
+        level: int | None = None,
+        featuretype: str | list[str] | None = None,
         format: str = "arrow",
     ):
         """Bulk parents lookup. Mirrors `children_batched` but walks the
@@ -749,7 +768,7 @@ class FeatureDB:
         self,
         feature_ids,
         *,
-        level: Optional[int],
+        level: int | None,
         featuretype,
         direction: str,
         format: str,
@@ -827,13 +846,13 @@ class FeatureDB:
         return self._materialize_batched(cte, params, format=format)
 
     @staticmethod
-    def _coerce_id_list(feature_ids) -> List[str]:
+    def _coerce_id_list(feature_ids) -> list[str]:
         """Normalize a heterogeneous iterable of (id-string | Feature) into a
         list of strings."""
-        out: List[str] = []
+        out: list[str] = []
         for item in feature_ids:
             if isinstance(item, Feature):
-                out.append(item.id)
+                out.append(_require_feature_id(item))
             elif isinstance(item, str):
                 out.append(item)
             else:
@@ -922,7 +941,7 @@ class FeatureDB:
     def _relation_query(
         self,
         target_id: str,
-        level: Optional[int],
+        level: int | None,
         featuretype,
         order_by,
         reverse: bool,
@@ -956,7 +975,7 @@ class FeatureDB:
             )
         yield from self._yield_features(sql, params)
 
-    def _dispatch_relation(self, level: Optional[int], target_id: str, direction: str) -> bool:
+    def _dispatch_relation(self, level: int | None, target_id: str, direction: str) -> bool:
         """Return True iff the caller should be served by the dynamic CTE.
 
         Decision matrix (Phase 7, revised):
@@ -1007,8 +1026,7 @@ class FeatureDB:
                     WHERE c.descendant = ? AND c.depth = ?
                 )
             """
-        row = self.conn.execute(sql, [target_id, self._max_depth]).fetchone()
-        return bool(row[0])
+        return bool(scalar_or(self.conn, sql, False, [target_id, self._max_depth]))
 
     def _relation_sql_cached(
         self,
@@ -1202,7 +1220,7 @@ class FeatureDB:
             self._seqid_y_map,
             has_spatial=bool(self._rtree_built),
         )
-        order = self.conn.execute("SELECT COALESCE(MAX(file_order), 0) FROM features").fetchone()[0]
+        order = scalar_or(self.conn, "SELECT COALESCE(MAX(file_order), 0) FROM features", 0)
 
         if isinstance(data, FeatureDB):
             data = list(data.all_features())
@@ -1284,19 +1302,19 @@ class FeatureDB:
         return self
 
     @staticmethod
-    def _coerce_ids(features) -> List[str]:
+    def _coerce_ids(features) -> list[str]:
         if isinstance(features, str):
             return [features]
         if isinstance(features, Feature):
-            return [features.id]
+            return [_require_feature_id(features)]
         if isinstance(features, FeatureDB):
-            return [f.id for f in features.all_features()]
-        out: List[str] = []
+            return [_require_feature_id(f) for f in features.all_features()]
+        out: list[str] = []
         for f in features:
             if isinstance(f, str):
                 out.append(f)
             elif isinstance(f, Feature):
-                out.append(f.id)
+                out.append(_require_feature_id(f))
         return out
 
     # ------------------------------------------------------------------
@@ -1316,12 +1334,12 @@ class FeatureDB:
         feats = list(features)
         if not feats:
             return
-        for prev, cur in zip(feats[:-1], feats[1:]):
+        for prev, cur in zip(feats[:-1], feats[1:], strict=True):
             new_start = prev.end + 1
             new_end = cur.start - 1
             if new_end < new_start:
                 continue
-            attrs = {}
+            attrs: dict[str, list[str]] = {}
             if merge_attributes:
                 for k, v in prev.attributes.items():
                     attrs.setdefault(k, []).extend(v)
@@ -1354,7 +1372,7 @@ class FeatureDB:
         if not feats:
             return
         accum = None
-        components: List[Feature] = []
+        components: list[Feature] = []
         for f in feats:
             if accum is None:
                 accum = self._clone_for_merge(f)
@@ -1393,8 +1411,8 @@ class FeatureDB:
         merge_criteria=None,
         featuretypes_groups=(None,),
         exclude_components: bool = False,
-    ) -> List[Feature]:
-        out: List[Feature] = []
+    ) -> list[Feature]:
+        out: list[Feature] = []
         for group in featuretypes_groups:
             feats = list(self.all_features(featuretype=group))
             for k in reversed(merge_order):
@@ -1405,8 +1423,8 @@ class FeatureDB:
     def create_introns(
         self,
         exon_featuretype: str = "exon",
-        grandparent_featuretype: Optional[str] = "gene",
-        parent_featuretype: Optional[str] = None,
+        grandparent_featuretype: str | None = "gene",
+        parent_featuretype: str | None = None,
         new_featuretype: str = "intron",
         merge_attributes: bool = True,
         numeric_sort: bool = False,
@@ -1415,7 +1433,7 @@ class FeatureDB:
             raise ValueError("specify exactly one of grandparent_featuretype/parent_featuretype")
         if not (grandparent_featuretype or parent_featuretype):
             raise ValueError("must specify grandparent_featuretype or parent_featuretype")
-        anchor_type = grandparent_featuretype or parent_featuretype
+        anchor_type: str = grandparent_featuretype or parent_featuretype  # type: ignore[assignment]
         for anchor in self.features_of_type(anchor_type):
             exons = sorted(
                 (e for e in self.children(anchor, featuretype=exon_featuretype)),
@@ -1433,8 +1451,8 @@ class FeatureDB:
     def create_splice_sites(
         self,
         exon_featuretype: str = "exon",
-        grandparent_featuretype: Optional[str] = "gene",
-        parent_featuretype: Optional[str] = None,
+        grandparent_featuretype: str | None = "gene",
+        parent_featuretype: str | None = None,
         merge_attributes: bool = True,
         numeric_sort: bool = False,
     ) -> Iterator[Feature]:
@@ -1499,11 +1517,19 @@ class FeatureDB:
             key=lambda f: (f.start, f.end),
         )
         cds = list(self.children(feature, featuretype=list(thick_featuretype)))
+        if feature.start is None or feature.end is None:
+            raise ValueError(
+                f"cannot build a BED12 record for {feature.id!r}: "
+                "feature has no start/end coordinates"
+            )
         chrom_start = feature.start - 1
         chrom_end = feature.end
-        if cds:
-            thick_start = min(c.start for c in cds) - 1
-            thick_end = max(c.end for c in cds)
+        # BED is 0-based half-open; GFF is 1-based closed.
+        cds_starts = [c.start for c in cds if c.start is not None]
+        cds_ends = [c.end for c in cds if c.end is not None]
+        if cds_starts and cds_ends:
+            thick_start = min(cds_starts) - 1
+            thick_end = max(cds_ends)
         else:
             thick_start = chrom_start
             thick_end = chrom_start
@@ -1514,9 +1540,13 @@ class FeatureDB:
         score = feature.score if feature.score not in (".", "") else "0"
         strand = feature.strand if feature.strand in ("+", "-") else "+"
         rgb = color or "0,0,0"
-        block_count = len(blocks)
-        block_sizes = ",".join(str(b.end - b.start + 1) for b in blocks)
-        block_starts = ",".join(str((b.start - 1) - chrom_start) for b in blocks)
+        # BED12 requires blockCount to equal the number of entries in
+        # blockSizes and blockStarts, so a block with missing coordinates has
+        # to drop out of all three together, not just the two lists.
+        sized = [(b.start, b.end) for b in blocks if b.start is not None and b.end is not None]
+        block_count = len(sized)
+        block_sizes = ",".join(str(end - start + 1) for start, end in sized)
+        block_starts = ",".join(str((start - 1) - chrom_start) for start, _end in sized)
         return "\t".join(
             str(x)
             for x in (
@@ -1538,11 +1568,11 @@ class FeatureDB:
     def iter_by_parent_childs(
         self,
         featuretype: str = "gene",
-        level: Optional[int] = None,
+        level: int | None = None,
         order_by=None,
         reverse: bool = False,
         completely_within: bool = False,
-    ) -> Iterator[List[Feature]]:
+    ) -> Iterator[list[Feature]]:
         for parent in self.features_of_type(featuretype, order_by=order_by, reverse=reverse):
             kids = list(
                 self.children(

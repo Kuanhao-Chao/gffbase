@@ -30,7 +30,7 @@ def test_engines_agree_on_gff3(gff3_path):
     py_feats = list(parse_gff(gff3_path, engine="python"))
     rs_feats = list(parse_gff(gff3_path, engine="rust"))
     assert len(py_feats) == len(rs_feats)
-    for a, b in zip(py_feats, rs_feats):
+    for a, b in zip(py_feats, rs_feats, strict=True):
         assert a.seqid == b.seqid
         assert a.source == b.source
         assert a.featuretype == b.featuretype
@@ -46,5 +46,5 @@ def test_engines_agree_on_gtf(gtf_path):
     py_feats = list(parse_gff(gtf_path, engine="python"))
     rs_feats = list(parse_gff(gtf_path, engine="rust"))
     assert len(py_feats) == len(rs_feats)
-    for a, b in zip(py_feats, rs_feats):
+    for a, b in zip(py_feats, rs_feats, strict=True):
         assert a.attributes_pairs == b.attributes_pairs

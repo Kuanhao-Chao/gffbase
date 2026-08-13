@@ -40,12 +40,11 @@ import argparse
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Dict
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "benchmarks" / "data"
 
-CORPORA: Dict[str, str] = {
+CORPORA: dict[str, str] = {
     # Primary GENCODE pair: same biological release in both formats so
     # the GTF-vs-GFF3 head-to-head is apples-to-apples.
     "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz": (
@@ -124,7 +123,7 @@ def main() -> None:
     if "gencode" in selected:
         selected.update({"gencode-gtf", "gencode-gff3"})
         selected.discard("gencode")
-    pick: Dict[str, str] = {}
+    pick: dict[str, str] = {}
     if "gencode-gtf" in selected:
         name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz"
         pick[name] = CORPORA[name]

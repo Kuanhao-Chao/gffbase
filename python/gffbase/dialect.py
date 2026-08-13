@@ -20,10 +20,8 @@ layer can pass these dicts straight to backwards-compat consumers.
 
 from __future__ import annotations
 
-from typing import Dict, List
 
-
-def default_dialect() -> Dict:
+def default_dialect() -> dict:
     return {
         "fmt": "gff3",
         "field separator": ";",
@@ -38,7 +36,7 @@ def default_dialect() -> Dict:
     }
 
 
-def merge_dialects(samples: List[Dict]) -> Dict:
+def merge_dialects(samples: list[dict]) -> dict:
     """Reconcile per-line dialect observations into one. OR for booleans,
     plurality vote for separators, first-appearance order for keys."""
     if not samples:
@@ -65,7 +63,7 @@ def merge_dialects(samples: List[Dict]) -> Dict:
         out[k] = any(s.get(k, False) for s in samples)
 
     seen = set()
-    order: List[str] = []
+    order: list[str] = []
     for s in samples:
         for key in s.get("order", []):
             if key not in seen:

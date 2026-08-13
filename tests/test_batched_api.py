@@ -195,7 +195,7 @@ def test_region_batched_rtree_path(gtf_db):
     qidx = out.column("query_idx").to_pylist()
     assert set(qidx) == {0, 1}
     # All result rows must match their query's seqid.
-    for q, sid in zip(qidx, out.column("seqid").to_pylist()):
+    for q, sid in zip(qidx, out.column("seqid").to_pylist(), strict=True):
         assert sid == ("chr1" if q == 0 else "chr2")
 
 
