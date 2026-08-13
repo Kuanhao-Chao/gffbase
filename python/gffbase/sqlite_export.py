@@ -80,8 +80,52 @@ CREATE INDEX binindex ON features (bin);
 """
 
 
+def _legacy_ids(con) -> dict[str, str]:
+    """Map every physical line to the id gffutils would have given it.
+
+    gffutils cannot represent a discontinuous feature at all, so a database
+    holding one has to be flattened before it can be exported. The flattening
+    reproduces what `gffutils.create_db(file, merge_strategy="create_unique")`
+    would have produced from the same input: segment 0 keeps the logical id and
+    segment k gets `<id>_k`.
+
+    Collision-hardened, because a file can legitimately contain both `cds1` and
+    `cds1_1`: a generated name that some other feature already claims is
+    stepped past rather than written, which would otherwise violate the legacy
+    table's primary key.
+
+    Returns `{f"{feature_id}\\x00{seg_idx}": legacy_id}`. Empty when nothing is
+    multipart, which is the overwhelmingly common case and means the export
+    does no extra work at all.
+    """
+    rows = con.execute(
+        "SELECT feature_id, seg_idx FROM segments WHERE seg_idx > 0 ORDER BY feature_id, seg_idx"
+    ).fetchall()
+    if not rows:
+        return {}
+
+    taken = {r[0] for r in con.execute("SELECT id FROM features").fetchall()}
+    mapping: dict[str, str] = {}
+    for feature_id, seg_idx in rows:
+        n = seg_idx
+        candidate = f"{feature_id}_{n}"
+        while candidate in taken:
+            n += 1
+            candidate = f"{feature_id}_{n}"
+        taken.add(candidate)
+        mapping[f"{feature_id}\x00{seg_idx}"] = candidate
+    return mapping
+
+
 def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False) -> str:
     """Write a legacy SQLite ``.db`` from the given DuckDB connection.
+
+    The result is openable by real gffutils. Because gffutils has no way to
+    represent a discontinuous feature, one is flattened back into the N
+    features gffutils itself would have made -- see `_legacy_ids`. The grouping
+    is not lost: `duplicates` records `(logical_id, legacy_id)` for every
+    segment past the first, which is both what that table means and how a
+    re-import can rediscover it.
 
     Returns the absolute path on success.
     """
@@ -93,40 +137,43 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False
     sqlite_con = sqlite3.connect(path)
     try:
         sqlite_con.executescript(_LEGACY_SCHEMA)
+        legacy = _legacy_ids(con)
 
-        # Stream features in file order.
+        # `segments_all`, not `features`: one row per physical input LINE. A
+        # segment-0 row must carry its own coordinates here, not the envelope,
+        # or the exported file describes spans the source never contained.
         rows = con.execute(
             """
-            SELECT id, seqid, source, featuretype, start, "end",
+            SELECT feature_id, seg_idx, seqid, source, featuretype, start, "end",
                    score, strand, frame,
                    CAST(attributes_blob AS VARCHAR) AS attributes,
                    CAST(extra_blob      AS VARCHAR) AS extra
-            FROM features
-            ORDER BY file_order NULLS LAST, id
+            FROM segments_all
+            ORDER BY file_order NULLS LAST, feature_id, seg_idx
             """
         ).fetchall()
 
-        # Compute UCSC bin in Python (DuckDB has no native equivalent and
-        # legacy SQLite users rely on this for `region()` queries).
+        # UCSC bin is computed in Python: DuckDB has no equivalent, and
+        # `gffutils.FeatureDB.region(completely_within=True)` filters on it, so
+        # getting it wrong makes those queries return nothing at all.
         export_rows = []
-        for r in rows:
-            (
-                fid,
-                seqid,
-                source,
-                featuretype,
-                start,
-                end,
-                score,
-                strand,
-                frame,
-                attributes,
-                extra,
-            ) = r
-            ucsc_bin = bin_from_coords(start, end) if start and end else None
+        for (
+            feature_id,
+            seg_idx,
+            seqid,
+            source,
+            featuretype,
+            start,
+            end,
+            score,
+            strand,
+            frame,
+            attributes,
+            extra,
+        ) in rows:
             export_rows.append(
                 (
-                    fid,
+                    legacy.get(f"{feature_id}\x00{seg_idx}", feature_id),
                     seqid,
                     source,
                     featuretype,
@@ -137,7 +184,7 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False
                     frame,
                     attributes or "",
                     extra or "",
-                    ucsc_bin,
+                    bin_from_coords(start, end),
                 )
             )
         sqlite_con.executemany(
@@ -145,9 +192,31 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False
             export_rows,
         )
 
-        # Closure → relations(parent, child, level=depth).
-        rels = con.execute("SELECT ancestor, descendant, depth FROM closure").fetchall()
+        # Closure -> relations(parent, child, level=depth), fanned out over
+        # both endpoints' legacy ids. A relation naming only the logical id
+        # would dangle against a features table that no longer has that row
+        # under that name for every segment.
+        by_logical: dict[str, list[str]] = {}
+        for key, legacy_id in legacy.items():
+            by_logical.setdefault(key.split("\x00", 1)[0], []).append(legacy_id)
+
+        rels = []
+        for ancestor, descendant, depth in con.execute(
+            "SELECT ancestor, descendant, depth FROM closure"
+        ).fetchall():
+            for parent in [ancestor, *by_logical.get(ancestor, ())]:
+                for child in [descendant, *by_logical.get(descendant, ())]:
+                    rels.append((parent, child, depth))
         sqlite_con.executemany("INSERT INTO relations VALUES (?,?,?)", rels)
+
+        # `duplicates` is how a re-import rediscovers the grouping, and it is
+        # also exactly what the legacy table means: a row that was renamed to
+        # avoid a primary-key collision.
+        if legacy:
+            sqlite_con.executemany(
+                "INSERT INTO duplicates VALUES (?, ?)",
+                [(key.split("\x00", 1)[0], legacy_id) for key, legacy_id in legacy.items()],
+            )
 
         # Meta — write the dialect (JSON) + version.
         meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
