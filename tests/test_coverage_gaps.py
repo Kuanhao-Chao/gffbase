@@ -139,12 +139,19 @@ def test_seqids_generator_empty():
     assert list(db.seqids()) == []
 
 
-def test_order_clause_unknown_column_pass_through():
+def test_order_clause_comma_separated_string():
+    """A comma-separated string used to be interpolated verbatim, so it reached
+    SQL as one opaque expression. Each name is now resolved and ordered on
+    individually -- which is what the caller meant, and is what closes the
+    injection this branch used to be."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    # An unknown column is passed verbatim — useful for power-user multi-key
-    # ordering. We just need it to not raise.
-    out = db._order_clause("seqid, start", reverse=False)
-    assert "seqid, start" in out
+    assert db._order_clause("seqid, start", reverse=False) == "seqid ASC, start ASC"
+
+
+def test_order_clause_rejects_anything_not_whitelisted():
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    with pytest.raises(ValueError, match="cannot order by"):
+        db._order_clause("start; DROP TABLE features", reverse=False)
 
 
 def test_parents_integer_level_branch():
@@ -749,12 +756,14 @@ def test_order_clause_qualified_length_branch():
     assert out.endswith("ASC")
 
 
-def test_order_clause_qualified_custom_expression_branch():
-    """`interface.py` line 1054 — an order_by string outside the known
-    column set is passed through verbatim (escape hatch for power users)."""
-    out = FeatureDB._order_clause_qualified("f.seqid, f.start", reverse=True, qualifier="f")
-    assert "f.seqid, f.start" in out
-    assert out.endswith("DESC")
+def test_order_clause_qualified_applies_the_same_whitelist():
+    """The joined paths must not be a way around it. They used to share the
+    pass-through escape hatch, so `children(..., order_by=<payload>)` was
+    injectable exactly like `all_features`."""
+    out = FeatureDB._order_clause_qualified(("seqid", "start"), reverse=True, qualifier="f")
+    assert out == "f.seqid DESC, f.start DESC"
+    with pytest.raises(ValueError, match="cannot order by"):
+        FeatureDB._order_clause_qualified("f.seqid", reverse=True, qualifier="f")
 
 
 def test_interfeatures_with_merge_attributes_true():
