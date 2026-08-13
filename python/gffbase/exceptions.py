@@ -84,3 +84,26 @@ class AttributeStringError(ValueError):
 
 class EmptyInputError(ValueError):
     """Raised when an input file or iterable yields no features."""
+
+
+class SchemaVersionError(ValueError):
+    """The database's schema version is one this build cannot read.
+
+    Raised when opening a database written by a *newer* gffbase, or one whose
+    ``meta.schema_version`` is unintelligible. An older version is not an error:
+    it degrades to a read-only compatibility mode instead.
+
+    This exists because the version was previously written and never read, so a
+    schema mismatch surfaced as a missing-column error from whichever query
+    happened to run first -- or, worse, as a silently wrong answer from one that
+    did not touch the new columns.
+    """
+
+
+class MultipartConstraintError(ValueError):
+    """Lines sharing one ``ID`` cannot be one discontinuous feature.
+
+    GFF3 requires the segments of a discontinuous feature to agree on seqid,
+    source, featuretype and strand. Raised in ``mode="strict"`` when they do
+    not; pass ``on_multipart_conflict="split"`` to partition them instead.
+    """
