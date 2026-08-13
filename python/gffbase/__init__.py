@@ -26,6 +26,8 @@ from gffbase.exceptions import (
     DuplicateIDError,
     EmptyInputError,
     FeatureNotFoundError,
+    MultipartConstraintError,
+    SchemaVersionError,
 )
 from gffbase.exceptions import (
     GFFFormatError as _PyGFFFormatError,
@@ -62,6 +64,8 @@ __all__ = [
     "AttributeStringError",
     "EmptyInputError",
     "GFFFormatError",
+    "SchemaVersionError",
+    "MultipartConstraintError",
     "merge_criteria",
     # gffbase extras
     "ParsedFeature",
