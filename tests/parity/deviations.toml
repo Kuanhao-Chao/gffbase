@@ -1,0 +1,349 @@
+# ---------------------------------------------------------------------------
+# gffutils compatibility deviations register
+# ---------------------------------------------------------------------------
+#
+# Every difference between gffbase's public surface and the frozen gffutils
+# oracle (commit 6b84330, "0.14") must be declared here. `test_api_parity.py`
+# fails on:
+#
+#   * an UNDECLARED gap  -- gffbase is missing something the oracle exports and
+#     nothing here says why;
+#   * a STALE declaration -- something is declared missing or deviating but is
+#     in fact present and matching, so the register has rotted.
+#
+# The second rule is what keeps this file honest: entries cannot be left behind
+# after the work lands. Delete a `planned` entry in the same commit that
+# implements it.
+#
+# status values
+# -------------
+#   planned      Not implemented yet. Must name the phase that delivers it.
+#                Reported as an expected gap; the suite stays green.
+#   intentional  Deliberately different from the oracle, permanently. Must give
+#                a reason and name the regression test that pins the behaviour.
+#   excluded     Genuinely out of scope (upstream implementation detail with no
+#                downstream contract). Must say why it is not a contract.
+#
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# PLANNED -- compatibility modules not yet ported.
+# ===========================================================================
+
+[[deviation]]
+kind = "module"
+name = "gffbase.attributes"
+status = "planned"
+phase = "missing-surface"
+note = """The `Attributes` MutableMapping and the swappable `dict_class` alias.
+gffbase currently has an equivalent in `feature._LazyAttributes`, but it is
+private and its `always_return_list` behaviour is not wired to a module-level
+toggle the way the oracle's is."""
+
+[[deviation]]
+kind = "module"
+name = "gffbase.bins"
+status = "planned"
+phase = "missing-surface"
+note = """UCSC binning. `gffbase._bins` exists but is private AND computes
+different bins than the oracle: its offsets are (585, 73, 9, 1, 0) against the
+oracle's [4681, 585, 73, 9, 1], so `bins(1, 100)` returns 585 where the oracle
+returns 4681. Because `export_sqlite` writes this into the legacy `bin` column
+and the oracle's `region()` uses bins to narrow its query, a legacy consumer
+reading a gffbase export gets wrong results. The public module and the
+corrected offsets land together."""
+
+[[deviation]]
+kind = "module"
+name = "gffbase.constants"
+status = "planned"
+phase = "missing-surface"
+note = """Schema/dialect constants plus the two documented global toggles,
+`always_return_list` and `ignore_url_escape_characters`. Both are read at
+runtime by the oracle's attribute machinery and are part of its documented
+API."""
+
+[[deviation]]
+kind = "module"
+name = "gffbase.convert"
+status = "planned"
+phase = "missing-surface"
+note = "`to_bed12(f, db, child_type, name_field)`. Superseded by `FeatureDB.bed12` upstream, but still importable there."
+
+[[deviation]]
+kind = "module"
+name = "gffbase.inspect"
+status = "planned"
+phase = "missing-surface"
+note = "`inspect(data, look_for, limit, verbose)` -- summarises a GFF/GTF source without building a database."
+
+[[deviation]]
+kind = "module"
+name = "gffbase.version"
+status = "planned"
+phase = "missing-surface"
+note = """A `version` module. gffbase exposes `__version__` from the package
+root; the oracle also exposes `gffutils.version.version`."""
+
+[[deviation]]
+kind = "module"
+name = "gffbase.create"
+status = "planned"
+phase = "missing-surface"
+note = """`_DBCreator` / `_GFFDBCreator` / `_GTFDBCreator`. Underscore-named but
+load-bearing: `FeatureDB.update()` constructs them directly and
+`FeatureDB.__init__` accepts one as `dbfn`, so a successor needs an equivalent
+seam even though the classes themselves are backend-specific."""
+
+[[deviation]]
+kind = "module"
+name = "gffbase.biopython_integration"
+status = "planned"
+phase = "missing-surface"
+note = "`to_seqfeature` / `from_seqfeature`. Ships behind the `biopython` extra."
+
+[[deviation]]
+kind = "module"
+name = "gffbase.pybedtools_integration"
+status = "planned"
+phase = "missing-surface"
+note = "`to_bedtool` / `tsses`. Ships behind the `pybedtools` extra."
+
+[[deviation]]
+kind = "module"
+name = "gffbase.contrib.plotting"
+status = "planned"
+phase = "missing-surface"
+note = "The `Gene` plotting helper. Requires pybedtools + matplotlib."
+
+# ===========================================================================
+# PLANNED -- symbols missing from modules that do exist.
+# ===========================================================================
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.feature.feature_from_line"
+status = "planned"
+phase = "missing-surface"
+note = "Public single-line parser: `feature_from_line(line, dialect, strict, keep_order)`."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.feature._position_lookup"
+status = "planned"
+phase = "missing-surface"
+note = """Integer-index -> field-name map backing `Feature[0]`. gffbase has the
+same mapping as `_FIELD_ORDER`; the oracle's name is what upstream tests
+import."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.HERE"
+status = "planned"
+phase = "missing-surface"
+note = "Package directory constant used to locate bundled example data."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.infer_dialect"
+status = "planned"
+phase = "missing-surface"
+note = "Infer a dialect dict from one attribute string."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.make_query"
+status = "planned"
+phase = "missing-surface"
+note = """The bare-bones ORM that builds (query, args) from limit/strand/
+featuretype/order_by/reverse/completely_within. Its `order_by` whitelist is
+also the model for hardening gffbase's own order-by handling."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.merge_attributes"
+status = "planned"
+phase = "missing-surface"
+note = "Merge two attribute dicts; used by every derived-feature method."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.dialect_compare"
+status = "planned"
+phase = "missing-surface"
+note = "Returns dict(added=..., removed=...) between two dialects."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.asinterval"
+status = "planned"
+phase = "missing-surface"
+note = "Feature -> pybedtools.Interval. Behind the `pybedtools` extra."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.sanitize_gff_db"
+status = "planned"
+phase = "missing-surface"
+note = "Enforce start <= stop and add a `gid` attribute."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.sanitize_gff_file"
+status = "planned"
+phase = "missing-surface"
+note = "File-level sanitizer; backs the `sanitize` CLI subcommand."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.canonical_transcripts"
+status = "planned"
+phase = "missing-surface"
+note = "Yields (transcript, sequence) for the longest-CDS transcript per gene."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.is_gff_db"
+status = "planned"
+phase = "missing-surface"
+note = "Cheap path-based database detection."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.get_gff_db"
+status = "planned"
+phase = "missing-surface"
+note = "Open-or-create helper backing the CLI's `db` argument."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.to_unicode"
+status = "planned"
+phase = "missing-surface"
+note = "Python-2-era text coercion; effectively identity for `str`."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.helpers.annotate_gff_db"
+status = "planned"
+phase = "missing-surface"
+note = """Listed in the oracle's public API docs but its body is `pass`. gffbase
+provides the name so imports resolve; see the intentional entry below for the
+behaviour."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.assign_child"
+status = "planned"
+phase = "missing-surface"
+note = "Default `child_func` for `add_relation`; sets Parent on the child."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.no_children"
+status = "planned"
+phase = "missing-surface"
+note = "Empty-children sentinel used by `merge()`."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators.is_url"
+status = "planned"
+phase = "missing-surface"
+note = "URL detection, part of `DataIterator`'s source dispatch."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators.Directive"
+status = "planned"
+phase = "missing-surface"
+note = "Trivial `##` directive wrapper. Defined upstream but never used there."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators._BaseIterator"
+status = "planned"
+phase = "missing-surface"
+note = """The iterator class hierarchy. The oracle's `FeatureDB.update()` and
+`delete()` docstrings point users at these classes by name, so they are part of
+the effective contract."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators._FileIterator"
+status = "planned"
+phase = "missing-surface"
+note = "See `_BaseIterator`."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators._UrlIterator"
+status = "planned"
+phase = "missing-surface"
+note = "See `_BaseIterator`. gffbase's DataIterator does not accept URLs at all yet."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators._FeatureIterator"
+status = "planned"
+phase = "missing-surface"
+note = "See `_BaseIterator`. gffbase's DataIterator does not accept feature iterables yet."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser._split_keyvals"
+status = "planned"
+phase = "missing-surface"
+note = """Attribute-string parser. Underscore-named but directly exercised by
+the upstream test suite (`parser_test.py`, `attr_test_cases.py`), which the
+differential suite ports."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser._reconstruct"
+status = "planned"
+phase = "missing-surface"
+note = "Attribute-string serializer; the inverse of `_split_keyvals`."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser.Quoter"
+status = "planned"
+phase = "missing-surface"
+note = """Caching percent-encoder. gffbase has no encode path at all yet, which
+is why re-serializing a feature after reading its attributes currently drops
+escaping."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser.quoter"
+status = "planned"
+phase = "missing-surface"
+note = "Module-level `Quoter()` singleton."
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser.quoted_semicolon_patterns"
+status = "planned"
+phase = "missing-surface"
+note = "Compiled patterns that split on a separator only when quotes balance."
+
+# ===========================================================================
+# EXCLUDED -- upstream implementation details with no downstream contract.
+# ===========================================================================
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.parser.sep"
+status = "excluded"
+reason = """A loop variable left in `gffutils.parser`'s module namespace by the
+`for sep in ...` that builds `quoted_semicolon_patterns`. It is a leaked local,
+not an API."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.gffwriter.version"
+status = "excluded"
+reason = """`gffutils.gffwriter` imports `version` from `gffutils.version` to
+stamp its header. It is the same object as `gffutils.version.version`, which is
+inventoried in its own right; re-exporting it from `gffwriter` is incidental."""
