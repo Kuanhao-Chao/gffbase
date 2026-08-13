@@ -156,6 +156,8 @@ markers = [
     "native: requires the compiled gffbase._native extension",
     "rtree: requires the DuckDB spatial extension (R-tree index path)",
     "slow: long-running; excluded from the default PR run",
+    "parity: differential comparison against an installed gffutils oracle",
+    "corpus: needs a downloaded multi-GB annotation corpus",
 ]
 
 [tool.coverage.run]
