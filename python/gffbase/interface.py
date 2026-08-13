@@ -111,6 +111,8 @@ class FeatureDB:
         self.sort_attribute_values = sort_attribute_values
         self.text_factory = text_factory
         self._analyzed_flag = False
+        # Created on demand; see `_segment_cursor`.
+        self._seg_cursor: duckdb.DuckDBPyConnection | None = None
 
         # Resolve dbfn → connection.
         if isinstance(dbfn, duckdb.DuckDBPyConnection):
@@ -309,19 +311,43 @@ class FeatureDB:
     # Dunders
     # ------------------------------------------------------------------
 
-    def __getitem__(self, key) -> Feature:
-        target_id = _require_feature_id(key)
-        row = self.conn.execute(
-            f"SELECT {_SELECT_FEATURE} FROM features WHERE id = ?", [target_id]
-        ).fetchone()
-        if row is None:
-            raise FeatureNotFoundError(target_id)
+    def _build_feature(self, row, segments=None) -> Feature:
+        """The one place a database row becomes a `Feature`.
+
+        Both construction sites route through here so the database-wide
+        rendering settings cannot reach one and miss the other -- they used to
+        be stored on `FeatureDB` and never passed on at all, which made
+        `keep_order` and `sort_attribute_values` silently inert.
+        """
         return feature_from_row(
             row,
             dialect=self.dialect,
             keep_order=self.keep_order,
             sort_attribute_values=self.sort_attribute_values,
+            segments=segments,
         )
+
+    def __getitem__(self, key) -> Feature:
+        target_id = _require_feature_id(key)
+        # Project `n_segments` only where a multipart feature can exist, so a
+        # v1 shim database -- which has no such column -- still answers, and so
+        # the overwhelmingly common single-segment lookup costs no extra query.
+        extra = ", n_segments" if self._n_multipart else ""
+        row = self.conn.execute(
+            f"SELECT {_SELECT_FEATURE}{extra} FROM features WHERE id = ?", [target_id]
+        ).fetchone()
+        if row is None:
+            raise FeatureNotFoundError(target_id)
+        if not extra:
+            return self._build_feature(row)
+
+        row, n_segments = row[:-1], row[-1]
+        if n_segments <= 1:
+            return self._build_feature(row)
+        # A lazy loader rather than an eager fetch: `db[id]` is often used to
+        # read a coordinate or an attribute, and those need no segments at all.
+        segments = self._prefetch_segments([target_id]).get(target_id, [])
+        return self._build_feature(row, segments)
 
     def __contains__(self, key) -> bool:
         target_id = key.id if isinstance(key, Feature) else key
@@ -647,6 +673,7 @@ class FeatureDB:
         featuretype: str | list[str] | None = None,
         completely_within: bool = False,
         format: str = "arrow",
+        explode_segments: bool = False,
     ):
         """Bulk overlap query. Performs a SINGLE spatial JOIN between every
         input region and the features table, returning a column-oriented
@@ -666,9 +693,21 @@ class FeatureDB:
         format : "arrow" | "df" | "polars"
             Return shape (default `"arrow"`).
 
+        explode_segments : bool
+            Emit one row per physical INPUT LINE rather than one per logical
+            feature, adding a `seg_idx` column. A discontinuous feature then
+            contributes a row per segment, each with its own coordinates,
+            score and phase -- which is what a caller writing a coverage track
+            or exporting to a line-oriented format actually needs.
+
+            Offered on the tabular APIs only, never on `region()` /
+            `children()` / `all_features()`: those must keep yielding
+            `Feature` objects, and letting `FeatureSegment` rows leak into
+            them would corrupt legacy consumers.
+
         Result columns are query_idx, query_seqid, query_start,
         query_end, id, seqid, source, featuretype, start, end, score,
-        strand, frame, file_order.
+        strand, frame, file_order -- plus seg_idx when `explode_segments`.
         """
         rows = []
         for r in regions:
@@ -680,7 +719,7 @@ class FeatureDB:
                 continue
             rows.append((seqid, int(rs), int(re_)))
         if not rows:
-            return self._empty_region_batched(format)
+            return self._empty_region_batched(format, explode_segments)
 
         import pyarrow as pa
 
@@ -710,8 +749,30 @@ class FeatureDB:
             # parameters. Empty -- and so byte-identical to v1 -- unless this
             # database actually holds a multipart feature. `sg`, not `s`: the
             # R-tree arm already binds `s` to the seqid lookup.
+            # Exploding replaces the logical projection with `segments_all`,
+            # which yields exactly one row per physical input line. The join to
+            # `features` stays -- it is what carries the R-tree predicate -- so
+            # the spatial index is still doing the selection and the extra join
+            # only expands the rows it found.
+            src = "sa" if explode_segments else "f"
+            seg_cols = ", sa.seg_idx" if explode_segments else ""
+            # `(query_idx, start)` alone is not a total order: two features
+            # sharing a start came back in whatever order the join happened to
+            # produce, which differed between the logical and exploded forms of
+            # the same query. `id` makes it deterministic, and `seg_idx` keeps a
+            # feature's own lines in file order.
+            seg_order = ", sa.seg_idx" if explode_segments else ""
+            explode_join = ""
+            if explode_segments:
+                bounds = (
+                    'sa.start >= q.query_start AND sa."end" <= q.query_end'
+                    if completely_within
+                    else 'sa.start <= q.query_end AND sa."end" >= q.query_start'
+                )
+                explode_join = " JOIN segments_all sa ON sa.feature_id = f.id AND " + bounds
+
             seg_clause = ""
-            if self._n_multipart and not completely_within:
+            if self._n_multipart and not completely_within and not explode_segments:
                 seg_clause = (
                     " AND (f.n_segments = 1 OR EXISTS ("
                     "SELECT 1 FROM segments sg WHERE sg.feature_id = f.id "
@@ -731,9 +792,9 @@ class FeatureDB:
                     )
                     SELECT
                         q.query_idx, q.query_seqid, q.query_start, q.query_end,
-                        f.id, f.seqid, f.source, f.featuretype,
-                        f.start, f."end" AS "end",
-                        f.score, f.strand, f.frame, f.file_order
+                        f.id, {src}.seqid, {src}.source, {src}.featuretype,
+                        {src}.start, {src}."end" AS "end",
+                        {src}.score, {src}.strand, {src}.frame, {src}.file_order{seg_cols}
                     FROM __staging_regions q
                     JOIN seqid_lookup s ON s.seqid = q.query_seqid
                     JOIN features f
@@ -741,25 +802,25 @@ class FeatureDB:
                       AND ST_Intersects(
                           f.bbox,
                           ST_MakeEnvelope(q.query_start, s.seqid_y,
-                                          q.query_end,   s.seqid_y + 1))
+                                          q.query_end,   s.seqid_y + 1)){explode_join}
                     WHERE 1=1{within_clause}{seg_clause}{ft_clause}
-                    ORDER BY q.query_idx, f.start
+                    ORDER BY q.query_idx, {src}.start, f.id{seg_order}
                 """
                 params = list(seqid_y_params) + ft_params
             else:
                 sql = f"""
                     SELECT
                         q.query_idx, q.query_seqid, q.query_start, q.query_end,
-                        f.id, f.seqid, f.source, f.featuretype,
-                        f.start, f."end" AS "end",
-                        f.score, f.strand, f.frame, f.file_order
+                        f.id, {src}.seqid, {src}.source, {src}.featuretype,
+                        {src}.start, {src}."end" AS "end",
+                        {src}.score, {src}.strand, {src}.frame, {src}.file_order{seg_cols}
                     FROM __staging_regions q
                     JOIN features f
                       ON f.seqid = q.query_seqid
                       AND f.start <= q.query_end
-                      AND f."end"  >= q.query_start
+                      AND f."end"  >= q.query_start{explode_join}
                     WHERE 1=1{within_clause}{seg_clause}{ft_clause}
-                    ORDER BY q.query_idx, f.start
+                    ORDER BY q.query_idx, {src}.start, f.id{seg_order}
                 """
                 params = list(ft_params)
 
@@ -770,7 +831,7 @@ class FeatureDB:
             except Exception:
                 pass
 
-    def _empty_region_batched(self, format: str):
+    def _empty_region_batched(self, format: str, explode_segments: bool = False):
         import pyarrow as pa
 
         schema = pa.schema(
@@ -790,6 +851,9 @@ class FeatureDB:
                 ("frame", pa.string()),
                 ("file_order", pa.int64()),
             ]
+            # An empty result must have the SAME columns as a populated one,
+            # or a caller reading `seg_idx` breaks exactly when nothing matched.
+            + ([("seg_idx", pa.int32())] if explode_segments else [])
         )
         empty = pa.table({name: [] for name in schema.names}, schema=schema)
         fmt = format.lower()
@@ -880,6 +944,7 @@ class FeatureDB:
         level: int | None = None,
         featuretype: str | list[str] | None = None,
         format: str = "arrow",
+        explode_segments: bool = False,
     ):
         """Bulk children lookup. Returns the descendants of ALL `feature_ids`
         in a single vectorized DuckDB query.
@@ -896,9 +961,15 @@ class FeatureDB:
         format : "arrow" | "df" | "polars"
             Return shape (default `"arrow"` — `pyarrow.Table`).
 
+        explode_segments : bool
+            Emit one row per physical INPUT LINE rather than one per logical
+            feature, adding a `seg_idx` column. Tabular APIs only -- see
+            `region_batched`.
+
         Result columns are anchor (the parent ID supplied),
         descendant_id, seqid, source, featuretype, start, end, score,
-        strand, frame, file_order, depth.
+        strand, frame, file_order, depth -- plus seg_idx when
+        `explode_segments`.
         """
         return self._batched_relation(
             feature_ids,
@@ -906,6 +977,7 @@ class FeatureDB:
             featuretype=featuretype,
             direction="children",
             format=format,
+            explode_segments=explode_segments,
         )
 
     def parents_batched(
@@ -914,6 +986,7 @@ class FeatureDB:
         level: int | None = None,
         featuretype: str | list[str] | None = None,
         format: str = "arrow",
+        explode_segments: bool = False,
     ):
         """Bulk parents lookup. Mirrors `children_batched` but walks the
         closure / edges in the reverse direction."""
@@ -923,6 +996,7 @@ class FeatureDB:
             featuretype=featuretype,
             direction="parents",
             format=format,
+            explode_segments=explode_segments,
         )
 
     def _batched_relation(
@@ -933,11 +1007,14 @@ class FeatureDB:
         featuretype,
         direction: str,
         format: str,
+        explode_segments: bool = False,
     ):
         ids = self._coerce_id_list(feature_ids)
         if not ids:
             return self._empty_batched_result(
-                format, "children" if direction == "children" else "parents"
+                format,
+                "children" if direction == "children" else "parents",
+                explode_segments,
             )
 
         # Decide cache vs dynamic the same way the row-by-row dispatcher
@@ -949,6 +1026,14 @@ class FeatureDB:
         ph = ",".join("?" * len(ids))
         ft_where, ft_params = self._featuretype_filter(featuretype, qualifier="f")
         ft_clause = (" AND " + " AND ".join(ft_where)) if ft_where else ""
+
+        # `segments_all` yields one row per physical input line and, for a
+        # singleton feature, exactly that feature's own row -- so swapping the
+        # joined relation is the whole of "explode". `id` becomes `feature_id`
+        # there, since a row is now a line rather than a feature.
+        rel = "segments_all" if explode_segments else "features"
+        id_col = "feature_id" if explode_segments else "id"
+        seg_cols = ", f.seg_idx" if explode_segments else ""
 
         if direction == "children":
             anchor_alias, descendant_alias = "ancestor", "descendant"
@@ -973,12 +1058,12 @@ class FeatureDB:
                 )
                 SELECT
                     w.anchor       AS anchor,
-                    f.id           AS descendant_id,
+                    f.{id_col}     AS descendant_id,
                     f.seqid, f.source, f.featuretype,
                     f.start, f."end" AS "end",
-                    f.score, f.strand, f.frame, f.file_order, w.depth
+                    f.score, f.strand, f.frame, f.file_order, w.depth{seg_cols}
                 FROM walk w
-                JOIN features f ON f.id = w.id
+                JOIN {rel} f ON f.{id_col} = w.id
                 WHERE 1=1{depth_filter}{ft_clause}
             """
             params: list = list(ids) + [max_walk]
@@ -991,12 +1076,12 @@ class FeatureDB:
             cte = f"""
                 SELECT
                     c.{anchor_alias}     AS anchor,
-                    f.id                  AS descendant_id,
+                    f.{id_col}            AS descendant_id,
                     f.seqid, f.source, f.featuretype,
                     f.start, f."end" AS "end",
-                    f.score, f.strand, f.frame, f.file_order, c.depth
+                    f.score, f.strand, f.frame, f.file_order, c.depth{seg_cols}
                 FROM closure c
-                JOIN features f ON f.id = c.{descendant_alias}
+                JOIN {rel} f ON f.{id_col} = c.{descendant_alias}
                 WHERE c.{anchor_alias} IN ({ph}){depth_filter}{ft_clause}
             """
             params = list(ids)
@@ -1055,7 +1140,7 @@ class FeatureDB:
                 ) from e
         raise ValueError(f"format must be one of 'arrow' | 'df' | 'polars'; got {format!r}")
 
-    def _empty_batched_result(self, format: str, direction: str):
+    def _empty_batched_result(self, format: str, direction: str, explode_segments: bool = False):
         """Return a properly-typed empty result when the input id list is
         empty. Avoids issuing a SQL query at all."""
         import pyarrow as pa
@@ -1075,6 +1160,7 @@ class FeatureDB:
                 ("file_order", pa.int64()),
                 ("depth", pa.int16()),
             ]
+            + ([("seg_idx", pa.int32())] if explode_segments else [])
         )
         empty = pa.table({name: [] for name in schema.names}, schema=schema)
         fmt = format.lower()
@@ -1348,6 +1434,11 @@ class FeatureDB:
         placeholders = ",".join("?" * len(ids))
         self.conn.execute(f"DELETE FROM features WHERE id IN ({placeholders})", ids)
         self.conn.execute(f"DELETE FROM attributes WHERE feature_id IN ({placeholders})", ids)
+        # `segments` too. Without this the segment rows outlive their feature,
+        # and `segments_all` joins them straight back -- so every physical-level
+        # consumer (`export_sqlite`, the validator, `explode_segments`) would
+        # keep reporting lines of a feature the caller deleted.
+        self.conn.execute(f"DELETE FROM segments WHERE feature_id IN ({placeholders})", ids)
         self.conn.execute(
             f"DELETE FROM edges WHERE parent IN ({placeholders}) OR child IN ({placeholders})",
             ids + ids,
@@ -1763,16 +1854,62 @@ class FeatureDB:
     # Internal: row → Feature streaming
     # ------------------------------------------------------------------
 
+    #: Rows pulled from DuckDB per round trip, and the boundary at which
+    #: segments are prefetched.
+    _CHUNK = 10_000
+
+    def _segment_cursor(self):
+        """A cursor of our own for segment prefetches.
+
+        A DuckDB connection holds ONE result set: running a query on it
+        discards whatever the previous `execute` was still streaming. So
+        prefetching segments on `self.conn` in the middle of `_yield_features`
+        silently truncated iteration at the first chunk boundary -- the
+        FlyBase 50k corpus came back as 10 069 lines instead of 49 981, and
+        nothing raised. `cursor()` gives an independent connection to the same
+        database, so the two queries no longer interfere.
+        """
+        if self._seg_cursor is None:
+            self._seg_cursor = self.conn.cursor()
+        return self._seg_cursor
+
+    def _prefetch_segments(self, ids: list[str]) -> dict[str, list]:
+        """Segment rows for a whole chunk of features, keyed by feature id.
+
+        One query per chunk rather than one per feature: `MultipartFeature`
+        would otherwise lazily load its own segments and iterating a corpus
+        with 345 discontinuous features would be 345 extra round trips.
+
+        Only multipart features have rows in `segments`, so the result is
+        empty for every ordinary feature and the returned map doubles as the
+        test for which rows need upgrading.
+        """
+        rows = (
+            self._segment_cursor()
+            .execute(
+                'SELECT feature_id, seg_idx, start, "end", score, frame, '
+                "attributes_blob, extra_blob, file_order "
+                "FROM segments WHERE feature_id IN (SELECT UNNEST(?::VARCHAR[])) "
+                "ORDER BY feature_id, seg_idx",
+                [ids],
+            )
+            .fetchall()
+        )
+        out: dict[str, list] = {}
+        for row in rows:
+            out.setdefault(row[0], []).append(row)
+        return out
+
     def _yield_features(self, sql: str, params: list) -> Iterator[Feature]:
         cur = self.conn.execute(sql, params)
+        # `_n_multipart` is read once at open. At zero -- every GTF corpus, all
+        # of GENCODE, every database migrated from v1 -- this whole path costs
+        # one attribute test per chunk of 10 000 rows.
+        multipart = bool(self._n_multipart)
         while True:
-            rows = cur.fetchmany(10_000)
+            rows = cur.fetchmany(self._CHUNK)
             if not rows:
                 return
+            segments = self._prefetch_segments([r[0] for r in rows]) if multipart else {}
             for row in rows:
-                yield feature_from_row(
-                    row,
-                    dialect=self.dialect,
-                    keep_order=self.keep_order,
-                    sort_attribute_values=self.sort_attribute_values,
-                )
+                yield self._build_feature(row, segments.get(row[0]))

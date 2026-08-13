@@ -777,12 +777,28 @@ def db_row_projection(alias: str | None = None) -> str:
     return ", ".join(parts)
 
 
+#: Column order of the `segments` rows `feature_from_row` accepts, matching the
+#: projection in `FeatureDB._prefetch_segments`.
+_SEGMENT_ROW_FIELDS = (
+    "feature_id",
+    "seg_idx",
+    "start",
+    "end",
+    "score",
+    "frame",
+    "attributes_blob",
+    "extra_blob",
+    "file_order",
+)
+
+
 def feature_from_row(
     row,
     dialect: dict | None = None,
     *,
     keep_order: bool = False,
     sort_attribute_values: bool = False,
+    segments=None,
 ) -> Feature:
     """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes.
 
@@ -790,6 +806,11 @@ def feature_from_row(
     control how a feature renders itself, so they have to reach every feature
     the database hands out. They used to be stored on `FeatureDB` and never
     passed on, which made both options inert.
+
+    Passing `segments` -- prefetched rows from the `segments` table -- produces
+    a `MultipartFeature` instead. Presence of those rows IS the test: only a
+    discontinuous feature has any, so no extra column is needed in the
+    projection, which is also what keeps a v1 database readable.
     """
     (
         fid,
@@ -805,20 +826,71 @@ def feature_from_row(
         extra_blob,
         file_order,
     ) = row
-    return Feature(
-        seqid=seqid,
-        source=source,
-        featuretype=featuretype,
+    score = score if score is not None else "."
+    strand = strand if strand is not None else "."
+    dialect = dialect or {"fmt": "gff3"}
+    shared = {
+        "seqid": seqid,
+        "source": source,
+        "featuretype": featuretype,
+        "id": fid,
+        "dialect": dialect,
+        "keep_order": keep_order,
+        "sort_attribute_values": sort_attribute_values,
+    }
+    if not segments:
+        return Feature(
+            start=start,
+            end=end,
+            score=score,
+            strand=strand,
+            frame=frame if frame is not None else ".",
+            attributes=blob if blob is not None else None,
+            extra=extra_blob if extra_blob else None,
+            file_order=file_order,
+            **shared,
+        )
+
+    # `seqid`, `source`, `featuretype` and `strand` are invariant across
+    # segments -- the ingest predicate guarantees it -- so each segment takes
+    # them from the logical row and supplies only its own coordinates, score,
+    # phase and column 9. That is what makes `str(segment)` reproduce the
+    # input line byte for byte.
+    parts = [
+        FeatureSegment(
+            start=seg_start,
+            end=seg_end,
+            score=seg_score if seg_score is not None else ".",
+            strand=strand,
+            frame=seg_frame if seg_frame is not None else ".",
+            attributes=bytes(seg_blob) if seg_blob is not None else None,
+            extra=seg_extra if seg_extra else None,
+            file_order=seg_order,
+            seg_idx=seg_idx,
+            **shared,
+        )
+        for (
+            _fid,
+            seg_idx,
+            seg_start,
+            seg_end,
+            seg_score,
+            seg_frame,
+            seg_blob,
+            seg_extra,
+            seg_order,
+        ) in segments
+    ]
+    return MultipartFeature(
         start=start,
         end=end,
-        score=score if score is not None else ".",
-        strand=strand if strand is not None else ".",
+        score=score,
+        strand=strand,
         frame=frame if frame is not None else ".",
         attributes=blob if blob is not None else None,
         extra=extra_blob if extra_blob else None,
-        id=fid,
-        dialect=dialect or {"fmt": "gff3"},
         file_order=file_order,
-        keep_order=keep_order,
-        sort_attribute_values=sort_attribute_values,
+        n_segments=len(parts),
+        segments=parts,
+        **shared,
     )
