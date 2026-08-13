@@ -396,6 +396,44 @@ class FeatureDB:
             completely_within=completely_within,
         )
 
+    def _segment_overlap(self, start, end, *, qualifier: str = ""):
+        """Recheck conjunct for a region *overlap* query. ``([], [])`` when not
+        needed, which is the overwhelmingly common case.
+
+        A multipart feature's stored coordinates are the envelope over its
+        segments, so an envelope-based overlap test is a *superset* of the true
+        answer: a feature whose two segments straddle the query region matches
+        on its envelope while overlapping nothing. GFF3 semantics are that a
+        discontinuous feature overlaps a region when any of its segments does,
+        so those have to be filtered back out.
+
+        Three properties make this nearly free:
+
+        * It is omitted entirely when no feature in the database is multipart
+          -- every GTF corpus, all of GENCODE, every database migrated from v1
+          -- and the emitted SQL is then byte-identical to v1's.
+        * `n_segments = 1` short-circuits the `EXISTS`, so even in a database
+          that does have multipart features the subquery is evaluated only for
+          the handful of rows that need it.
+        * It is a separate top-level conjunct, so `ST_Intersects` stays a
+          top-level conjunct too and the planner still picks the R-tree.
+
+        Not needed for ``completely_within``: an envelope lies inside the
+        region exactly when all of its segments do, so the envelope test is
+        already exact there.
+        """
+        if not self._n_multipart or start is None or end is None:
+            return [], []
+        q = f"{qualifier}." if qualifier else ""
+        return (
+            [
+                f"({q}n_segments = 1 OR EXISTS ("
+                f"SELECT 1 FROM segments s WHERE s.feature_id = {q}id "
+                'AND s.start <= ? AND s."end" >= ?))'
+            ],
+            [end, start],
+        )
+
     def _build_scan_sql(
         self,
         *,
@@ -423,6 +461,9 @@ class FeatureDB:
                 else:
                     where.append('start <= ? AND "end" >= ?')
                     params.extend([rend, rstart])
+                    seg_where, seg_params = self._segment_overlap(rstart, rend)
+                    where.extend(seg_where)
+                    params.extend(seg_params)
         if strand is not None:
             where.append("strand = ?")
             params.append(strand)
@@ -507,6 +548,10 @@ class FeatureDB:
         if completely_within:
             where.append('start >= ? AND "end" <= ?')
             params.extend([start, end])
+        else:
+            seg_where, seg_params = self._segment_overlap(start, end)
+            where.extend(seg_where)
+            params.extend(seg_params)
         if strand is not None:
             where.append("strand = ?")
             params.append(strand)
@@ -535,6 +580,9 @@ class FeatureDB:
                 # Standard overlap: feature.start <= region.end AND feature.end >= region.start
                 where.append('start <= ? AND "end" >= ?')
                 params.extend([end, start])
+                seg_where, seg_params = self._segment_overlap(start, end)
+                where.extend(seg_where)
+                params.extend(seg_params)
         elif start is not None:
             where.append("start >= ?")
             params.append(start)
@@ -657,6 +705,18 @@ class FeatureDB:
                 if completely_within
                 else ""
             )
+            # Same envelope-superset recheck as `_segment_overlap`, but
+            # correlated against the staged query columns rather than bound
+            # parameters. Empty -- and so byte-identical to v1 -- unless this
+            # database actually holds a multipart feature. `sg`, not `s`: the
+            # R-tree arm already binds `s` to the seqid lookup.
+            seg_clause = ""
+            if self._n_multipart and not completely_within:
+                seg_clause = (
+                    " AND (f.n_segments = 1 OR EXISTS ("
+                    "SELECT 1 FROM segments sg WHERE sg.feature_id = f.id "
+                    'AND sg.start <= q.query_end AND sg."end" >= q.query_start))'
+                )
 
             if self._rtree_built and self._seqid_y_map:
                 # Inline the seqid → seqid_y map as a small VALUES table so
@@ -682,7 +742,7 @@ class FeatureDB:
                           f.bbox,
                           ST_MakeEnvelope(q.query_start, s.seqid_y,
                                           q.query_end,   s.seqid_y + 1))
-                    WHERE 1=1{within_clause}{ft_clause}
+                    WHERE 1=1{within_clause}{seg_clause}{ft_clause}
                     ORDER BY q.query_idx, f.start
                 """
                 params = list(seqid_y_params) + ft_params
@@ -698,7 +758,7 @@ class FeatureDB:
                       ON f.seqid = q.query_seqid
                       AND f.start <= q.query_end
                       AND f."end"  >= q.query_start
-                    WHERE 1=1{within_clause}{ft_clause}
+                    WHERE 1=1{within_clause}{seg_clause}{ft_clause}
                     ORDER BY q.query_idx, f.start
                 """
                 params = list(ft_params)
@@ -1249,6 +1309,9 @@ class FeatureDB:
             else:
                 where.append(f'{qualifier}.start <= ? AND {qualifier}."end" >= ?')
                 params.extend([rend, rstart])
+                seg_where, seg_params = self._segment_overlap(rstart, rend, qualifier=qualifier)
+                where.extend(seg_where)
+                params.extend(seg_params)
         return where, params
 
     @staticmethod
