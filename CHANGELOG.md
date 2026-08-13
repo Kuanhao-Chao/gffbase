@@ -125,6 +125,51 @@ transactional storage, and a release pipeline gated on validation.
   those callers instead of forcing a choice. `FeatureNotFoundError` is
   deliberately left on `Exception`.
 
+### Added
+
+- **`mode="compat"` / `mode="strict"`.** Validation conflated two independent
+  questions -- which rules apply, and what a violation does. They are now
+  separate axes (`validation`, `on_error`) behind one switch, with `compat` as
+  the default for `create_db` and `strict` for `parse_gff`. `strict=` keeps
+  working for one deprecation cycle; passing it together with `on_error=`
+  raises `TypeError`.
+- `FeatureDB.warnings` reports every specification violation tolerated while
+  building the database, with kind, line number and message -- so a compat-mode
+  caller gets exactly gffutils' data *plus* a diagnostic gffutils never
+  offered.
+- `docs/design/schema-v2.md` records the design for schema v2, the multipart
+  feature model, and this mode axis.
+
+### Fixed
+
+- **gffbase rejected 6 of the 23 upstream fixtures gffutils reads**, including
+  `FBgn0031208.gff`, gffutils' own canonical fixture. `rust/src/validate.rs`
+  validated to the NCBI GFF3 specification unconditionally, but `create_db()`
+  is the compatibility entry point and real annotation files break that spec
+  routinely. Under `compat` the rules still run and every violation is
+  reported, but the record is kept. Corpus-wide result: **0 rejections, and 23
+  of 28 files now produce byte-identical feature counts.**
+- **An embedded FASTA section without a `##FASTA` directive was parsed as
+  features.** A bare `>` line ends the feature section in gffutils; gffbase
+  only stopped at the directive, so `FBgn0031208.gff` gained three junk
+  features from its sequence lines.
+- **The two engines disagreed on padded coordinates.** Python's `int()` strips
+  surrounding whitespace and Rust's `parse::<i64>()` does not, so the Rust
+  engine dropped any record with a coordinate like `944828 ` while the
+  pure-Python fallback kept it -- a silent, engine-dependent difference in
+  which records exist. `wormbase_gff2.txt` exercises it.
+
+### Intentional deviations
+
+- **Attribute keys are stripped of surrounding whitespace, and the empty key a
+  trailing `;` produces is dropped.** The oracle keeps both literally, and on
+  `FBgn0031208.gff` line 84 that costs it real data: the line separates
+  attributes with `; ` while the file's inferred separator is `;`, so the key
+  is stored as `' Parent'`, relationship building looks up `'Parent'`, and the
+  edge silently vanishes -- `db.parents("CDS:Fk_gene_1:1")` returns `[]` under
+  gffutils and `["Fk_gene_1", "transcript_Fk_gene_1"]` under gffbase.
+  Compatibility mode preserves quirks, but not data-loss defects.
+
 ### Known gaps recorded by the new harness
 
 Not yet fixed, but now measured and pinned rather than unknown:
@@ -133,15 +178,6 @@ Not yet fixed, but now measured and pinned rather than unknown:
   inferred gene/transcript rows as well as authored ones; gffbase keys
   inferred rows on the `transcript_id` attribute unconditionally, so a custom
   scalar id_spec over a GTF yields extra rows.
-- **gffbase rejects 6 of the 23 fixtures the oracle ingests**, including
-  `FBgn0031208.gff`, the canonical gffutils fixture. The parser validates to
-  the NCBI GFF3 spec unconditionally, but `create_db()` is the drop-in entry
-  point and real files violate that spec routinely. Four rules are too strict
-  for the compatibility path: `InvalidPhase` (a CDS row with `.` phase, which
-  FlyBase and WormBase both emit), `TooFewFields` (space-delimited GFF),
-  `InvalidCoordinate` (`end < start` -- which is exactly what the sanitize
-  tooling exists to repair, so rejecting it makes sanitize impossible), and
-  `InvalidAttribute` (GFF2 `key value` attributes with no `=`).
 - Attribute escaping is lost once attributes are materialized.
 - The oracle weights its dialect vote by attribute count; gffbase weights all
   sampled lines equally.

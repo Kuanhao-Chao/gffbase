@@ -41,7 +41,7 @@ mod parser;
 mod validate;
 
 use parser::{FileSource, ParseOptions, RecordIter};
-use validate::GffError;
+use validate::{GffError, ValidationProfile};
 
 // Phase 16: descriptive parser errors. Subclassing `PyValueError` keeps
 // legacy `pytest.raises(ValueError)` calls working while letting users
@@ -63,9 +63,24 @@ fn gff_error_to_py(py: Python<'_>, e: GffError) -> PyErr {
     err
 }
 
+/// Map the Python-facing profile name onto the enum.
+///
+/// `"gffutils"` is the compatibility rule set used by `create_db()`;
+/// `"ncbi"` is the full specification. Anything else is a caller error.
+fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
+    match name {
+        "gffutils" | "compat" => Ok(ValidationProfile::Gffutils),
+        "ncbi" | "strict" => Ok(ValidationProfile::Ncbi),
+        other => Err(PyValueError::new_err(format!(
+            "validation must be 'gffutils' or 'ncbi'; got {:?}",
+            other
+        ))),
+    }
+}
+
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
+#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
 fn parse_file(
     py: Python<'_>,
     path: &str,
@@ -73,12 +88,14 @@ fn parse_file(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
+    validation: &str,
 ) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
         strict,
+        profile: parse_profile(validation)?,
     };
     let source = FileSource::open(path)
         .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
@@ -90,7 +107,7 @@ fn parse_file(
 
 /// Parse an in-memory byte buffer. Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
+#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -98,12 +115,14 @@ fn parse_bytes(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
+    validation: &str,
 ) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
         strict,
+        profile: parse_profile(validation)?,
     };
     let source = FileSource::from_bytes(data.to_vec());
     let iter = RecordIter::new(source, opts)
@@ -126,6 +145,7 @@ fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<Py<
         // Dialect detection is non-strict by design: malformed lines in
         // the first `checklines` get skipped without poisoning detection.
         strict: false,
+        profile: ValidationProfile::Gffutils,
     };
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;

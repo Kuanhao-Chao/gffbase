@@ -71,6 +71,13 @@ class IngestStats:
     fmt: str = "gff3"
     dialect: dict = None  # type: ignore[assignment]
     directives: list[str] = None  # type: ignore[assignment]
+    #: Specification violations the parser tolerated. Non-empty only under
+    #: `mode="compat"`, where a violating record is kept and annotated rather
+    #: than rejected -- so the caller gets gffutils' data plus a diagnostic
+    #: gffutils never offered.
+    warnings: list[dict] = None  # type: ignore[assignment]
+    #: Records dropped by a `transform` callback or by `merge_strategy`.
+    n_skipped: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +451,8 @@ def from_file(
         checklines=options.checklines,
         force_dialect_check=options.force_dialect_check,
         force_gff=options.force_gff,
+        validation=options.resolved_mode.validation,
+        strict=options.resolved_mode.raises,
     )
     seqid_to_y: dict = {}
     builder = _ArrowBatchBuilder(seqid_to_y, has_spatial=has_spatial)
@@ -624,6 +633,8 @@ def from_file(
         fmt=fmt,
         dialect=dialect,
         directives=directives,
+        warnings=list(getattr(it, "warnings", []) or []),
+        n_skipped=n_skipped,
     )
 
 

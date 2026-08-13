@@ -375,14 +375,32 @@ def test_gff_format_error_carries_repr_friendly_attrs(engine):
 # ---------------------------------------------------------------------------
 
 
-def test_create_db_strict_default_raises_on_bad_line(tmp_path):
-    """``create_db`` defaults to strict parsing. A single bad row
-    sinks the whole ingest with a ``GFFFormatError`` carrying the
-    exact line number."""
+def test_create_db_tolerates_a_bad_line_and_reports_it(tmp_path):
+    """``create_db`` defaults to `mode="compat"`, so a spec violation is
+    recorded rather than fatal.
+
+    This test previously asserted the opposite. Rejecting on the drop-in path
+    is what made gffbase refuse six of the twenty-three upstream fixtures
+    gffutils reads, including gffutils' own canonical one -- so the default
+    changed, and the diagnostic is how the information is kept.
+    """
+    src = tmp_path / "bad.gff3"
+    src.write_text(
+        "chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\nchr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
+    )
+    db = create_db(str(src), str(tmp_path / "out.duckdb"), force=True)
+    assert db.count_features_of_type() == 2
+    (warning,) = db.warnings
+    assert warning["kind"] == "InvalidCoordinate"
+    assert warning["line_no"] == 2
+
+
+def test_create_db_strict_mode_raises_on_bad_line(tmp_path):
+    """``mode="strict"`` still rejects, with the exact line number."""
     src = tmp_path / "bad.gff3"
     src.write_text(
         "chr1\trs\texon\t1\t10\t.\t+\t.\tID=ok\nchr1\trs\texon\t-5\t10\t.\t+\t.\tID=neg\n"
     )
     with pytest.raises(GFFFormatError) as excinfo:
-        create_db(str(src), str(tmp_path / "out.duckdb"), force=True)
+        create_db(str(src), str(tmp_path / "out.duckdb"), force=True, mode="strict")
     assert excinfo.value.line_no == 2

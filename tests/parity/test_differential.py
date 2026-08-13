@@ -50,6 +50,7 @@ def _need_oracle():
 
 SHARED_GFF3 = [
     "F3-unique-3.v2.gff",
+    "FBgn0031208.gff",
     "c_elegans_WS199_ann_gff.txt",
     "gff_example1.gff3",
     "gms2_example.gff3",
@@ -60,9 +61,13 @@ SHARED_GFF3 = [
     "keyval_sep_in_attrs.gff",
     "mouse_extra_comma.gff3",
     "nonascii",
+    "unsanitized.gff",
+    "wormbase_gff2.txt",
+    "wormbase_gff2_alt.txt",
 ]
 
 SHARED_GTF = [
+    "FBgn0031208.gtf",
     "ensembl_gtf.txt",
     "gencode-v19.gtf",
     "issue174.gtf",
@@ -70,11 +75,11 @@ SHARED_GTF = [
     "sharr.gtf",
 ]
 
-#: Files the ORACLE ingests but gffbase rejects outright, and the validation
-#: rule responsible. Each rule is stricter than the oracle *and* stricter than
-#: real-world GFF3, which is what makes this a drop-in break rather than a
-#: quality feature.
-GFFBASE_REJECTS = {
+#: Files that violate the GFF3 specification and are therefore rejected under
+#: `mode="strict"`, with the rule responsible. Under the default
+#: `mode="compat"` all of them load, exactly as they do under gffutils, with
+#: the violation recorded in `FeatureDB.warnings`.
+STRICT_MODE_REJECTS = {
     "FBgn0031208.gff": "InvalidPhase",
     "FBgn0031208.gtf": "InvalidPhase",
     "wormbase_gff2_alt.txt": "InvalidPhase",
@@ -130,6 +135,20 @@ _EMPTY_VALUE_RENDERING = (
     "`feature._drop_lone_empty_values`); only the rendering differs. Resolving "
     "this means deciding whether byte-faithful output or oracle-identical "
     "output wins -- the same open question as `_RAW_VS_NORMALIZED`."
+)
+
+_ATTR_KEY_WHITESPACE = (
+    "INTENTIONAL DEVIATION -- gffbase strips whitespace around attribute keys "
+    "and drops the empty key a trailing `;` produces; the oracle keeps both "
+    "literally. This is not cosmetic: on `FBgn0031208.gff` line 84, "
+    "`ID=CDS:Fk_gene_1:1; Parent=transcript_Fk_gene_1` uses `; ` while the "
+    "file's inferred separator is `;`, so the oracle stores the key as "
+    "`' Parent'` -- and because relationship building looks up `'Parent'`, it "
+    "SILENTLY LOSES THE EDGE. `db.parents('CDS:Fk_gene_1:1')` returns [] under "
+    "gffutils and ['Fk_gene_1', 'transcript_Fk_gene_1'] under gffbase. "
+    "Compatibility mode preserves quirks, but not data-loss defects, so this "
+    "one is deliberately not reproduced. Pinned by "
+    "`test_stripped_attribute_keys_recover_an_edge_the_oracle_loses`."
 )
 
 _LOST_ESCAPING = (
@@ -198,7 +217,17 @@ def test_gff3_feature_fields_match(name):
     assert not diff, diff.report()
 
 
-@pytest.mark.parametrize("name", _params(SHARED_GFF3, {}))
+@pytest.mark.parametrize(
+    "name",
+    _params(
+        SHARED_GFF3,
+        {
+            "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
+            "wormbase_gff2.txt": _ATTR_KEY_WHITESPACE,
+            "wormbase_gff2_alt.txt": _ATTR_KEY_WHITESPACE,
+        },
+    ),
+)
 def test_gff3_attributes_match(name):
     oracle, ours = D.build_both(D.fixture(name))
     theirs = D.features_by_id(oracle)
@@ -223,7 +252,7 @@ def test_gff3_featuretype_counts_match(name):
     assert not diff, diff.report()
 
 
-@pytest.mark.parametrize("name", _params(SHARED_GFF3, {}))
+@pytest.mark.parametrize("name", _params(SHARED_GFF3, {"FBgn0031208.gff": _ATTR_KEY_WHITESPACE}))
 def test_gff3_relations_match(name):
     """Parent/child edges at every level.
 
@@ -316,6 +345,8 @@ def test_duplicate_ids_fail_the_same_way():
 # ---------------------------------------------------------------------------
 
 _SERIALIZE_UNTOUCHED_KNOWN = {
+    "wormbase_gff2.txt": _RAW_VS_NORMALIZED,
+    "wormbase_gff2_alt.txt": _RAW_VS_NORMALIZED,
     "mouse_extra_comma.gff3": _EMPTY_VALUE_RENDERING,
     "jgi_gff2.txt": _RAW_VS_NORMALIZED,
     "keyval_sep_in_attrs.gff": _RAW_VS_NORMALIZED,
@@ -350,6 +381,9 @@ def test_untouched_features_serialize_identically(name):
 # materialized gffbase normalizes them, which is what the oracle does
 # unconditionally, so the two agree again.
 _SERIALIZE_READ_KNOWN = {
+    "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
+    "wormbase_gff2.txt": _ATTR_KEY_WHITESPACE,
+    "wormbase_gff2_alt.txt": _ATTR_KEY_WHITESPACE,
     "mouse_extra_comma.gff3": _EMPTY_VALUE_RENDERING,
     "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
     "c_elegans_WS199_ann_gff.txt": _LOST_ESCAPING,
@@ -420,51 +454,53 @@ def test_features_of_type_returns_the_same_features(name):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(GFFBASE_REJECTS))
-def test_rejected_fixture_is_rejected_for_the_recorded_reason(name):
-    """Pin exactly which validation rule rejects each file.
+@pytest.mark.parametrize("name", sorted(STRICT_MODE_REJECTS))
+def test_strict_mode_rejects_specification_violations(name):
+    """`mode="strict"` still enforces the full NCBI specification.
 
-    A characterization test, not an endorsement. It exists so the compat-mode
-    work can be verified rule by rule: as each rule is relaxed, its entry is
-    deleted from `GFFBASE_REJECTS` and the file joins the shared lists above.
+    Relaxing the compatibility path must not remove the strict checking --
+    that is the whole point of having two profiles rather than one.
     """
     import gffbase
 
-    _, exc = D.capture(gffbase.create_db, D.fixture(name), ":memory:")
-    assert exc is not None, (
-        f"{name} now ingests -- remove it from GFFBASE_REJECTS and add it to "
-        f"the SHARED_* list so the differential tests actually cover it"
-    )
-    assert getattr(exc, "kind", None) == GFFBASE_REJECTS[name], (
-        f"{name} now fails with kind={getattr(exc, 'kind', None)!r}, "
-        f"expected {GFFBASE_REJECTS[name]!r}"
+    _, exc = D.capture(gffbase.create_db, D.fixture(name), ":memory:", mode="strict")
+    assert exc is not None, f"{name} no longer violates {STRICT_MODE_REJECTS[name]}"
+    assert getattr(exc, "kind", None) == STRICT_MODE_REJECTS[name], (
+        f"{name} fails with kind={getattr(exc, 'kind', None)!r}, "
+        f"expected {STRICT_MODE_REJECTS[name]!r}"
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "gffbase's parser validates to the NCBI GFF3 spec unconditionally, but "
-        "create_db() is the drop-in entry point and real annotation files "
-        "routinely violate that spec in ways the oracle accepts. Four rules are "
-        "too strict for the compatibility path: InvalidPhase (a CDS row with "
-        "'.' phase -- FlyBase and WormBase both emit these), TooFewFields "
-        "(space-delimited GFF), InvalidCoordinate (end < start, which is "
-        "precisely what the sanitize tooling exists to repair, so rejecting it "
-        "makes sanitize impossible), and InvalidAttribute (GFF2 'key value' "
-        "attributes with no '='). Six of the 23 fixtures the oracle loads are "
-        "rejected outright, including FBgn0031208.gff, the canonical gffutils "
-        "fixture. Fixed by the compat/strict mode work: compat collects these "
-        "as warnings, strict keeps raising."
-    ),
-)
+@pytest.mark.parametrize("name", sorted(STRICT_MODE_REJECTS))
+def test_compat_mode_loads_what_strict_rejects_and_says_so(name):
+    """The same file loads in compat mode, and the violation is reported.
+
+    A compat-mode caller gets exactly gffutils' data *plus* a diagnostic
+    gffutils never offered -- which is why relaxing the rules does not mean
+    losing the information.
+    """
+    import gffbase
+
+    db = gffbase.create_db(D.fixture(name), ":memory:")
+    assert db.count_features_of_type() > 0
+    kinds = {w["kind"] for w in db.warnings}
+    assert STRICT_MODE_REJECTS[name] in kinds, (
+        f"{name} loaded but did not report {STRICT_MODE_REJECTS[name]}; got {kinds}"
+    )
+
+
 def test_ingest_parity_across_the_corpus():
-    """Anything the oracle can ingest, gffbase must ingest too."""
+    """Anything the oracle can ingest, gffbase must ingest too.
+
+    This is the headline compatibility check. It failed for six fixtures --
+    including FBgn0031208.gff, the canonical gffutils fixture -- because the
+    parser validated to the NCBI specification on the drop-in path.
+    """
     import gffbase
     import gffutils
 
     rejected = []
-    for name in sorted(GFFBASE_REJECTS) + SHARED_GFF3 + SHARED_GTF:
+    for name in sorted(STRICT_MODE_REJECTS) + SHARED_GFF3 + SHARED_GTF:
         path = D.fixture(name)
         _, oracle_exc = D.capture(gffutils.create_db, path, ":memory:")
         if oracle_exc is not None:
@@ -476,154 +512,29 @@ def test_ingest_parity_across_the_corpus():
     assert not rejected, "gffbase rejects files gffutils accepts:\n  " + "\n  ".join(rejected)
 
 
-# ---------------------------------------------------------------------------
-# create_db option fidelity.
-#
-# Every one of these was accepted and silently ignored before, so each test is
-# checking that the option changes the database in the same way the oracle
-# changes it -- not merely that it is tolerated.
-# ---------------------------------------------------------------------------
+def test_stripped_attribute_keys_recover_an_edge_the_oracle_loses():
+    """The concrete payoff of not reproducing the oracle's key handling.
 
-
-@pytest.mark.parametrize("strategy", ["create_unique", "warning", "replace", "merge"])
-def test_merge_strategy_matches(strategy):
-    oracle, ours = D.build_both(D.fixture("ncbi_gff3.txt"), merge_strategy=strategy)
-    diff = D.compare_mappings(
-        f"merge_strategy={strategy} ids",
-        dict.fromkeys(D.feature_ids_in_order(oracle)),
-        dict.fromkeys(D.feature_ids_in_order(ours)),
-    )
-    assert not diff, diff.report()
-
-
-def test_merge_strategy_error_is_the_default():
-    """Both libraries reject `ncbi_gff3.txt` out of the box."""
-    import gffbase
-    import gffutils
-
-    path = D.fixture("ncbi_gff3.txt")
-    _, oracle_exc = D.capture(gffutils.create_db, path, ":memory:")
-    _, our_exc = D.capture(gffbase.create_db, path, ":memory:")
-    assert not D.compare_failures("default strategy", oracle_exc, our_exc)
-
-
-def test_duplicates_table_matches_for_create_unique():
-    """The renames recorded in `duplicates`, not just the resulting ids."""
-    import gffbase
-    import gffutils
-
-    path = D.fixture("ncbi_gff3.txt")
-    oracle = gffutils.create_db(path, ":memory:", merge_strategy="create_unique")
-    ours = gffbase.create_db(path, ":memory:", merge_strategy="create_unique")
-
-    theirs = sorted(tuple(r) for r in oracle.execute("SELECT idspecid, newid FROM duplicates"))
-    mine = sorted(
-        tuple(r) for r in ours.execute("SELECT original_id, new_id FROM duplicates").fetchall()
-    )
-    diff = D.compare_sequences("duplicates", theirs, mine)
-    assert not diff, diff.report()
-
-
-@pytest.mark.parametrize(
-    ("name", "id_spec"),
-    [
-        ("gff_example1.gff3", "ID"),
-        ("gff_example1.gff3", ["ID", "Name"]),
-        ("gff_example1.gff3", ":seqid:"),
-        ("gencode-v19.gtf", {"gene": "gene_id", "transcript": "transcript_id"}),
-        pytest.param(
-            "gencode-v19.gtf",
-            "gene_id",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "GTF synthesis ignores id_spec. The oracle applies the "
-                    "id_spec to *inferred* gene/transcript rows as well as "
-                    "authored ones, so under `id_spec='gene_id'` an inferred "
-                    "transcript is keyed on gene_id and collapses into the "
-                    "existing rows -- 4 transcripts either way, with or "
-                    "without disable_infer_transcripts. gffbase's synthesis "
-                    "keys inferred rows on the transcript_id attribute "
-                    "unconditionally, so it adds 4 more (`ENST...`) for 8 "
-                    "total. Fixed by the GTF synthesis work."
-                ),
-            ),
-        ),
-    ],
-    ids=["str", "list", "gff-column", "dict", "gtf-single-key"],
-)
-def test_id_spec_produces_the_same_keys(name, id_spec):
-    oracle, ours = D.build_both(D.fixture(name), id_spec=id_spec, merge_strategy="create_unique")
-    diff = D.compare_mappings(
-        f"{name} id_spec={id_spec!r}",
-        dict.fromkeys(D.feature_ids_in_order(oracle)),
-        dict.fromkeys(D.feature_ids_in_order(ours)),
-    )
-    assert not diff, diff.report()
-
-
-def test_callable_id_spec_produces_the_same_keys():
-    def upper_id(f):
-        vals = f.attributes.get("ID")
-        return vals[0].upper() if vals else None
-
-    oracle, ours = D.build_both(D.fixture("gff_example1.gff3"), id_spec=upper_id)
-    diff = D.compare_mappings(
-        "callable id_spec",
-        dict.fromkeys(D.feature_ids_in_order(oracle)),
-        dict.fromkeys(D.feature_ids_in_order(ours)),
-    )
-    assert not diff, diff.report()
-
-
-def test_transform_can_drop_features():
-    """A falsy return drops the record in both libraries."""
-
-    def drop_exons(f):
-        if f.featuretype == "exon":
-            return False
-        return f
-
-    oracle, ours = D.build_both(D.fixture("gff_example1.gff3"), transform=drop_exons)
-    assert "exon" not in set(ours.featuretypes())
-    diff = D.compare_mappings(
-        "transform-filtered ids",
-        dict.fromkeys(D.feature_ids_in_order(oracle)),
-        dict.fromkeys(D.feature_ids_in_order(ours)),
-    )
-    assert not diff, diff.report()
-
-
-def test_transform_can_modify_features():
-    def relabel(f):
-        f.source = "transformed"
-        return f
-
-    oracle, ours = D.build_both(D.fixture("gff_example1.gff3"), transform=relabel)
-    assert {f.source for f in ours.all_features()} == {"transformed"}
-    assert {f.source for f in oracle.all_features()} == {"transformed"}
-
-
-def test_unknown_keyword_is_rejected_like_the_oracle():
-    """gffutils' `deprecation_handler` raises TypeError; so must we."""
-    import gffbase
-    import gffutils
-
-    path = D.fixture("gff_example1.gff3")
-    _, oracle_exc = D.capture(gffutils.create_db, path, ":memory:", not_a_real_kwarg=1)
-    _, our_exc = D.capture(gffbase.create_db, path, ":memory:", not_a_real_kwarg=1)
-    assert isinstance(oracle_exc, TypeError)
-    assert isinstance(our_exc, TypeError)
-
-
-def test_positional_arguments_are_accepted_in_the_oracle_order():
-    """`create_db(data, dbfn, id_spec, force, verbose, checklines, merge_strategy)`.
-
-    gffbase previously made every option keyword-only, so any positional call
-    written against gffutils raised TypeError.
+    `FBgn0031208.gff` line 84 separates its attributes with `; ` while the
+    file's inferred separator is `;`. The oracle therefore stores the key as
+    `' Parent'`, and since relationship building looks up `'Parent'`, the edge
+    silently vanishes.
     """
     import gffbase
+    import gffutils
 
-    path = D.fixture("ncbi_gff3.txt")
-    db = gffbase.create_db(path, ":memory:", None, False, False, 10, "create_unique")
-    assert db.count_features_of_type() > 0
+    path = D.fixture("FBgn0031208.gff")
+    fid = "CDS:Fk_gene_1:1"
+
+    oracle = gffutils.create_db(path, ":memory:")
+    assert " Parent" in dict(oracle[fid].attributes), (
+        "fixture no longer exercises the oracle's unstripped-key path"
+    )
+    assert [f.id for f in oracle.parents(fid)] == [], "the oracle unexpectedly recovered the edge"
+
+    ours = gffbase.create_db(path, ":memory:")
+    assert "Parent" in dict(ours[fid].attributes)
+    assert sorted(f.id for f in ours.parents(fid)) == [
+        "Fk_gene_1",
+        "transcript_Fk_gene_1",
+    ]

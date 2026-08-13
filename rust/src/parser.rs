@@ -30,7 +30,9 @@ use memchr::memchr;
 
 use crate::attributes::parse_attributes;
 use crate::dialect::{self, Dialect};
-use crate::validate::{validate_attributes_pairs, validate_fields, ErrorKind, GffError};
+use crate::validate::{
+    validate_attributes_pairs, validate_fields, ErrorKind, GffError, ValidationProfile,
+};
 
 #[derive(Debug, Clone)]
 pub struct Record {
@@ -58,6 +60,10 @@ pub struct ParseOptions {
     /// `warnings` vector — the caller can inspect them via
     /// `RecordIter::warnings()`.
     pub strict: bool,
+    /// Which rule set to apply. `Gffutils` keeps a violating record and
+    /// records a warning; `Ncbi` rejects it (raising or dropping per
+    /// `strict`). See `validate::ValidationProfile`.
+    pub profile: ValidationProfile,
 }
 
 /// A simple text source: either a Vec<u8> we own or a Read trait object.
@@ -98,6 +104,7 @@ pub struct RecordIter {
     fasta_reached: bool,
     line_no: usize,
     strict: bool,
+    profile: ValidationProfile,
     warnings: Vec<GffError>,
 }
 
@@ -119,6 +126,7 @@ impl RecordIter {
             fasta_reached: false,
             line_no: 0,
             strict: opts.strict,
+            profile: opts.profile,
             warnings: Vec::new(),
         };
         iter.peek_dialect(&opts);
@@ -231,22 +239,44 @@ impl RecordIter {
                 self.directives.push(s[2..].to_string());
                 continue;
             }
+            // A bare `>` line starts an embedded FASTA section even without a
+            // preceding `##FASTA` directive -- gffutils stops at either, and
+            // FBgn0031208.gff relies on it. Without this the sequence lines
+            // become degenerate features.
+            if line.first() == Some(&b'>') {
+                self.fasta_reached = true;
+                return None;
+            }
             if line.starts_with(b"#") {
                 continue;
             }
             // Trim trailing \r (Windows files).
             let line = trim_cr(line);
             // Tab split.
-            let fields = split_tabs(line);
+            let mut fields = split_tabs(line);
             if fields.len() < 9 {
-                return Some(Err(GffError::new(
+                let err = GffError::new(
                     cur_line_no,
                     ErrorKind::TooFewFields,
                     format!(
                         "expected at least 9 tab-separated fields, found {}",
                         fields.len()
                     ),
-                )));
+                );
+                if self.profile.rejects() {
+                    return Some(Err(err));
+                }
+                // Compat: gffutils never errors here. `feature_from_line`
+                // splits on tab and `zip(_gffkeys, fields)` truncates, so a
+                // space-delimited line becomes one feature whose seqid is the
+                // whole line and whose remaining columns take their defaults.
+                // Reproducing that is deliberate -- refusing a file the oracle
+                // reads is worse for a drop-in -- and the warning is what
+                // makes it safe.
+                self.warnings.push(err);
+                while fields.len() < 9 {
+                    fields.push(if fields.len() == 8 { b"" } else { b"." });
+                }
             }
             let seqid = bytes_to_string(fields[0]);
             let source = bytes_to_string(fields[1]);
@@ -330,7 +360,7 @@ impl Iterator for RecordIter {
             let raw = match self.next_raw_record() {
                 Some(Ok(r)) => r,
                 Some(Err(e)) => {
-                    if self.strict {
+                    if self.strict && self.profile.rejects() {
                         return Some(Err(e));
                     }
                     self.warnings.push(e);
@@ -354,11 +384,15 @@ impl Iterator for RecordIter {
                 &blob,
                 is_gtf,
             ) {
-                if self.strict {
-                    return Some(Err(e));
+                if self.profile.rejects() {
+                    if self.strict {
+                        return Some(Err(e));
+                    }
+                    self.warnings.push(e);
+                    continue;
                 }
+                // Compat: annotate, keep the record.
                 self.warnings.push(e);
-                continue;
             }
 
             let blob_str = std::str::from_utf8(&blob).unwrap_or("");
@@ -366,11 +400,14 @@ impl Iterator for RecordIter {
             // Post-parse attribute structure check (handles both GFF3 and
             // GTF correctly because it inspects what the parser produced).
             if let Err(e) = validate_attributes_pairs(self.line_no, pairs.len(), &blob, is_gtf) {
-                if self.strict {
-                    return Some(Err(e));
+                if self.profile.rejects() {
+                    if self.strict {
+                        return Some(Err(e));
+                    }
+                    self.warnings.push(e);
+                    continue;
                 }
                 self.warnings.push(e);
-                continue;
             }
             // Suppress unused-warning under release builds (line_no_for_err is a
             // defensive snapshot — not used on the happy path).
@@ -424,9 +461,17 @@ fn bytes_to_string(b: &[u8]) -> String {
 /// for a real integer, and `Err(())` for anything else. The caller turns
 /// the `Err` into a structured `GffError`.
 fn parse_coord_strict(b: &[u8]) -> Result<Option<i64>, ()> {
-    if b == b"." || b.is_empty() {
+    let s = std::str::from_utf8(b).map_err(|_| ())?;
+    // Trim surrounding whitespace before parsing.
+    //
+    // Python's `int()` strips whitespace and Rust's `parse::<i64>()` does not,
+    // so without this the two engines disagree on any file with a padded
+    // coordinate column -- `wormbase_gff2.txt` has `944828 ` and the Rust
+    // engine dropped that record while the pure-Python fallback kept it.
+    // gffutils accepts it, so compat requires accepting it too.
+    let s = s.trim();
+    if s == "." || s.is_empty() {
         return Ok(None);
     }
-    let s = std::str::from_utf8(b).map_err(|_| ())?;
     s.parse::<i64>().map(Some).map_err(|_| ())
 }
