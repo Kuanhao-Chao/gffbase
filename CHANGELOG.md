@@ -351,6 +351,14 @@ nobody can install would only mislead. Everything below is the delta from
 
 ### Fixed
 
+- The `corpus` pytest marker was declared and carried by **no test**, so
+  `pytest -m corpus` selected nothing and reported success. It now has the
+  harness it was declared for (`tests/test_corpus.py`): ingest-and-validate
+  over all five whole-genome annotations, R-tree-vs-B-tree agreement at a
+  scale where the spatial index earns its place, and a byte-faithful round
+  trip. The `native` and `rtree` markers, also unused, are removed — both
+  conditions are handled where they arise. `hypothesis` is no longer a
+  declared test dependency; nothing imported it.
 - **The release workflow could publish from a red tree.** `ci.yml` runs on
   pushes to `main` and `release/*` and **not on tags**, and the publish job
   depended only on the wheel builds — so a tag pushed from a failing tree went
