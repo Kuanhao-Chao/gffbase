@@ -773,24 +773,28 @@ def test_order_clause_qualified_applies_the_same_whitelist():
 
 
 def test_interfeatures_with_merge_attributes_true():
-    """`interface.py` branch at 1206 (`if merge_attributes`) — exercise
-    the True path so attribute-merging executes."""
+    """The `merge_attributes=True` path, and the default featuretype.
+
+    An unnamed interfeature is typed after the two features it sits between
+    (`inter_exon_exon`), not with the constant `"interfeature"`. That constant
+    threw away the only information the name carried -- an intergenic gap and
+    an intron were indistinguishable in the output.
+    """
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     feats = sorted(db.children("t1", featuretype="exon"), key=lambda f: f.start)
     out = list(db.interfeatures(feats, merge_attributes=True))
-    assert all(f.featuretype == "interfeature" for f in out)
+    assert out
+    assert all(f.featuretype == "inter_exon_exon" for f in out)
+    assert all(f.source == db.derived_source for f in out)
 
 
 def test_interfeatures_with_merge_attributes_false():
-    """`interface.py` branch 1206→1213 (False path) — when
-    `merge_attributes=False`, the per-attr accumulation block is
-    skipped entirely."""
+    """`merge_attributes=False` skips the accumulation block entirely."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     feats = sorted(db.children("t1", featuretype="exon"), key=lambda f: f.start)
     out = list(db.interfeatures(feats, merge_attributes=False))
-    # The yielded interfeature has no inherited attributes when merging
-    # is disabled — confirms the accumulator block was skipped.
-    assert all(f.featuretype == "interfeature" for f in out)
+    assert out
+    assert all(f.featuretype == "inter_exon_exon" for f in out)
     assert all(f.attributes == {} for f in out)
 
 

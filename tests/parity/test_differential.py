@@ -603,3 +603,154 @@ def test_stripped_attribute_keys_recover_an_edge_the_oracle_loses():
         "Fk_gene_1",
         "transcript_Fk_gene_1",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Derived features.
+# ---------------------------------------------------------------------------
+#
+# There was no differential coverage here at all, which is how `merge_all`
+# came to accept `exclude_components` and ignore it, `create_introns` came to
+# compute introns across transcript boundaries, and `bed12` came to emit a
+# trailing comma on every line -- three defects that a single comparison
+# against the oracle would have caught immediately.
+#
+# These fixtures are the ones with a gene -> transcript -> exon hierarchy deep
+# enough for the grandparent form to mean anything.
+
+DERIVED_GFF3 = ["FBgn0031208.gff", "c_elegans_WS199_ann_gff.txt", "intro_docs_example.gff"]
+
+
+def _norm(feature) -> tuple:
+    """The fields a derived feature is defined by."""
+    return (
+        feature.seqid,
+        feature.source,
+        feature.featuretype,
+        feature.start,
+        feature.end,
+        feature.strand,
+    )
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_create_introns_matches_the_oracle(name):
+    """Introns are computed per transcript, not per gene.
+
+    gffbase treated `grandparent_featuretype="gene"` as the direct anchor and
+    pooled every isoform's exons into one sorted list, so a multi-isoform gene
+    produced gaps that spanned transcripts. The oracle descends one level
+    first. On `FBgn0031208.gff` that was the difference between 1 intron and 3.
+    """
+    oracle, ours = D.build_both(D.fixture(name))
+    theirs = sorted(_norm(f) for f in oracle.create_introns())
+    mine = sorted(_norm(f) for f in ours.create_introns())
+    assert mine == theirs
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_created_introns_carry_the_same_attributes(name):
+    """Coordinates agreeing is not enough -- the merged attributes have to as
+    well, which is what `helpers.merge_attributes` is for."""
+    oracle, ours = D.build_both(D.fixture(name))
+
+    def keyed(db):
+        # `sorted` on `(tuple, dict)` blows up the moment two norms tie, so
+        # carry the attributes as sorted items rather than as a mapping.
+        return sorted((_norm(f), sorted(D.feature_attributes(f).items())) for f in db)
+
+    assert keyed(ours.create_introns()) == keyed(oracle.create_introns())
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_interfeatures_match_the_oracle(name):
+    """The primitive under `create_introns` and `create_splice_sites`."""
+    oracle, ours = D.build_both(D.fixture(name))
+    exons_o = list(oracle.features_of_type("exon", order_by="start"))
+    exons_g = list(ours.features_of_type("exon", order_by="start"))
+    assert [f.id for f in exons_o] == [f.id for f in exons_g], "exon inputs differ"
+    theirs = [_norm(f) for f in oracle.interfeatures(exons_o)]
+    mine = [_norm(f) for f in ours.interfeatures(exons_g)]
+    assert mine == theirs
+
+
+#: `FBgn0031208.gff` differs here for a reason established elsewhere, not a
+#: bed12 one. Measured: the oracle sees NO CDS children of
+#: `transcript_Fk_gene_1` because it lost that `Parent` edge to the
+#: unstripped-key defect, so it marks the whole transcript thick
+#: (thickStart=10000). gffbase recovers the edge, finds `CDS:Fk_gene_1:1`, and
+#: computes a real thick span (thickStart=9999). Only that one column differs.
+_BED12_KNOWN = {"FBgn0031208.gff": _ATTR_KEY_WHITESPACE}
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, _BED12_KNOWN))
+def test_bed12_matches_the_oracle(name):
+    """Whole BED12 lines, byte for byte.
+
+    Catches the trailing comma, the no-CDS thick span, the name fallback and
+    the `.`-strand rewrite in one comparison -- every one of which made every
+    line differ.
+    """
+    oracle, ours = D.build_both(D.fixture(name))
+    shared = [f.id for f in ours.features_of_type("mRNA")]
+    if not shared:
+        pytest.skip(f"{name} has no mRNA features")
+    for fid in shared:
+        assert ours.bed12(fid) == oracle.bed12(fid), fid
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_children_bp_matches_the_oracle(name):
+    oracle, ours = D.build_both(D.fixture(name))
+    for fid in [f.id for f in ours.features_of_type("mRNA")]:
+        assert ours.children_bp(fid) == oracle.children_bp(fid), fid
+        assert ours.children_bp(fid, merge=True) == oracle.children_bp(fid, merge=True), fid
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_merge_all_returns_only_genuine_merges(name):
+    """`merge_all` must agree with the oracle on WHAT merged.
+
+    It used to return every input feature, merged or not, so the count was the
+    size of the database rather than the number of merges.
+    """
+    oracle, ours = D.build_both(D.fixture(name))
+    theirs = sorted(_norm(f) for f in oracle.merge_all(featuretypes_groups=("exon",)))
+    mine = sorted(_norm(f) for f in ours.merge_all(featuretypes_groups=("exon",)))
+    assert mine == theirs
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_merge_all_persists_its_results(name):
+    """The oracle documents that "the resulting records are added to the
+    database". gffbase returned them and wrote nothing."""
+    oracle, ours = D.build_both(D.fixture(name))
+    before_o = sum(D.featuretype_counts(oracle).values())
+    before_g = sum(D.featuretype_counts(ours).values())
+    merged_o = oracle.merge_all(featuretypes_groups=("exon",))
+    merged_g = ours.merge_all(featuretypes_groups=("exon",))
+    if not merged_g:
+        pytest.skip(f"{name} has no overlapping exons to merge")
+
+    grew_o = sum(D.featuretype_counts(oracle).values()) - before_o
+    grew_g = sum(D.featuretype_counts(ours).values()) - before_g
+    assert len(merged_g) == len(merged_o), "the two disagree on how much merged"
+    assert grew_g == grew_o == len(merged_g)
+    # And every merged feature is retrievable by the id it was given.
+    for f in merged_g:
+        assert f.id in ours
+
+
+@pytest.mark.parametrize("name", _params(DERIVED_GFF3, {}))
+def test_merge_all_exclude_components_removes_the_components(name):
+    """`exclude_components=True` was accepted and ignored outright."""
+    oracle, ours = D.build_both(D.fixture(name))
+    merged_o = oracle.merge_all(featuretypes_groups=("exon",), exclude_components=True)
+    merged_g = ours.merge_all(featuretypes_groups=("exon",), exclude_components=True)
+    if not merged_g:
+        pytest.skip(f"{name} has no overlapping exons to merge")
+    assert sorted(_norm(f) for f in merged_g) == sorted(_norm(f) for f in merged_o)
+    # The components are gone from both.
+    for f in merged_g:
+        for child in f.children:
+            assert child.id not in ours, f"{child.id} survived exclude_components"

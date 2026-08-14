@@ -113,6 +113,82 @@ transactional storage, and a release pipeline gated on validation.
   attribute and the oracle stores directives with the prefix stripped
   (`gff-version 3`, not `##gff-version 3`), so every consumer reading them
   saw the wrong strings.
+- **Every derived-feature method disagreed with the oracle**, and there was no
+  differential test over any of them — which is how each of these survived.
+
+  - **`merge_all` did not do the two things it documents.** It returned every
+    input feature, merged or not, so the result was the size of the database
+    rather than the number of merges; and it persisted nothing, despite the
+    docstring promising that "the resulting records are added to the
+    database". It also **accepted `exclude_components` and ignored it**, so
+    asking for the components to be removed silently did nothing. It now emits
+    only genuine merges, inserts them, and either deletes the components or
+    links them with a `Parent` pointing at the merged feature.
+
+    The discriminator that makes this possible was missing too: `merge()` set
+    `children` unconditionally, so every feature looked merged. A run of one
+    now gets `no_children`.
+
+  - **`merge()` extended only `end`.** With a caller-supplied `merge_order`
+    the run is not necessarily start-sorted, so a merged feature could be
+    silently truncated at the front. It also re-sorted its input, discarding
+    the very ordering `merge_all` had asked for; assigned no id, so the merged
+    feature could not be deleted or linked; and never flagged ambiguity, so a
+    merge across strands kept the first component's strand rather than `.`.
+
+  - **`create_introns` computed introns across transcript boundaries.**
+    `grandparent_featuretype="gene"` was treated as the direct anchor, pooling
+    every isoform's exons into one sorted list. On `FBgn0031208.gff` that was
+    1 "intron" where the oracle finds 3, and for any multi-isoform gene the
+    gaps produced were not introns of anything.
+
+  - **`create_splice_sites` emitted 1 bp sites.** A splice site is a
+    dinucleotide, so these named half of one. They were also always typed
+    `splice_site` rather than by position in the transcript, and carried no
+    attributes at all.
+
+  - **`interfeatures`** stamped no derived `source`, produced a nonsense
+    feature spanning two different sequences whenever consecutive inputs
+    changed seqid, typed unnamed gaps with a constant instead of
+    `inter_<a>_<b>`, never set `strand` to `.` on a mismatch, ignored
+    `numeric_sort`, and took a three-argument `attribute_func` where the
+    oracle takes one — so any gffutils caller passing a callback got a
+    `TypeError`.
+
+  - **`bed12`** put a trailing comma on `blockSizes`/`blockStarts` (making
+    every line differ), accepted `thin_featuretype` and ignored it with no
+    mutual-exclusion error, and on a feature with no CDS set both thickStart
+    and thickEnd to `chromStart` — rendering it entirely *thin*, the opposite
+    of what the oracle draws.
+
+  - **`children_bp`** swallowed unknown keyword arguments, including the
+    removed `ignore_strand`, returning a plausible number instead of saying no.
+
+  - **Three `merge_criteria` predicates were distance tests, not range
+    tests.** `overlap_end_threshold` and friends computed
+    `abs(acc.end - cur.start) <= threshold`, which *rejects a feature lying
+    entirely inside the accumulator* — the most unambiguous overlap there is.
+    The three existing tests passed under both formulas and so had never
+    pinned this; the case that separates them is now tested directly.
+
+  - **`add_relation` discarded its callbacks' return values** and wrote
+    nothing back, so `child_func=assign_child` set an attribute on a throwaway
+    object. Callbacks were also skipped entirely when ids were passed instead
+    of `Feature`s. A batched `add_relations` was added because the closure is
+    re-derived per call, which would have made `merge_all` quadratic.
+
+  Backed by a new differential group comparing introns, interfeatures, bed12,
+  children_bp and merge_all against gffutils 0.14 — none of which had any
+  differential coverage before.
+
+- **The ingest mode was not recorded anywhere.** `meta` held the dialect, the
+  format, the R-tree flag and the depths, but nothing said whether a database
+  had been built in `compat` or `strict` mode — so a file on disk could not
+  report how it was made. It now stores `mode`, `validation` and `on_error`,
+  readable as `db.mode` and friends. Additive, so no schema version bump; a
+  database written earlier has no key and reads back as `compat`, which is
+  what it was.
+
 - **Reading an attribute and writing the feature back out could emit
   structurally invalid GFF3.** Materializing `feature.attributes` takes
   serialization off the raw-bytes fast path, and there was no re-encode step,
@@ -202,6 +278,16 @@ transactional storage, and a release pipeline gated on validation.
 
 ### Added
 
+- `gffbase.interface.assign_child` and `no_children`, the two symbols
+  `merge_all` is built from upstream, plus `FeatureDB.add_relations` for
+  linking many pairs with a single closure rebuild.
+- `gffbase.helpers.merge_attributes`, the sorted-set union of two attribute
+  mappings that every derived-feature method needs.
+- `FeatureDB.mode`, `.validation` and `.on_error`, recovered from the database
+  rather than assumed, and `FeatureDB.derived_source` — the `source` stamped on
+  features gffbase derives rather than reads. It is `gffutils_derived` under
+  `mode="compat"` so a ported script filtering on that string keeps working,
+  and `gffbase_derived` under `mode="strict"`, which reports honest provenance.
 - **First-class discontinuous (multipart) GFF3 features.** Several lines sharing
   one `ID` — how NCBI represents a split CDS — are now one logical feature.
   Previously the second line collided against the primary key and every merge
