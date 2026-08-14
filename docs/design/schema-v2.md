@@ -1,7 +1,11 @@
 # Schema v2, multipart features, and the compat/strict axis
 
-Status: **design, approved for implementation**
-Supersedes: schema v1 (`gffbase.schema.SCHEMA_VERSION == "1"`)
+Status: **implemented in 0.2.0** (`gffbase.schema.SCHEMA_VERSION == "2"`)
+Supersedes: schema v1
+
+This document is kept as the design record. Where the implementation ended up
+somewhere other than the recommendation, §12 says so rather than being quietly
+edited to match — the disagreement is the useful part.
 
 This is the design for the three linked changes in 0.2.0: a validation-profile
 axis that makes `create_db()` usable as a drop-in again, a storage model that
@@ -446,7 +450,10 @@ that. Consumers needing key order fall back to the raw blob, which is intact.
 `export_sqlite` writes **one legacy row per physical segment**, reading from
 `segments_all` — a seg-0 row must carry its own coordinates, not the envelope.
 
-Default `flatten="gffutils"` reproduces what
+There is no `flatten=` parameter in the shipped `export_sqlite(con, path,
+force=False)`: open question 1 was resolved by hardcoding the fan-out, so the
+alternative was never built. The behaviour described here is what it does
+unconditionally, reproducing what
 `gffutils.create_db(file, merge_strategy="create_unique")` would have produced:
 `legacy_id(seg 0) = <logical id>`, `legacy_id(seg k>0) = <logical id>_k`,
 collision-hardened by anti-join. Relations fan out over both endpoints'
@@ -468,12 +475,13 @@ the end of a strict-mode ingest. All checks are single set-based queries.
 | INV-3 | `n_segments` agrees with the `segments` row count |
 | INV-4 | `seg_idx` is dense `0…n-1` and unique per feature |
 | INV-5 | **Envelope is exact**: `features.start = MIN(seg.start)`, `"end" = MAX(seg."end")` — the single most important check; a wrong envelope silently loses features from `region()` |
-| INV-6 | Every `edges` endpoint resolves to a `features.id` |
+| INV-6 | Every `edges` endpoint resolves to a `features.id` (warn — a dangling `Parent=` is common in hand-edited files and costs an edge, not correctness elsewhere) |
 | INV-7 | Segments of one feature share the logical columns and do not overlap each other (warn — abutting segments occur in real files) |
 | INV-8 | `bbox` agrees with `(start, seqid_y, "end", seqid_y+1)`, and is NULL exactly when coords are NULL |
 | INV-9 | Every `features.seqid` has a `seqid_map` row with a matching band |
 | INV-10 | Attribute dedup is consistent with `attrs_same_as_seg0` |
 | INV-11 | `closure` is acyclic and depth-consistent |
+| INV-11b | No feature is its own ancestor (warn — a self-loop is recorded rather than repaired, since silently rewriting a user's hierarchy is worse) |
 | INV-12 | (`full` only) Re-parsing `attributes_blob` for a sample reproduces the normalized `attributes` rows — the check that catches escaping bugs |
 | INV-13 | `id_origin='create_unique'` ⟺ an `id_conflicts` row exists; `duplicates` is non-empty only under `merge` |
 | INV-14 | `features.file_order` equals `MIN(file_order)` over its segments |
@@ -513,18 +521,28 @@ the end of a strict-mode ingest. All checks are single set-based queries.
 
 ---
 
-## 12. Open questions
+## 12. Open questions — all resolved
 
-1. **`export_sqlite` default flatten mode** — `"gffutils"` (fan-out) vs
-   `"logical"` (envelope rows). Recommended: `"gffutils"`, the stronger parity
-   claim, though it produces more rows than the logical feature count.
-2. **Default `on_multipart_conflict`** — `"error"` (recommended) vs `"split"`.
-   Erroring is defensible for an opt-in mode, but rejects some real files that
-   compat ingests.
-3. **Serialization model** — the differential suite has three recorded
-   disagreements (`_RAW_VS_NORMALIZED`, `_EMPTY_VALUE_RENDERING`,
-   `_DIALECT_VOTE_WEIGHTING`) that all reduce to one question: does gffbase
-   re-emit the original bytes, or re-serialize from the parsed model the way
-   gffutils does? Byte-faithful is better engineering; oracle-identical is
-   better drop-in. Recommended: match the oracle in `str(feature)` and expose
-   the original line separately, so both properties are available.
+1. **`export_sqlite` default flatten mode** — resolved as `"gffutils"`
+   (fan-out), and **hardcoded**: no `flatten=` parameter exists, because
+   nothing wanted the alternative once the parity claim was the point.
+   Verified by opening a gffbase export with real gffutils 0.14.
+2. **Default `on_multipart_conflict`** — resolved as `"error"`, as
+   recommended. It only applies under `mode="strict"`, which is opt-in, so
+   refusing an ambiguous fusion is the conservative default; `"split"`
+   partitions the run instead.
+3. **Serialization model** — resolved **opposite to the recommendation**, and
+   worth recording as such. The recommendation was to match the oracle in
+   `str(feature)` and expose the original line separately. What shipped is the
+   reverse: `str(feature)` is byte-faithful, and `to_line(normalized=True)`
+   produces the oracle's rendering on demand.
+
+   The deciding evidence arrived after this document was written. Once the
+   attribute encoder existed, `to_line(normalized=True)` was measured against
+   gffutils across the whole shared corpus and matched exactly on 11 of 15
+   GFF3 fixtures — the four that differ are dialect-*inference* differences,
+   not serialization ones. So both properties are available either way, and
+   the question became which should be the default. Byte-faithful won because
+   a round trip that silently rewrites a user's file is the more surprising
+   default, and because `_EMPTY_VALUE_RENDERING` turned out to be a case where
+   the ORACLE is lossy: it renders `ID=` as a bare `ID`.

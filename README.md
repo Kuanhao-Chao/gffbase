@@ -38,9 +38,10 @@ migrate by changing one import line.
    returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
    table in **1.16 s**. No Python `Feature` objects, ever. *([How?](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
 3. **🛡️  Validated NCBI compliance** — all four canonical human-genome
-   annotations (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with
-   **zero strict-mode warnings**. RefSeq's split-CDS duplicate-ID
-   convention is handled automatically.
+   annotations (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly. RefSeq's
+   split-CDS duplicate-ID convention is handled automatically, and under
+   `mode="strict"` those lines become one discontinuous feature rather than
+   several renamed ones.
 
 ---
 
@@ -148,13 +149,15 @@ set-based DuckDB `GROUP BY` aggregations + one recursive CTE — the
 column barely shifts (4 min 37 s → 6 min 7 s) between the two rows
 while the legacy column balloons by 13×–20×.
 
-**Robustness:** every corpus ingests cleanly with **zero strict-mode
-warnings** from the NCBI-spec-hardened Rust parser (9 enforced rules,
-line-numbered `GFFFormatError`, opt-in non-strict mode). RefSeq's
-notorious duplicate-`ID=cds-NP_xxx` convention (split CDS segments) is
-handled transparently — gffbase mirrors
-`gffutils.merge_strategy="create_unique"` automatically and records the
-remap in the `duplicates` table. No config knobs to flip.
+**Robustness:** every corpus ingests cleanly from the NCBI-spec-hardened
+Rust parser (9 enforced rules, line-numbered `GFFFormatError`). RefSeq's
+notorious duplicate-`ID=cds-NP_xxx` convention — a CDS split across several
+lines — is handled transparently, and how depends on the mode you asked for.
+Under the default `mode="compat"` the rows are renamed as
+`gffutils.merge_strategy="create_unique"` would, so a ported script sees what
+it expects. Under `mode="strict"` they are **fused into one discontinuous
+feature** backed by the `segments` table, which is what the GFF3 specification
+actually describes. See [Schema v2](design/schema-v2.md).
 
 📊 Full reproducible numbers + per-corpus root-cause analysis:
 [Performance Comparison](https://gffbase.khchao.com/performance/). Re-run via
@@ -213,11 +216,13 @@ zero-copy contract for spatial and parent workloads.
 
 ## ✨ What's inside
 
-- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
-  GTF semicolon-in-quotes safe, gzipped input transparent. Hardened
-  against the NCBI GFF3 spec (line-numbered `GFFFormatError`,
-  strict / non-strict modes, 9 enforced rules).
-- **DuckDB columnar storage** — 7-table schema, set-based GTF
+- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding
+  *and* percent-encoding on the way back out, GTF semicolon-in-quotes safe,
+  gzipped input transparent. Hardened against the NCBI GFF3 spec
+  (line-numbered `GFFFormatError`, 9 enforced rules, `compat`/`strict`
+  profiles).
+- **DuckDB columnar storage** — 11-table schema (plus 3 compatibility
+  views), set-based GTF
   gene/transcript synthesis, recursive-CTE transitive closure,
   per-seqid-banded R-tree spatial index built inline during ingest.
 - **Smart routing** — `region()` auto-picks R-tree vs B-tree;
@@ -228,7 +233,16 @@ zero-copy contract for spatial and parent workloads.
   `polars.DataFrame` directly out of DuckDB's buffer pool.
 - **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
   `DataIterator`, `GFFWriter`, `merge_criteria`, `interfeatures`,
-  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`.
+  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`. 97% of the
+  gffutils 0.14 symbol surface, with every remaining difference declared and
+  tested.
+- **Discontinuous features** — `MultipartFeature` / `FeatureSegment`, per
+  segment phase, `covered_length`, and `explode_segments=` on the batched
+  APIs. Several lines sharing one `ID` are one logical feature.
+- **A command line** — `gffbase create|fetch|children|parents|region|search|
+  rmdups|sanitize|validate|migrate`. See [the CLI reference](cli.md).
+- **Post-ingest validation** — `gffbase.validate` checks 15 invariants, and
+  `gffbase.migrate` upgrades a v1 database in place.
 - **abi3 wheels** — single binary per arch covers CPython 3.10-3.14.
 
 ---
@@ -259,11 +273,11 @@ mkdocs serve            # http://localhost:8000
 
 ```bash
 pip install -e '.[test,all]'
-pytest                                     # 530 passed
+pytest                                     # 1680 passed
 pytest --cov=gffbase --cov-report=term     # coverage report
 ```
 
-All 530 tests pass with the compiled extension built and the DuckDB spatial
+All 1680 tests pass with the compiled extension built and the DuckDB spatial
 extension available. Without them, the `native` and `rtree` cells skip rather
 than fail — CI runs dedicated jobs where a missing capability is an error, so
 those paths cannot silently go unexercised.
