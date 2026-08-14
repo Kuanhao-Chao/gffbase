@@ -73,8 +73,13 @@ def parse_attributes(blob: str) -> tuple[list[tuple[str, str, int]], dict]:
         if counter > 0:
             obs["repeated keys"] = True
 
+        # `constants.ignore_url_escape_characters` is read per call, not
+        # captured: it is a documented global that callers flip at runtime.
+        from gffbase import constants
+
+        decode = local_fmt == "gff3" and not constants.ignore_url_escape_characters
         for v in multi_values:
-            decoded = urllib.parse.unquote(v) if local_fmt == "gff3" else v
+            decoded = urllib.parse.unquote(v) if decode else v
             pairs.append((key, decoded, counter))
             counter += 1
         keys_seen[key] = counter

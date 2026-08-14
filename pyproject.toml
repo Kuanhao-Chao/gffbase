@@ -236,7 +236,17 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Optional integrations, imported lazily inside try/except ImportError.
-module = ["polars.*", "pandas.*", "pyfaidx.*", "duckdb.*", "pyarrow.*"]
+# `pybedtools` and `Bio` are installed in some environments but ship no
+# `py.typed`, so they need the same treatment as the ones that may be absent.
+module = [
+    "polars.*",
+    "pandas.*",
+    "pyfaidx.*",
+    "duckdb.*",
+    "pyarrow.*",
+    "pybedtools.*",
+    "Bio.*",
+]
 ignore_missing_imports = true
 
 [tool.ruff]

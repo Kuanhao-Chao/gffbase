@@ -30,6 +30,7 @@ from gffbase._pyfallback import parser as _pyparser
 from gffbase._serialize import (
     Quoter,
     _reconstruct,
+    _split_keyvals,
     encode_value,
     quoted_semicolon_patterns,
     quoter,
@@ -39,6 +40,7 @@ from gffbase.feature import ParsedFeature
 __all__ = [
     "Quoter",
     "_reconstruct",
+    "_split_keyvals",
     "detect_dialect",
     "encode_value",
     "native_available",
