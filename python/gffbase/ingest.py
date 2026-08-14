@@ -44,6 +44,7 @@ from gffbase.schema import (
     DDL,
     EDGES_FROM_GTF,
     EDGES_FROM_PARENT,
+    FIND_PARENT_CYCLES,
     GTF_PROPAGATE_GENE_ID,
     GTF_SYNTHESIZE_GENES,
     GTF_SYNTHESIZE_TRANSCRIPT_ATTRS,
@@ -1101,6 +1102,25 @@ def _build_database(
 
     # Closure via recursive CTE.
     con.execute(CLOSURE_RECURSIVE_CTE, [max_depth])
+
+    # A cyclic `Parent` graph is malformed GFF3. The walk above no longer
+    # follows the cycle, so the database is usable and bounded -- but staying
+    # silent would leave the user with a hierarchy that quietly is not the one
+    # their file describes.
+    cycles = con.execute(FIND_PARENT_CYCLES).fetchall()
+    if cycles:
+        detail = ", ".join(f"{p!r} -> {c!r}" for p, c in cycles[:5])
+        _log.warning(
+            "%d Parent relationship(s) form a cycle and were not followed: %s%s",
+            len(cycles),
+            detail,
+            " ..." if len(cycles) > 5 else "",
+        )
+        con.executemany(
+            "INSERT INTO id_conflicts (raw_id, resolved_id, kind, file_order, detail) "
+            "VALUES (?, ?, 'parent_cycle', NULL, 'Parent cycle; edge not followed')",
+            cycles,
+        )
 
     # Indexes — only after all data is materialized.
     con.execute(POST_LOAD_INDEXES)
