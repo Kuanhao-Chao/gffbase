@@ -313,6 +313,14 @@ class FeatureDB:
         raw = meta.get("schema_version")
         self._v1_shim = False
 
+        if raw is None and self._looks_unfinished():
+            raise SchemaVersionError(
+                f"{self.dbfn} has gffbase tables but no metadata at all, so it is an "
+                "incomplete database -- an ingest that failed part-way, or a file "
+                "truncated afterwards. Rebuild it with create_db(); opening it would "
+                "silently hand back an empty database that reports itself as current."
+            )
+
         if raw is None or raw == "1":
             # `None` covers both a genuine v1 database and one built before the
             # version was recorded at all; neither has the v2 tables.
@@ -345,6 +353,32 @@ class FeatureDB:
 
         self._schema_version = int(SCHEMA_VERSION)
         self._n_multipart = self._read_n_multipart(meta)
+
+    def _looks_unfinished(self) -> bool:
+        """True for a database whose tables exist but whose `meta` is empty.
+
+        That is what a failed ingest used to leave on disk: valid DuckDB, the
+        full gffbase schema, no data and no metadata. Every real database has
+        at least a `schema_version` row, because `_write_meta` is the last step
+        of a successful build -- so an empty `meta` beside a real `features`
+        table cannot be anything but an interrupted one.
+
+        Distinguished from "no `meta` table at all", which is not a gffbase
+        database and is left to fail on its own terms.
+
+        Only applied to a database opened from a PATH. A caller who hands
+        `FeatureDB` a connection they built and populated themselves is doing
+        something deliberate, and the advice this refusal gives -- rebuild it
+        with `create_db()` -- would not even apply to them.
+        """
+        if self.dbfn == ":existing-connection:":
+            return False
+        try:
+            n_meta = scalar(self.conn, "SELECT COUNT(*) FROM meta")
+            n_features = scalar(self.conn, "SELECT COUNT(*) FROM features")
+        except duckdb.Error:
+            return False
+        return n_meta == 0 and n_features == 0
 
     def _try_migrate(self) -> bool:
         """Upgrade a v1 database in place. False if the connection cannot.
