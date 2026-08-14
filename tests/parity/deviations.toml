@@ -298,35 +298,11 @@ note = """Attribute-string parser. Underscore-named but directly exercised by
 the upstream test suite (`parser_test.py`, `attr_test_cases.py`), which the
 differential suite ports."""
 
-[[deviation]]
-kind = "symbol"
-name = "gffbase.parser._reconstruct"
-status = "planned"
-phase = "missing-surface"
-note = "Attribute-string serializer; the inverse of `_split_keyvals`."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.parser.Quoter"
-status = "planned"
-phase = "missing-surface"
-note = """Caching percent-encoder. gffbase has no encode path at all yet, which
-is why re-serializing a feature after reading its attributes currently drops
-escaping."""
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.parser.quoter"
-status = "planned"
-phase = "missing-surface"
-note = "Module-level `Quoter()` singleton."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.parser.quoted_semicolon_patterns"
-status = "planned"
-phase = "missing-surface"
-note = "Compiled patterns that split on a separator only when quotes balance."
+# `_reconstruct`, `Quoter`, `quoter` and `quoted_semicolon_patterns` were
+# declared here and are now implemented, in `gffbase._serialize` and
+# re-exported from `gffbase.parser`. Their entries are deleted rather than
+# marked done, which is what `test_symbol_exists_or_is_declared` requires:
+# a declaration that outlives the work it describes is itself a failure.
 
 # ===========================================================================
 # EXCLUDED -- upstream implementation details with no downstream contract.

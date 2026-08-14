@@ -32,6 +32,8 @@ from collections.abc import Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from gffbase._serialize import _reconstruct
+
 # `slots=True` landed in Python 3.10. `ParsedFeature` is instantiated once per
 # parsed line — millions of times on a GENCODE-scale file — so the per-instance
 # memory saving is worth keeping wherever it is available. On 3.9 we fall back
@@ -452,32 +454,28 @@ class Feature:
         else:
             source = self.attributes
 
-        fmt = (self.dialect or {}).get("fmt", "gff3")
-        sep = "; " if (self.dialect or {}).get("field separator") == "; " else ";"
-        kv_sep = (self.dialect or {}).get("keyval separator") or ("=" if fmt == "gff3" else " ")
-        multival = (self.dialect or {}).get("multival separator", ",")
-        items = list(source.items())
-        if self.sort_attribute_values:
-            items = [(k, sorted(v)) for k, v in items]
+        # A Feature can be hand-built with no dialect at all; `_reconstruct`
+        # refuses that, as the oracle does, so supply the GFF3 default rather
+        # than making every caller pass one.
+        dialect = dict(self.dialect) if self.dialect else {}
+        dialect.setdefault("fmt", "gff3")
+        if dialect["fmt"] != "gff3":
+            # GTF's own default. `quoted GFF2 values` is deliberately defaulted
+            # True here and not in `_reconstruct`: the oracle reads the key
+            # straight from a dialect its parser always populates, whereas a
+            # hand-built gffbase Feature routinely has a partial one.
+            dialect.setdefault("quoted GFF2 values", True)
 
-        parts = []
-        for k, vs in items:
-            vs_list = vs if isinstance(vs, list) else [vs]
-            if fmt == "gff3":
-                joined = multival.join(str(v) for v in vs_list)
-                parts.append(f"{k}{kv_sep}{joined}")
-            else:
-                # GTF: typically `key "value"; key "value";`
-                quoted = (self.dialect or {}).get("quoted GFF2 values", True)
-                for v in vs_list:
-                    if quoted:
-                        parts.append(f'{k}{kv_sep}"{v}"')
-                    else:
-                        parts.append(f"{k}{kv_sep}{v}")
-        s = sep.join(parts)
-        if (self.dialect or {}).get("trailing semicolon") and not s.endswith(";"):
-            s = s + ";"
-        if (self.dialect or {}).get("leading semicolon"):
+        items = {k: (v if isinstance(v, list) else [v]) for k, v in source.items()}
+        s = _reconstruct(
+            items,
+            dialect,
+            keep_order=self.keep_order,
+            sort_attribute_values=self.sort_attribute_values,
+        )
+        if dialect.get("leading semicolon") and s:
+            # `_reconstruct` stays oracle-exact and drops this; gffbase puts it
+            # back, so a file whose column 9 starts with `;` round-trips.
             s = ";" + s
         return s
 
@@ -524,9 +522,9 @@ class Feature:
         so it is the form to use when comparing against the oracle -- at the
         cost of losing whatever the source file's exact spacing was.
 
-        (One known gap: gffbase has no percent-encoding path yet, so a value
-        containing a reserved character is not re-escaped on the normalized
-        path. Tracked as a deviation against `gffutils.parser.Quoter`.)
+        Values are percent-encoded on this path, so a value containing `;`,
+        `,`, `=`, `&` or `%` re-emits as valid GFF3. Spaces and non-ASCII are
+        left alone, which is what the spec says and what the oracle does.
         """
         return self._format_line(normalized)
 
