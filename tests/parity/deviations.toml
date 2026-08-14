@@ -27,269 +27,125 @@
 # ---------------------------------------------------------------------------
 
 # ===========================================================================
-# PLANNED -- compatibility modules not yet ported.
+# EVERY `planned` ENTRY HAS LANDED.
 # ===========================================================================
-
-[[deviation]]
-kind = "module"
-name = "gffbase.attributes"
-status = "planned"
-phase = "missing-surface"
-note = """The `Attributes` MutableMapping and the swappable `dict_class` alias.
-gffbase currently has an equivalent in `feature._LazyAttributes`, but it is
-private and its `always_return_list` behaviour is not wired to a module-level
-toggle the way the oracle's is."""
-
-[[deviation]]
-kind = "module"
-name = "gffbase.bins"
-status = "planned"
-phase = "missing-surface"
-note = """UCSC binning. `gffbase._bins` exists but is private AND computes
-different bins than the oracle: its offsets are (585, 73, 9, 1, 0) against the
-oracle's [4681, 585, 73, 9, 1], so `bins(1, 100)` returns 585 where the oracle
-returns 4681. Because `export_sqlite` writes this into the legacy `bin` column
-and the oracle's `region()` uses bins to narrow its query, a legacy consumer
-reading a gffbase export gets wrong results. The public module and the
-corrected offsets land together."""
-
-[[deviation]]
-kind = "module"
-name = "gffbase.constants"
-status = "planned"
-phase = "missing-surface"
-note = """Schema/dialect constants plus the two documented global toggles,
-`always_return_list` and `ignore_url_escape_characters`. Both are read at
-runtime by the oracle's attribute machinery and are part of its documented
-API."""
-
-[[deviation]]
-kind = "module"
-name = "gffbase.convert"
-status = "planned"
-phase = "missing-surface"
-note = "`to_bed12(f, db, child_type, name_field)`. Superseded by `FeatureDB.bed12` upstream, but still importable there."
-
-[[deviation]]
-kind = "module"
-name = "gffbase.inspect"
-status = "planned"
-phase = "missing-surface"
-note = "`inspect(data, look_for, limit, verbose)` -- summarises a GFF/GTF source without building a database."
-
-[[deviation]]
-kind = "module"
-name = "gffbase.version"
-status = "planned"
-phase = "missing-surface"
-note = """A `version` module. gffbase exposes `__version__` from the package
-root; the oracle also exposes `gffutils.version.version`."""
-
-[[deviation]]
-kind = "module"
-name = "gffbase.create"
-status = "planned"
-phase = "missing-surface"
-note = """`_DBCreator` / `_GFFDBCreator` / `_GTFDBCreator`. Underscore-named but
-load-bearing: `FeatureDB.update()` constructs them directly and
-`FeatureDB.__init__` accepts one as `dbfn`, so a successor needs an equivalent
-seam even though the classes themselves are backend-specific."""
-
-[[deviation]]
-kind = "module"
-name = "gffbase.biopython_integration"
-status = "planned"
-phase = "missing-surface"
-note = "`to_seqfeature` / `from_seqfeature`. Ships behind the `biopython` extra."
-
-[[deviation]]
-kind = "module"
-name = "gffbase.pybedtools_integration"
-status = "planned"
-phase = "missing-surface"
-note = "`to_bedtool` / `tsses`. Ships behind the `pybedtools` extra."
-
-[[deviation]]
-kind = "module"
-name = "gffbase.contrib.plotting"
-status = "planned"
-phase = "missing-surface"
-note = "The `Gene` plotting helper. Requires pybedtools + matplotlib."
+#
+# The ten compatibility modules and all 38 planned symbols are implemented, so
+# their declarations are gone rather than marked done -- an entry that outlives
+# the work it describes is itself a failure, and `test_api_parity.py` enforces
+# that. What remains below is the permanent register: places where gffbase
+# deliberately behaves differently, and upstream details that are not contracts.
 
 # ===========================================================================
-# PLANNED -- symbols missing from modules that do exist.
+# INTENTIONAL -- deliberately different, permanently.
 # ===========================================================================
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.feature.feature_from_line"
-status = "planned"
-phase = "missing-surface"
-note = "Public single-line parser: `feature_from_line(line, dialect, strict, keep_order)`."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.feature._position_lookup"
-status = "planned"
-phase = "missing-surface"
-note = """Integer-index -> field-name map backing `Feature[0]`. gffbase has the
-same mapping as `_FIELD_ORDER`; the oracle's name is what upstream tests
-import."""
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.HERE"
-status = "planned"
-phase = "missing-surface"
-note = "Package directory constant used to locate bundled example data."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.infer_dialect"
-status = "planned"
-phase = "missing-surface"
-note = "Infer a dialect dict from one attribute string."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.make_query"
-status = "planned"
-phase = "missing-surface"
-note = """The bare-bones ORM that builds (query, args) from limit/strand/
-featuretype/order_by/reverse/completely_within. Its `order_by` whitelist is
-also the model for hardening gffbase's own order-by handling."""
-
-# `merge_attributes` landed with the derived-feature work, which is its only
-# caller -- `interfeatures` needs the oracle's sorted-set union to produce the
-# same attributes on a gap.
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.dialect_compare"
-status = "planned"
-phase = "missing-surface"
-note = "Returns dict(added=..., removed=...) between two dialects."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.asinterval"
-status = "planned"
-phase = "missing-surface"
-note = "Feature -> pybedtools.Interval. Behind the `pybedtools` extra."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.sanitize_gff_db"
-status = "planned"
-phase = "missing-surface"
-note = "Enforce start <= stop and add a `gid` attribute."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.sanitize_gff_file"
-status = "planned"
-phase = "missing-surface"
-note = "File-level sanitizer; backs the `sanitize` CLI subcommand."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.canonical_transcripts"
-status = "planned"
-phase = "missing-surface"
-note = "Yields (transcript, sequence) for the longest-CDS transcript per gene."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.is_gff_db"
-status = "planned"
-phase = "missing-surface"
-note = "Cheap path-based database detection."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.get_gff_db"
-status = "planned"
-phase = "missing-surface"
-note = "Open-or-create helper backing the CLI's `db` argument."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.to_unicode"
-status = "planned"
-phase = "missing-surface"
-note = "Python-2-era text coercion; effectively identity for `str`."
 
 [[deviation]]
 kind = "symbol"
 name = "gffbase.helpers.annotate_gff_db"
-status = "planned"
-phase = "missing-surface"
-note = """Listed in the oracle's public API docs but its body is `pass`. gffbase
-provides the name so imports resolve; see the intentional entry below for the
-behaviour."""
-
-# `assign_child` and `no_children` were declared here and are now implemented
-# in `gffbase.interface`, together with `merge_all`'s persistence, which is
-# what needed them.
+status = "intentional"
+reason = """Raises `NotImplementedError` where the oracle's body is a bare
+`pass`. Upstream lists it as public API and it silently returns None, so a
+caller believes their database was annotated. Saying so is strictly better
+than pretending; the name exists so imports resolve. Pinned by
+`test_annotate_gff_db_refuses_rather_than_pretending`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators.is_url"
-status = "planned"
-phase = "missing-surface"
-note = "URL detection, part of `DataIterator`'s source dispatch."
+name = "gffbase.helpers.get_gff_db"
+status = "intentional"
+reason = """Always returns a `FeatureDB`. The oracle returns a *path string*
+when a sibling `.db` exists and a `FeatureDB` otherwise, which is why
+`gffutils-cli fetch` raises `TypeError: string indices must be integers` in
+its common case -- it indexes whatever it got. Its sibling filename is also
+built with `"%s.%s" % (name, ".db")`, producing `foo.gff..db`. Pinned by
+`test_get_gff_db_always_returns_a_database`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators.Directive"
-status = "planned"
-phase = "missing-surface"
-note = "Trivial `##` directive wrapper. Defined upstream but never used there."
+name = "gffbase.helpers.canonical_transcripts"
+status = "intentional"
+reason = """Two upstream defects are not reproduced. Its no-CDS fallback sorts
+ascending and takes `[0]`, selecting the SHORTEST transcript against its own
+comment; and it `print()`s an internal tuple to stdout for every gene, which
+corrupts any piped output. Pinned by
+`test_canonical_transcripts_picks_the_longest_and_prints_nothing`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators._BaseIterator"
-status = "planned"
-phase = "missing-surface"
-note = """The iterator class hierarchy. The oracle's `FeatureDB.update()` and
-`delete()` docstrings point users at these classes by name, so they are part of
-the effective contract."""
+name = "gffbase.helpers.dialect_compare"
+status = "intentional"
+reason = """Compares key by key rather than through `set(dict.items())`. The
+oracle's form raises `TypeError: unhashable type: 'list'` on any dialect
+carrying an `order` list -- which is all of them -- so it works only on
+hand-built dialects. Pinned by `test_dialect_compare_handles_real_dialects`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators._FileIterator"
-status = "planned"
-phase = "missing-surface"
-note = "See `_BaseIterator`."
+name = "gffbase.helpers.to_unicode"
+status = "intentional"
+reason = """Actually decodes bytes. After `2to3`, the oracle's body is
+`if isinstance(obj, str): if not isinstance(obj, str): ...` -- an unreachable
+inner branch making it the identity for every input, bytes included. Pinned by
+`test_to_unicode_decodes_bytes`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators._UrlIterator"
-status = "planned"
-phase = "missing-surface"
-note = "See `_BaseIterator`. gffbase's DataIterator does not accept URLs at all yet."
+name = "gffbase.helpers.make_query"
+status = "intentional"
+reason = """Validates `order_by` against the whitelist for a plain string as
+well as for an iterable. The oracle checks only the iterable form and
+interpolates a bare string verbatim -- the same defect class as the `order_by`
+and `set_pragmas` injections fixed in this release (see
+docs/security/2026-sql-injection.md). Pinned by
+`test_make_query_validates_a_string_order_by`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.iterators._FeatureIterator"
-status = "planned"
-phase = "missing-surface"
-note = "See `_BaseIterator`. gffbase's DataIterator does not accept feature iterables yet."
+name = "gffbase.attributes.Attributes"
+status = "intentional"
+reason = """`Attributes.items()` and `.values()` keep returning lists when
+`constants.always_return_list` is False; only `__getitem__` honours the
+toggle. Upstream routes all three through it, which makes `items()` yield
+strings, and every consumer that iterates a value then walks it one character
+at a time -- gffutils' own `_reconstruct` renders `gene1` as `g,e,n,e,1` that
+way. gffbase's write paths all iterate `.items()`, so reproducing it would
+corrupt stored data rather than merely differ. Pinned by
+`test_always_return_list_applies_to_getitem_only`."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.parser._split_keyvals"
-status = "planned"
-phase = "missing-surface"
-note = """Attribute-string parser. Underscore-named but directly exercised by
-the upstream test suite (`parser_test.py`, `attr_test_cases.py`), which the
-differential suite ports."""
+name = "gffbase.create._DBCreator"
+status = "intentional"
+reason = """`_DBCreator` / `_GFFDBCreator` / `_GTFDBCreator` are adapters over
+`create_db`, not ports. gffbase ingests through a Rust parser feeding Arrow
+batches into DuckDB and has no per-row Python seam, so a subclass that
+overrides a row-level hook cannot work here and there is nothing to
+reimplement that would make it work. `create_db(transform=...)` is the
+supported per-feature intervention. Pinned by
+`test_db_creators_build_a_working_database`."""
 
-# `_reconstruct`, `Quoter`, `quoter` and `quoted_semicolon_patterns` were
-# declared here and are now implemented, in `gffbase._serialize` and
-# re-exported from `gffbase.parser`. Their entries are deleted rather than
-# marked done, which is what `test_symbol_exists_or_is_declared` requires:
-# a declaration that outlives the work it describes is itself a failure.
+[[deviation]]
+kind = "signature"
+name = "gffbase.create_db.create_db"
+status = "intentional"
+reason = """`pragmas` defaults to None rather than `constants.default_pragmas`.
+Every pragma in that dict is SQLite-only and none exists in DuckDB, so
+defaulting to it would mean every `create_db` call began by discarding four
+settings. Passing it explicitly still works and still skips them. gffbase also
+adds `mode` and `on_multipart_conflict`, which the oracle has no equivalent
+for."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.FeatureDB.bed12"
+status = "intentional"
+reason = """`thickStart`/`thickEnd` can differ on a file where the oracle loses
+a `Parent` edge to its unstripped-attribute-key defect: with no CDS children
+visible it marks the whole feature thick, where gffbase finds the CDS and
+computes a real thick span. Measured on `FBgn0031208.gff`. This is the
+attribute-key deviation showing through, not a bed12 difference. Pinned by
+`test_bed12_matches_the_oracle`."""
 
 # ===========================================================================
 # EXCLUDED -- upstream implementation details with no downstream contract.
@@ -310,3 +166,14 @@ status = "excluded"
 reason = """`gffutils.gffwriter` imports `version` from `gffutils.version` to
 stamp its header. It is the same object as `gffutils.version.version`, which is
 inventoried in its own right; re-exporting it from `gffwriter` is incidental."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.bins.test"
+status = "excluded"
+reason = """An in-module self-test. Upstream runs pytest with
+`--doctest-modules` over its own package, so a function literally named `test`
+inside `bins.py` is collected as part of its suite. Shipping one in a library
+module means any downstream project whose pytest configuration reaches into
+site-packages collects it too. gffbase's equivalent assertions live in
+`tests/test_compat_surface.py`, where they belong."""

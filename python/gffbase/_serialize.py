@@ -162,11 +162,15 @@ def _reconstruct(
 
     fmt = dialect.get("fmt", "gff3")
 
+    from gffbase import constants
+
     # Encode first, so that everything downstream is manipulating text that is
     # already safe to concatenate. GTF is never percent-encoded -- neither
     # engine decodes it on the way in, so encoding on the way out would invent
-    # escapes the source never had.
-    if fmt != "gff3":
+    # escapes the source never had. `ignore_url_escape_characters` turns the
+    # whole scheme off, for callers whose values contain literal `%` that must
+    # not be touched.
+    if fmt != "gff3" or constants.ignore_url_escape_characters:
         attributes = {k: list(v) for k, v in keyvals.items()}
     else:
         attributes = {
@@ -222,3 +226,23 @@ def _reconstruct(
     if dialect.get("trailing semicolon"):
         rendered += ";"
     return rendered
+
+
+def _split_keyvals(keyval_str, dialect=None):
+    """Parse an attribute string into `(mapping, dialect)`.
+
+    The inverse of `_reconstruct`, and the entry point upstream's
+    `parser_test.py` exercises directly. Delegates to the same attribute
+    parser the ingest path uses, so the compatibility surface and the
+    production path cannot give different answers.
+
+    `dialect`, if supplied, is returned unchanged rather than inferred -- the
+    caller has already decided.
+    """
+    from gffbase._pyfallback.attributes import parse_attributes
+    from gffbase.dialect import default_dialect
+    from gffbase.feature import _LazyAttributes
+
+    pairs, observed = parse_attributes(keyval_str or "")
+    resolved = dict(dialect) if dialect else {**default_dialect(), **observed}
+    return _LazyAttributes(initial=pairs), resolved

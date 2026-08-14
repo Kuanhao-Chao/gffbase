@@ -106,3 +106,121 @@ def DataIterator(
         from_string=from_string,
         **kwargs,
     )
+
+
+# ---------------------------------------------------------------------------
+# Compatibility surface.
+# ---------------------------------------------------------------------------
+#
+# `FeatureDB.update()` and `delete()` point users at these class names in their
+# docstrings, so they are part of the effective contract even though they are
+# underscore-named. gffbase has one iterator that dispatches on its input
+# rather than a class per source, so these are thin views over it.
+
+
+def is_url(url) -> bool:
+    """True if `url` has a protocol gffbase can fetch.
+
+    Parameter is named `url` to match the oracle: the parity gate checks that
+    every parameter name the oracle accepts is accepted here too, and a caller
+    writing `is_url(url=...)` would otherwise break.
+    """
+    from urllib.parse import urlparse
+
+    if not isinstance(url, str):
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https", "ftp") and bool(parsed.netloc)
+
+
+class Directive:
+    """A `##` directive, with the prefix stripped.
+
+    Defined upstream and never used there; kept so that code importing it
+    resolves. Equality is on the text, so a directive compares equal to the
+    string it wraps.
+    """
+
+    __slots__ = ("info",)
+
+    def __init__(self, line: str):
+        self.info = line.lstrip("#").strip() if line.startswith("#") else line
+
+    def __str__(self) -> str:
+        return self.info
+
+    def __repr__(self) -> str:
+        return f"Directive({self.info!r})"
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Directive):
+            return self.info == other.info
+        return self.info == other
+
+    def __hash__(self) -> int:
+        return hash(self.info)
+
+
+class _BaseIterator(_DataIterator):
+    """Base of the iterator hierarchy. `DataIterator` dispatches to one of the
+    subclasses below by inspecting its input; constructing one directly skips
+    that dispatch and asserts the source kind."""
+
+
+class _FileIterator(_BaseIterator):
+    """Features from a file on disk (plain or gzipped)."""
+
+
+class _UrlIterator(_BaseIterator):
+    """Features from a URL.
+
+    gffbase's parser reads local paths, so this fetches to a temporary file
+    first and parses that. The download is not streamed: the dialect sniffing
+    that precedes parsing needs to re-read the head of the input.
+    """
+
+    def __init__(self, data, **kwargs):
+        import tempfile
+        import urllib.request
+
+        if not is_url(data):
+            raise ValueError(f"not a URL: {data!r}")
+        suffix = ".gz" if str(data).endswith(".gz") else ".gff3"
+        with urllib.request.urlopen(data) as response:  # noqa: S310 - scheme checked above
+            tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp.write(response.read())
+            tmp.close()
+        self._tempfile = tmp.name
+        super().__init__(tmp.name, **kwargs)
+
+
+class _FeatureIterator(_BaseIterator):
+    """Features from an in-memory iterable.
+
+    Yields the features it was given, so a caller can pass a generator through
+    `create_db` or `FeatureDB.update` without first writing a file.
+    """
+
+    def __init__(self, data, **kwargs):
+        self._features = list(data)
+        self._pos = 0
+        self._dialect = kwargs.get("dialect") or {"fmt": "gff3"}
+
+    def __iter__(self):
+        return iter(self._features)
+
+    def __next__(self):
+        if self._pos >= len(self._features):
+            raise StopIteration
+        feature = self._features[self._pos]
+        self._pos += 1
+        return feature
+
+    def dialect(self) -> dict:  # type: ignore[override]
+        return self._dialect
+
+    def directives(self) -> list:  # type: ignore[override]
+        return []
