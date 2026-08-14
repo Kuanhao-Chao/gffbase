@@ -58,21 +58,41 @@ def overlap_any_inclusive(acc, cur, components):
     )
 
 
+# The three threshold factories below are RANGE tests, not distance tests.
+#
+# They used to compute `abs(acc.end - cur.start) <= threshold`, which reads
+# naturally but answers a different question: it asks how far apart two
+# boundaries are, and therefore *rejects a feature that lies entirely inside
+# the accumulator* -- distance zero is not what a contained feature produces.
+# The oracle asks whether `cur` starts anywhere within the accumulator extended
+# by the threshold, which admits containment and is what "overlap within
+# `threshold`" means to a caller.
+#
+# Concretely, with `acc = (1, 100)`, `cur = (50, 200)`, `threshold = 5`:
+# the old form gave `abs(100 - 50) = 50 <= 5` -> False, and these two plainly
+# overlapping features did not merge. The oracle gives `1 <= 50 <= 105` -> True.
+
+
 def overlap_end_threshold(threshold: int):
+    """`cur` starts within the accumulator, allowing a gap of `threshold`."""
+
     def predicate(acc, cur, components):
-        return abs(acc.end - cur.start) <= threshold
+        return acc.start <= cur.start <= acc.end + threshold
 
     return predicate
 
 
 def overlap_start_threshold(threshold: int):
+    """`cur` ends within the accumulator, allowing a gap of `threshold`."""
+
     def predicate(acc, cur, components):
-        return abs(acc.start - cur.end) <= threshold
+        return acc.start - threshold <= cur.end + 1 <= acc.end + 1
 
     return predicate
 
 
 def overlap_any_threshold(threshold: int):
+    """Either end qualifies."""
     end_thr = overlap_end_threshold(threshold)
     start_thr = overlap_start_threshold(threshold)
 
