@@ -190,16 +190,18 @@ def test_features_of_type_order_by_length(db):
     assert spans == sorted(spans)
 
 
-def test_features_of_type_order_by_raw_column_passes_through(db):
-    """An `order_by` that isn't in the recognized whitelist (here
-    `frame`, which the whitelist DOES contain — but `id` does not)
-    falls through to a raw column reference. We just need it to
-    execute without crashing."""
+def test_features_of_type_order_by_id(db):
+    """`id` is a real column and sorting by it is meaningful, so it is on the
+    whitelist even though the oracle's documented list omits it."""
     rows = list(db.features_of_type("exon", order_by="id"))
-    # Smoke test — no crash, ordered list returned.
     assert len(rows) >= 1
     ids = [f.id for f in rows]
     assert ids == sorted(ids)
+
+
+def test_features_of_type_rejects_an_unknown_order_by(db):
+    with pytest.raises(ValueError, match="cannot order by"):
+        list(db.features_of_type("exon", order_by="no_such_column"))
 
 
 def test_features_of_type_order_by_reverse(db):

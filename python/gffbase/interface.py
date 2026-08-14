@@ -68,6 +68,83 @@ def _with_coordinates(features):
     return [f for f in features if f.start is not None and f.end is not None]
 
 
+#: Sort keys `order_by` accepts, mapped to the SQL that implements each.
+#:
+#: This is a WHITELIST, and it restores the documented contract rather than
+#: narrowing it: gffutils specifies that "the string or tuple items must be in:
+#: 'seqid', 'source', 'featuretype', 'start', 'end', 'score', 'strand',
+#: 'frame', 'attributes', 'extra'". gffbase used to fall through to
+#: interpolating anything else straight into the SQL "for power users", which
+#: on DuckDB is a live injection: DuckDB executes trailing statements, so
+#: `order_by="start ASC; DROP TABLE attributes; SELECT ..."` dropped the table
+#: and still returned rows. gffutils has the same interpolation and is saved
+#: only by SQLite refusing more than one statement per execute.
+#:
+#: `{q}` is the table qualifier, empty for an unjoined query.
+_ORDER_BY_COLUMNS = {
+    # Not in the oracle's documented list, but a real column that callers do
+    # sort by, and safe: an omission there rather than a rule.
+    "id": "{q}id",
+    "seqid": "{q}seqid",
+    "source": "{q}source",
+    "featuretype": "{q}featuretype",
+    "start": "{q}start",
+    "end": '{q}"end"',
+    "score": "{q}score",
+    "strand": "{q}strand",
+    "frame": "{q}frame",
+    # The oracle's names for the two blob columns.
+    "attributes": "{q}attributes_blob",
+    "extra": "{q}extra_blob",
+    # gffbase extensions: `file_order` is the default sort, and `length` sorts
+    # by span rather than by position.
+    "file_order": "{q}file_order",
+    "length": '({q}"end" - {q}start)',
+}
+
+
+def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
+    """Build an ORDER BY clause from a whitelisted sort key, or several.
+
+    Accepts a single name, a tuple or list of names, or a comma-separated
+    string. All three were nominally supported and only the first worked: a
+    tuple was interpolated as a Python repr, which DuckDB parses as a constant
+    struct and so silently sorted by nothing, and a list raised
+    `TypeError: unhashable type: 'list'` from a set membership test.
+
+    `reverse` applies to EVERY key. gffutils appends the direction once, which
+    in SQL reverses only the last key -- almost certainly not what a caller
+    asking for descending order means. Since multi-key sorting did not work at
+    all here before, there is no behaviour to preserve, and reproducing that in
+    new code would be copying a defect.
+    """
+    q = f"{qualifier}." if qualifier else ""
+    if order_by is None:
+        names = ["file_order"]
+    elif isinstance(order_by, str):
+        names = [part.strip() for part in order_by.split(",") if part.strip()]
+    elif isinstance(order_by, (tuple, list)):
+        names = [str(part).strip() for part in order_by]
+    else:
+        raise TypeError(
+            f"order_by must be a string, tuple or list of column names; got {type(order_by)!r}"
+        )
+    if not names:
+        names = ["file_order"]
+
+    direction = "DESC" if reverse else "ASC"
+    parts = []
+    for name in names:
+        try:
+            template = _ORDER_BY_COLUMNS[name]
+        except KeyError:
+            raise ValueError(
+                f"cannot order by {name!r}; order_by accepts {', '.join(sorted(_ORDER_BY_COLUMNS))}"
+            ) from None
+        parts.append(f"{template.format(q=q)} {direction}")
+    return ", ".join(parts)
+
+
 def _require_feature_id(obj) -> str:
     """Coerce a `Feature`-or-id argument to a primary-key string.
 
@@ -558,27 +635,7 @@ class FeatureDB:
 
     @staticmethod
     def _order_clause(order_by, reverse: bool) -> str:
-        if order_by is None:
-            col = "file_order"
-        elif order_by == "length":
-            col = '("end" - start)'
-        elif order_by in {
-            "seqid",
-            "source",
-            "featuretype",
-            "start",
-            "end",
-            "score",
-            "strand",
-            "frame",
-            "file_order",
-        }:
-            col = '"end"' if order_by == "end" else order_by
-        else:
-            # Unknown / multi-field — accept as a literal for power users.
-            col = order_by
-        direction = "DESC" if reverse else "ASC"
-        return f"{col} {direction}"
+        return _order_clause(order_by, reverse)
 
     # ------------------------------------------------------------------
     # region() — smart R-tree vs B-tree dispatch
@@ -1354,7 +1411,7 @@ class FeatureDB:
             f"SELECT {self._select_feature_aliased('f')} "
             f"FROM closure c JOIN features f ON f.id = {join_col} "
             f"WHERE {' AND '.join(where)} "
-            f"ORDER BY {self._order_clause(order_by, reverse).replace(' ', ' f.', 0) if False else self._order_clause_qualified(order_by, reverse, 'f')}"
+            f"ORDER BY {self._order_clause_qualified(order_by, reverse, 'f')}"
         )
         return sql, params
 
@@ -1450,26 +1507,7 @@ class FeatureDB:
 
     @staticmethod
     def _order_clause_qualified(order_by, reverse, qualifier):
-        if order_by is None:
-            col = f"{qualifier}.file_order"
-        elif order_by == "length":
-            col = f'({qualifier}."end" - {qualifier}.start)'
-        elif order_by in {
-            "seqid",
-            "source",
-            "featuretype",
-            "start",
-            "end",
-            "score",
-            "strand",
-            "frame",
-            "file_order",
-        }:
-            col = f'{qualifier}."end"' if order_by == "end" else f"{qualifier}.{order_by}"
-        else:
-            col = order_by
-        direction = "DESC" if reverse else "ASC"
-        return f"{col} {direction}"
+        return _order_clause(order_by, reverse, qualifier)
 
     # ------------------------------------------------------------------
     # Mutation
