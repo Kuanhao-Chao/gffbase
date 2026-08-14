@@ -96,14 +96,32 @@ STRICT_MODE_REJECTS = {
 
 
 _RAW_VS_NORMALIZED = (
-    "Serialization model differs. The oracle re-serializes column 9 from its "
-    "parsed model, normalizing as it goes: it adds GFF2 quotes the source "
-    'omitted (`proteinId 873` -> `proteinId "873"`) and percent-encodes '
-    "reserved characters the source left bare (`identity=99.58` -> "
-    "`identity%3D99.58`). gffbase re-emits the original bytes, which is more "
-    "faithful to the input but not identical to the oracle. Needs an explicit "
-    "decision: match the oracle's normalized output and expose the raw line "
-    "separately, or keep raw bytes and document the deviation."
+    "INTENTIONAL DEVIATION -- serialization models differ, and the question is "
+    "settled rather than open. The oracle re-serializes column 9 from its "
+    "parsed model on every `str()`, normalizing as it goes: it adds GFF2 "
+    'quotes the source omitted (`proteinId 873` -> `proteinId "873"`) and '
+    "percent-encodes reserved characters the source left bare "
+    "(`identity=99.58` -> `identity%3D99.58`). gffbase's `str()` re-emits the "
+    "original bytes, so a file round-trips unchanged, and "
+    "`to_line(normalized=True)` produces the oracle's form on demand. "
+    "`test_normalized_rendering_matches_the_oracle` asserts that positively "
+    "for these same fixtures, so this xfail marks a deliberate difference in "
+    "the DEFAULT, not an unreachable output."
+)
+
+_DIALECT_INFERENCE = (
+    "Dialect inference differs, so the re-rendered text does -- serialization "
+    "is faithfully applying a different dialect, not misbehaving. Measured on "
+    "`wormbase_gff2.txt`: gffbase infers `field separator='; '`, "
+    "`repeated keys=True`, `semicolon in quotes=True` where the oracle infers "
+    '`\' ; \'`, False, False. The source is `Sequence "cTel33B" ; Note "Clone '
+    'cTel33B; Genbank AC199162"`, whose separator really is ` ; `; the `; ` '
+    "*inside the quoted value* is being counted as evidence by gffbase's "
+    "separator vote. Upstream avoids that with `quoted_semicolon_patterns`, "
+    "which gffbase now has but wires only into the compatibility surface, not "
+    "into the vote. On `wormbase_gff2_alt.txt` the difference is "
+    "`trailing semicolon` alone. Both parse to IDENTICAL attributes -- "
+    "verified -- so no data is lost either way."
 )
 
 
@@ -144,12 +162,17 @@ _ATTR_KEY_WHITESPACE = (
     "`test_stripped_attribute_keys_recover_an_edge_the_oracle_loses`."
 )
 
-_LOST_ESCAPING = (
-    "Reading `feature.attributes` materializes decoded values and switches "
-    "serialization off the raw-bytes fast path, but there is no re-encode "
-    "step, so escapes are lost: `Note=hello%20world` re-emits as "
-    "`Note=hello world`, and a value containing `;` or `,` produces "
-    "structurally invalid GFF3. Fixed by the attribute-escaping work."
+#: Retained for the record: this was the reason the two escaping fixtures were
+#: xfailed, and it is now fixed. Kept as documentation of what the fix bought,
+#: since `test_features_serialize_identically_after_reading_attributes` passing
+#: on `nonascii` is otherwise an unremarkable green dot.
+_LOST_ESCAPING_FIXED = (
+    "FIXED. Reading `feature.attributes` materialized decoded values and "
+    "switched serialization off the raw-bytes fast path with no re-encode "
+    "step, so escapes were lost: `Note=hello%20world` re-emitted as "
+    "`Note=hello world`, and a value containing `;` or `,` produced "
+    "structurally invalid GFF3 -- on `nonascii`, one attribute became five. "
+    "`gffbase._serialize.encode_value` now re-encodes on that path."
 )
 
 
@@ -366,6 +389,50 @@ def test_untouched_features_serialize_identically(name):
     assert not diff, diff.report()
 
 
+#: The positive half of `_RAW_VS_NORMALIZED`. Every fixture xfailed above for
+#: "gffbase does not normalize by default" is asserted HERE to produce the
+#: oracle's exact bytes when asked to normalize -- otherwise that xfail would
+#: be indistinguishable from "gffbase cannot produce the oracle's output".
+#:
+#: The two wormbase files are excluded for a different, measured reason: their
+#: inferred dialects genuinely differ (see `_DIALECT_INFERENCE`), so faithful
+#: serialization of a different dialect is expected to differ.
+_NORMALIZED_KNOWN = {
+    "wormbase_gff2.txt": _DIALECT_INFERENCE,
+    "wormbase_gff2_alt.txt": _DIALECT_INFERENCE,
+    "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
+    "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
+}
+
+
+@pytest.mark.parametrize("name", _params(SHARED_GFF3, _NORMALIZED_KNOWN))
+def test_normalized_rendering_matches_the_oracle(name):
+    """`to_line(normalized=True)` is the oracle's serialization model.
+
+    gffutils re-renders column 9 from its parsed mapping on every `str()`;
+    gffbase does that only on request, keeping `str()` byte-faithful. This
+    test is what makes that a *choice of default* rather than a missing
+    capability: asked for the normalized form, gffbase must produce the
+    oracle's bytes exactly -- GFF2 quoting, percent-encoding, separators,
+    valueless attributes and all.
+
+    It is also the strongest single check on the `_reconstruct` port, since it
+    compares full rendered lines across the whole shared corpus rather than
+    the 18 hand-written cases in `attr_test_cases.py`.
+    """
+    oracle, ours = D.build_both(D.fixture(name))
+    theirs = {f.id: str(f) for f in oracle.all_features()}
+    mine = {f.id: f.to_line(normalized=True) for f in ours.all_features()}
+    shared = set(theirs) & set(mine)
+    assert shared, f"{name}: no overlapping ids to compare"
+    diff = D.compare_mappings(
+        f"{name} to_line(normalized=True)",
+        {k: theirs[k] for k in shared},
+        {k: mine[k] for k in shared},
+    )
+    assert not diff, diff.report()
+
+
 # Only the escaping defect survives attribute materialization. `hybrid1.gff3`
 # and `jgi_gff2.txt` differ on the *raw* path only: once attributes are
 # materialized gffbase normalizes them, which is what the oracle does
@@ -374,10 +441,19 @@ _SERIALIZE_READ_KNOWN = {
     "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
     "wormbase_gff2.txt": _ATTR_KEY_WHITESPACE,
     "wormbase_gff2_alt.txt": _ATTR_KEY_WHITESPACE,
-    "mouse_extra_comma.gff3": _EMPTY_VALUE_RENDERING,
     "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
-    "keyval_sep_in_attrs.gff": _LOST_ESCAPING,
-    "nonascii": _LOST_ESCAPING,
+    # Three fixtures used to sit here and now pass:
+    #
+    # `keyval_sep_in_attrs.gff` and `nonascii` under _LOST_ESCAPING --
+    # `_serialize.encode_value` re-encodes on the materialized path, so `%3B`
+    # survives a read-then-write instead of splitting one attribute into five.
+    #
+    # `mouse_extra_comma.gff3` under _EMPTY_VALUE_RENDERING, which was not
+    # expected: porting `_reconstruct` wholesale brought the valueless-attribute
+    # rendering along with the encoder, so `{"ID": []}` now renders as a bare
+    # `ID` here exactly as it does upstream. It stays xfailed on the *untouched*
+    # path below, where gffbase re-emits the source's `ID=` byte-for-byte and
+    # the oracle cannot.
 }
 
 

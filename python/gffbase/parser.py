@@ -22,7 +22,31 @@ are required by tests to produce identical output.
 from __future__ import annotations
 
 from gffbase._pyfallback import parser as _pyparser
+
+# Column-9 serialization. Defined in a leaf module so `gffbase.feature` can use
+# it without importing this one (which imports `gffbase.feature`), and
+# re-exported here under the names gffutils uses, which is where callers and
+# the upstream test suite look for them.
+from gffbase._serialize import (
+    Quoter,
+    _reconstruct,
+    encode_value,
+    quoted_semicolon_patterns,
+    quoter,
+)
 from gffbase.feature import ParsedFeature
+
+__all__ = [
+    "Quoter",
+    "_reconstruct",
+    "detect_dialect",
+    "encode_value",
+    "native_available",
+    "parse_bytes",
+    "parse_gff",
+    "quoted_semicolon_patterns",
+    "quoter",
+]
 
 try:  # pragma: no cover - import availability is env-dependent
     from gffbase import _native as _rust

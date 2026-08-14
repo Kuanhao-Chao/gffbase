@@ -40,6 +40,7 @@ from gffbase._options import (
     IngestOptions,
     _FeatureAdapter,
 )
+from gffbase._serialize import encode_value
 from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
 from gffbase.feature import ParsedFeature
 from gffbase.modes import VALIDATION_NCBI
@@ -874,7 +875,15 @@ def _regenerate_attributes_blob(con, feature_id: str, fmt: str) -> None:
         parts = [f'{k} "{v}"' for k, values in grouped.items() for v in values]
         blob = "; ".join(parts)
     else:
-        blob = ";".join(f"{k}={','.join(values)}" for k, values in grouped.items())
+        # The `attributes` rows hold DECODED values, so they have to be
+        # re-encoded on the way back into column 9. Without this a merged
+        # value containing `;` or `,` is written to the database unescaped,
+        # and every later read of that feature parses it as several
+        # attributes -- corruption that outlives the process, unlike the
+        # serialization-only case.
+        blob = ";".join(
+            f"{k}={','.join(encode_value(v) for v in values)}" for k, values in grouped.items()
+        )
     con.execute(
         "UPDATE features SET attributes_blob = ? WHERE id = ?",
         [blob.encode("utf-8"), feature_id],
