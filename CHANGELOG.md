@@ -351,6 +351,38 @@ nobody can install would only mislead. Everything below is the delta from
 
 ### Fixed
 
+- **`gffbase migrate --coalesce` crashed on every invocation.** The command
+  passed a path to `coalesce_multipart`, which takes an open connection —
+  `AttributeError: 'str' object has no attribute 'execute'`. It also needed
+  the connection to have the spatial extension loaded, or DuckDB refuses to
+  modify a table carrying an R-tree index. Both fixed, and verified end to
+  end against the committed v1 fixture: schema 1 → 2, one multipart feature
+  re-fused.
+- **The pure-Python fallback parser was 73% covered and had no direct tests.**
+  It is the oracle the Rust parser is differentially compared against *and*
+  the only parser on a wheel-less install, so it was the worst place in the
+  codebase to be under-tested — a bug there could make a Rust bug look like
+  agreement. Now 93%, with a dedicated `tests/test_pyfallback_parser.py`.
+
+  Two defects surfaced immediately. `_FallbackIterator._drain_for_metadata`
+  pulled a record to populate the dialect but never captured it, so
+  `.dialect()` returned `{}` until something happened to iterate — the same
+  call gave a populated dialect or an empty one depending on nothing the
+  caller could see. And a file with directives but no features never reached
+  a yield at all, so `.dialect()["fmt"]` was a `KeyError` on exactly the
+  inputs a caller probes before deciding what to do. Both now match the Rust
+  engine.
+
+  The gap existed because every fallback test used a file smaller than
+  `checklines`, so the parser's *second* loop — which processes nearly every
+  line of a real annotation — had never run.
+- `_FeatureIterator.dialect` and `.directives` were methods where their base
+  class has them as properties, with a `type: ignore` hiding the mypy error.
+  The same expression worked against one iterator and raised
+  `TypeError: 'list' object is not callable` against another.
+- Removed two dead definitions from the fallback parser (`_parse_coord` and
+  `_LazyGFFFormatErrorProxy`), neither referenced anywhere.
+
 - `FeatureDB.bed12()` emitted a `blockCount` that counted *all* block
   children while `blockSizes`/`blockStarts` silently dropped any child with a
   missing coordinate, producing a BED12 line whose three block fields

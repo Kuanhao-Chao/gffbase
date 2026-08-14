@@ -47,7 +47,7 @@ def _gff_format_error_class():
         from gffbase._native import GFFFormatError as _C
 
         return _C
-    except Exception:
+    except Exception:  # pragma: no cover - only on a build without the extension
         from gffbase.exceptions import GFFFormatError as _C
 
         return _C
@@ -66,18 +66,12 @@ def _make_error(message: str, line_no: int, kind: str):
             err.line_no = line_no
             err.kind = kind
             err.message = message
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError):  # pragma: no cover - defensive
+            # A future PyO3 exception type might not accept attribute
+            # assignment. The message is already correct; the structured
+            # metadata is a nicety.
             pass
         return err
-
-
-# Backwards-compat: tests importing `GFFFormatError` from this module.
-class _LazyGFFFormatErrorProxy:
-    def __instancecheck__(self, instance):
-        return isinstance(instance, _gff_format_error_class())
-
-    def __call__(self, *a, **kw):
-        return _gff_format_error_class()(*a, **kw)
 
 
 GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise sites below
@@ -96,12 +90,6 @@ def _iter_lines(stream) -> Iterator[str]:
         if line.endswith("\r"):
             line = line[:-1]
         yield line
-
-
-def _parse_coord(s: str) -> int | None:
-    if s == "." or s == "":
-        return None
-    return int(s)
 
 
 def _validate(
@@ -420,7 +408,7 @@ class _FallbackIterator:
             directives=self._directives,
             profile=validation,
         )
-        self._dialect = None
+        self._dialect: dict | None = None
         self._exhausted = False
 
     def __iter__(self):
@@ -441,11 +429,30 @@ class _FallbackIterator:
             # The generator runs the dialect-peek phase before its first
             # yield, populating directives + dialect along the way. We
             # drive it just enough to reach that point.
-            first = next(self._gen)
+            item = next(self._gen)
+            # The generator yields `(feature, directives, dialect)`, and the
+            # dialect has to be captured HERE as well as in `__next__`.
+            # Draining without capturing left `.dialect()` returning `{}`
+            # until someone happened to iterate -- so the same call gave a
+            # populated dialect or an empty one depending on nothing the
+            # caller could see. `directives` was fine because the generator
+            # appends into a list this object already owns.
+            _feat, _directives, dialect = item
+            self._dialect = dialect
             # Restore: stash the first record so __next__ still sees it.
-            self._gen = self._chain([first], self._gen)
+            self._gen = self._chain([item], self._gen)
         except StopIteration:
             self._exhausted = True
+            if self._dialect is None:
+                # A file with directives but no features never reaches a
+                # yield, so nothing ever handed us a dialect. Returning `{}`
+                # made `.dialect()["fmt"]` a KeyError on exactly the inputs
+                # where a caller is most likely to be probing before deciding
+                # what to do. The Rust engine reports the default here, so
+                # report the same thing.
+                from gffbase.dialect import default_dialect
+
+                self._dialect = default_dialect()
 
     @staticmethod
     def _chain(prefix, suffix):

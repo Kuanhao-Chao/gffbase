@@ -24,6 +24,8 @@ them.
 
 from __future__ import annotations
 
+import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -372,7 +374,7 @@ def test_feature_iterator_yields_what_it_was_given(db):
     feats = list(db.all_features())
     it = _FeatureIterator(feats)
     assert [f.id for f in it] == [f.id for f in feats]
-    assert it.directives() == []
+    assert it.directives == []
 
 
 def test_create_db_accepts_a_feature_iterable(db):
@@ -498,3 +500,415 @@ def test_to_seqfeature_refuses_a_non_feature():
 
     with pytest.raises(TypeError, match="expected a Feature"):
         to_seqfeature(42)
+
+
+# ---------------------------------------------------------------------------
+# pybedtools, for real
+# ---------------------------------------------------------------------------
+#
+# These were import-smoke tested only, which left ~52 statements across
+# `pybedtools_integration` and `contrib.plotting` unreachable in CI -- most of
+# the gap between measured coverage and the gate. The extras exist now, so
+# these run.
+
+#: A module-level `importorskip` would abort collection of this ENTIRE file,
+#: silently discarding the 41 tests defined above it -- the same silent-skip
+#: failure mode that let 23 fixtures go missing unnoticed. Skip per test
+#: instead, so losing the extra costs exactly the tests that need it.
+requires_pybedtools = pytest.mark.skipif(
+    importlib.util.find_spec("pybedtools") is None,
+    reason="needs the [pybedtools] extra",
+)
+
+TSS_SRC = (
+    "chr1\ts\tgene\t100\t900\t.\t+\t.\tID=g1;Name=alpha\n"
+    "chr1\ts\ttranscript\t100\t900\t.\t+\t.\tID=t1;Parent=g1;Name=alpha\n"
+    "chr1\ts\ttranscript\t300\t800\t.\t-\t.\tID=t2;Parent=g1;Name=beta\n"
+    "chr1\ts\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
+)
+
+
+@pytest.fixture
+def tss_db():
+    return create_db(TSS_SRC, ":memory:", from_string=True)
+
+
+@requires_pybedtools
+def test_to_bedtool_converts_every_feature(db):
+    from gffbase.pybedtools_integration import to_bedtool
+
+    intervals = list(to_bedtool(db.all_features()))
+    assert len(intervals) == 8
+    assert {iv.chrom for iv in intervals} == {"chr1"}
+
+
+@requires_pybedtools
+def test_to_bedtool_result_can_be_iterated_more_than_once(db):
+    """The deviation from gffutils, and the reason for it.
+
+    A generator-backed `BedTool` is a one-shot stream that reports its
+    emptiness inconsistently -- `len(list(bt))` is 0 while `len(bt)` is the
+    real count. Verified against pybedtools 0.12.0 with no gffbase code
+    involved. gffutils returns that object, so `list(to_bedtool(...))` there
+    is silently empty, which reads as an empty database rather than as a bug.
+    """
+    from gffbase.pybedtools_integration import to_bedtool
+
+    bt = to_bedtool(db.all_features())
+    assert len(list(bt)) == 8
+    assert len(list(bt)) == 8, "second iteration lost the records"
+    assert len(bt) == 8, "len() and list() must agree"
+
+
+@requires_pybedtools
+def test_raw_pybedtools_still_has_the_trap_this_works_around():
+    """Pins the upstream behaviour, so that if pybedtools ever fixes it the
+    workaround above can be revisited rather than cargo-culted forever."""
+    import pybedtools
+
+    def gen():
+        for i in range(3):
+            yield pybedtools.create_interval_from_list(
+                ["chr1", "s", "gene", str(10 * i + 1), str(10 * i + 5), ".", "+", ".", f"ID=g{i}"]
+            )
+
+    assert len(list(pybedtools.BedTool(gen()))) == 0
+    assert len(pybedtools.BedTool(gen())) == 3
+
+
+@requires_pybedtools
+def test_tsses_puts_the_minus_strand_site_at_the_end(tss_db):
+    """The TSS is the 5' end. Taking `start` on both strands is the classic
+    error here and it is silent -- the output is still a valid BED file, just
+    describing the wrong end of every reverse-strand gene."""
+    from gffbase.pybedtools_integration import tsses
+
+    sites = {iv.attrs["ID"]: (iv.start, iv.end, iv.strand) for iv in tsses(tss_db)}
+    assert sites["t1"][:2] == (99, 100)  # + strand -> transcript.start
+    assert sites["t2"][:2] == (799, 800)  # - strand -> transcript.end
+    assert sites["t1"][2] == "+" and sites["t2"][2] == "-"
+
+
+@requires_pybedtools
+def test_tsses_are_one_base(tss_db):
+    from gffbase.pybedtools_integration import tsses
+
+    for interval in tsses(tss_db):
+        assert interval.end - interval.start == 1, str(interval)
+
+
+@requires_pybedtools
+def test_tsses_carry_the_derived_source(tss_db):
+    from gffbase.pybedtools_integration import tsses
+
+    assert {iv.fields[1] for iv in tsses(tss_db)} == {tss_db.derived_source}
+
+
+@requires_pybedtools
+def test_tsses_as_bed6(tss_db):
+    from gffbase.pybedtools_integration import tsses
+
+    intervals = list(tsses(tss_db, as_bed6=True))
+    assert all(len(iv.fields) == 6 for iv in intervals)
+    assert {iv.name for iv in intervals} == {"t1", "t2"}
+
+
+@requires_pybedtools
+def test_tsses_names_from_one_attribute(tss_db):
+    from gffbase.pybedtools_integration import tsses
+
+    assert {iv.name for iv in tsses(tss_db, attrs="Name")} == {"alpha", "beta"}
+
+
+@requires_pybedtools
+def test_tsses_names_from_several_attributes(tss_db):
+    """`gff2bed`'s `name_field` takes ONE key, so a joined name has to be
+    computed before the conversion rather than passed through."""
+    from gffbase.pybedtools_integration import tsses
+
+    got = {iv.name for iv in tsses(tss_db, attrs=["ID", "Name"], attrs_sep="|")}
+    assert got == {"t1|alpha", "t2|beta"}
+
+
+@requires_pybedtools
+def test_tsses_merge_overlapping(tss_db):
+    from gffbase.pybedtools_integration import tsses
+
+    merged = list(tsses(tss_db, merge_overlapping=True))
+    assert merged, "merging must not empty the result"
+    assert all(iv.end - iv.start >= 1 for iv in merged)
+
+
+@requires_pybedtools
+def test_tsses_skips_transcripts_with_no_coordinates():
+    """A transcript with no position has no transcription start site.
+    Inventing 0 would put it at the start of the chromosome."""
+    from gffbase.pybedtools_integration import tsses
+
+    src = (
+        "chr1\ts\tgene\t100\t900\t.\t+\t.\tID=g1\n"
+        "chr1\ts\ttranscript\t100\t900\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\ts\ttranscript\t.\t.\t.\t+\t.\tID=t_null;Parent=g1\n"
+    )
+    db = create_db(src, ":memory:", from_string=True)
+    assert {iv.attrs["ID"] for iv in tsses(db)} == {"t1"}
+
+
+@requires_pybedtools
+def test_asinterval_round_trips_a_feature(db):
+    """`helpers.asinterval` is the primitive under `to_bedtool`."""
+    from gffbase.helpers import asinterval
+
+    feature = db["g1"]
+    interval = asinterval(feature)
+    assert interval.chrom == feature.seqid
+    assert interval.start == feature.start - 1  # BED is 0-based
+    assert interval.end == feature.end
+
+
+# ---------------------------------------------------------------------------
+# Paths that had no test at all
+# ---------------------------------------------------------------------------
+
+
+def test_print_bin_sizes_reports_every_level(capsys):
+    """A debugging aid, but an exported one -- upstream examples call it."""
+    gbins.print_bin_sizes()
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line.startswith("level:")]
+    assert len(lines) == len(gbins.OFFSETS)
+    assert "bin size" in lines[0]
+    # The finest level is 128 Kb (2**17); the coarsest is 512 Mb.
+    assert "128.0 Kb" in lines[0]
+    assert "512.0 Mb" in lines[-1]
+
+
+def test_python_m_gffbase_runs_the_cli():
+    """`__main__.py` is only reachable through a subprocess, so an in-process
+    test cannot cover it -- and it is how `python -m gffbase` works."""
+    import subprocess
+    import sys
+
+    import gffbase
+
+    result = subprocess.run(
+        [sys.executable, "-m", "gffbase", "--version"],
+        capture_output=True,
+        text=True,
+        cwd=Path(gffbase.__file__).parent.parent.parent,
+        env={**os.environ, "PYTHONPATH": str(Path(gffbase.__file__).parent.parent)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert gffbase.__version__ in result.stdout
+
+
+def test_url_iterator_fetches_and_parses(tmp_path, monkeypatch):
+    """`_UrlIterator` downloads to a temp file first, because dialect sniffing
+    re-reads the head of the input and a socket cannot be rewound."""
+    import io
+
+    from gffbase.iterators import _UrlIterator
+
+    payload = b"##gff-version 3\nchr1\ts\tgene\t1\t9\t.\t+\t.\tID=g1\n"
+
+    class _Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, *a, **k: _Response(payload))
+    it = _UrlIterator("http://example.com/x.gff3")
+    features = list(it)
+    # `.id` is assigned at ingest, not by the iterator, so compare on the
+    # attribute the file actually carries.
+    assert [f.attributes["ID"] for f in features] == [["g1"]]
+    assert [(f.seqid, f.start, f.end) for f in features] == [("chr1", 1, 9)]
+    assert it.directives == ["gff-version 3"]
+
+
+def test_url_iterator_refuses_a_non_url():
+    from gffbase.iterators import _UrlIterator
+
+    with pytest.raises(ValueError, match="not a URL"):
+        _UrlIterator("/local/path.gff3")
+
+
+def test_feature_iterator_next_protocol(db):
+    """`__next__` is separate from `__iter__` here and had no test."""
+    from gffbase.iterators import _FeatureIterator
+
+    feats = list(db.all_features())[:2]
+    it = _FeatureIterator(feats)
+    assert next(it).id == feats[0].id
+    assert next(it).id == feats[1].id
+    with pytest.raises(StopIteration):
+        next(it)
+    assert it.dialect["fmt"] == "gff3"
+
+
+def test_inspect_over_a_feature_iterable(db):
+    """The third input shape: not a path, not a FeatureDB."""
+    got = gff_inspect(list(db.all_features()), verbose=False)
+    assert got["feature_count"] == 8
+
+
+def test_inspect_reports_progress_when_verbose(db, capsys):
+    gff_inspect(db, limit=2, verbose=True)
+    assert "features inspected" in capsys.readouterr().err
+
+
+def test_the_two_iterator_layers_have_different_accessor_shapes():
+    """`dialect`/`directives` are METHODS on the low-level iterator and
+    PROPERTIES on the public one. Both are deliberate; nothing said so, and
+    the mismatch cost real time.
+
+    `parser._Iterator` wraps the Rust extension and mirrors its call-based
+    surface. `iterators.DataIterator` is the gffutils-compatible face, and
+    gffutils exposes `directives` as a plain attribute -- so a ported script
+    writes `it.directives`, not `it.directives()`.
+
+    `_FeatureIterator` sits under `DataIterator` and had them as methods,
+    which mypy flagged and a `type: ignore` silenced. The result was that the
+    same expression worked against one iterator and raised
+    `TypeError: 'list' object is not callable` against another.
+    """
+    from gffbase.iterators import _FeatureIterator
+    from gffbase.parser import parse_gff
+
+    low = parse_gff(str(DATA / "simple.gff3"))
+    assert callable(low.dialect), "parser._Iterator.dialect must stay a method"
+    assert callable(low.directives)
+    assert isinstance(low.dialect(), dict)
+
+    from gffbase import DataIterator
+
+    high = DataIterator(str(DATA / "simple.gff3"))
+    assert not callable(high.dialect), "DataIterator.dialect must be a property"
+    assert not callable(high.directives)
+    assert isinstance(high.dialect, dict)
+
+    # And the subclass agrees with its own base class.
+    feature_it = _FeatureIterator([])
+    assert not callable(feature_it.dialect)
+    assert not callable(feature_it.directives)
+
+
+# ---------------------------------------------------------------------------
+# helpers: the argument shapes nothing exercised
+# ---------------------------------------------------------------------------
+
+
+def test_get_gff_db_accepts_a_path_object(tmp_path):
+    from gffbase.interface import FeatureDB
+
+    src = tmp_path / "in.gff3"
+    src.write_text("chr1\ts\tgene\t1\t9\t.\t+\t.\tID=g1\n")
+    assert isinstance(get_gff_db(src), FeatureDB)  # a Path, not a str
+
+
+def test_get_gff_db_opens_an_existing_sibling_database(tmp_path):
+    """The branch that made upstream's version return a path string instead
+    of a database."""
+    from gffbase.interface import FeatureDB
+
+    src = tmp_path / "in.gff3"
+    src.write_text("chr1\ts\tgene\t1\t9\t.\t+\t.\tID=g1\n")
+    sibling = tmp_path / "in.gff3.db"
+    create_db(str(src), str(sibling))
+
+    got = get_gff_db(str(src))
+    assert isinstance(got, FeatureDB)
+    assert got["g1"].start == 1
+
+
+def test_sanitize_gff_file_accepts_an_existing_database(tmp_path, capsys):
+    from gffbase.helpers import sanitize_gff_file
+
+    src = tmp_path / "in.gff3"
+    src.write_text(
+        "chr1\ts\tgene\t1\t99\t.\t+\t.\tID=g1\nchr1\ts\tmRNA\t1\t99\t.\t+\t.\tID=t1;Parent=g1\n"
+    )
+    dbfile = tmp_path / "in.db"
+    create_db(str(src), str(dbfile))
+    sanitize_gff_file(str(dbfile))
+    assert "gid=" in capsys.readouterr().out
+
+
+def test_sanitize_gff_file_without_in_memory(tmp_path, capsys):
+    """`in_memory=False` routes through `get_gff_db` rather than building
+    straight into `:memory:`."""
+    from gffbase.helpers import sanitize_gff_file
+
+    src = tmp_path / "in.gff3"
+    src.write_text(
+        "chr1\ts\tgene\t1\t99\t.\t+\t.\tID=g1\nchr1\ts\tmRNA\t1\t99\t.\t+\t.\tID=t1;Parent=g1\n"
+    )
+    sanitize_gff_file(str(src), in_memory=False)
+    assert "gid=" in capsys.readouterr().out
+
+
+def test_make_query_featuretype_as_a_list():
+    sql, args = make_query([], featuretype=["gene", "mRNA"])
+    assert "features.featuretype IN  (?,?)" in sql
+    assert args == ["gene", "mRNA"]
+
+
+def test_make_query_limit_as_a_tuple():
+    """`limit` takes `"chr1:1-100"` or `("chr1", 1, 100)`; only the string
+    form had a test."""
+    sql, args = make_query([], limit=("chr1", 1, 100))
+    assert "features.seqid = ?" in sql
+    assert args[0] == "chr1"
+
+
+def test_make_query_completely_within_flips_the_comparison():
+    inside, args_in = make_query([], limit="chr1:100-200", completely_within=True)
+    overlap, args_ov = make_query([], limit="chr1:100-200", completely_within=False)
+    assert "features.start >= ? AND features.end <= ?" in inside
+    assert "features.start <= ? AND features.end >= ?" in overlap
+    # Note the argument order flips with the comparison.
+    assert args_in[1:] == ["100", "200"]
+    assert args_ov[1:] == ["200", "100"]
+
+
+def test_canonical_transcripts_prefers_the_longest_cds(tmp_path, capsys):
+    """The CDS-bearing branch. The no-CDS fallback is covered elsewhere; this
+    is the path a real annotation takes."""
+    pytest.importorskip("pyfaidx")
+
+    fasta = tmp_path / "g.fa"
+    fasta.write_text(">chr1\n" + ("ACGT" * 60) + "\n")
+    src = (
+        "chr1\ts\tgene\t1\t200\t.\t+\t.\tID=g1\n"
+        "chr1\ts\tmRNA\t1\t60\t.\t+\t.\tID=short;Parent=g1\n"
+        "chr1\ts\tCDS\t1\t60\t.\t+\t0\tID=sc;Parent=short\n"
+        "chr1\ts\tmRNA\t1\t180\t.\t+\t.\tID=long;Parent=g1\n"
+        "chr1\ts\tCDS\t1\t180\t.\t+\t0\tID=lc;Parent=long\n"
+        # A gene with no children at all -- the `continue` branch.
+        "chr1\ts\tgene\t500\t600\t.\t+\t.\tID=g_empty\n"
+    )
+    db = create_db(src, ":memory:", from_string=True)
+    got = list(canonical_transcripts(db, str(fasta)))
+    assert [t.id for t, _seq in got] == ["long"]
+    assert capsys.readouterr().out == ""
+
+
+def test_split_keyvals_honours_a_supplied_dialect():
+    """With a dialect given it is returned unchanged rather than inferred --
+    the caller has already decided."""
+    from gffbase.parser import _split_keyvals
+
+    supplied = {"fmt": "gtf", "keyval separator": " "}
+    _parsed, dialect = _split_keyvals("ID=x", dialect=supplied)
+    assert dialect == supplied
+
+
+def test_is_url_survives_a_malformed_address():
+    """`urlparse` raises on a truncated IPv6 literal."""
+    assert is_url("http://[::1") is False
+
+
+def test_directive_repr():
+    assert repr(Directive("##gff-version 3")) == "Directive('gff-version 3')"
