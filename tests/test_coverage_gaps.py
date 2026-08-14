@@ -611,14 +611,32 @@ def test_ingest_mid_loop_batch_flush(tmp_path):
     assert stats.n_features_raw == 5
 
 
-def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch):
-    """`ingest.py` line 459 — when `GFFUTILS2_THREADS` is set, the PRAGMA
-    threads SQL is issued."""
-    monkeypatch.setenv("GFFUTILS2_THREADS", "2")
+@pytest.mark.parametrize("var", ["GFFBASE_THREADS", "GFFUTILS2_THREADS"])
+def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch, var):
+    """Both spellings set the thread count.
+
+    `GFFUTILS2_THREADS` predates the rename to gffbase and was the last
+    `GFFUTILS2_*` name left. It still works, because an existing job script
+    silently losing its thread limit on a shared machine is worse than a
+    slightly untidy environment.
+    """
+    monkeypatch.delenv("GFFBASE_THREADS", raising=False)
+    monkeypatch.delenv("GFFUTILS2_THREADS", raising=False)
+    monkeypatch.setenv(var, "2")
     src = tmp_path / "tiny.gff3"
     src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n")
     con, stats = from_file(str(src))
     assert stats.n_features_raw == 1
+    assert con.execute("SELECT current_setting('threads')").fetchone()[0] == 2
+
+
+def test_the_new_threads_name_wins_over_the_old(tmp_path, monkeypatch):
+    monkeypatch.setenv("GFFUTILS2_THREADS", "2")
+    monkeypatch.setenv("GFFBASE_THREADS", "3")
+    src = tmp_path / "tiny.gff3"
+    src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n")
+    con, _stats = from_file(str(src))
+    assert con.execute("SELECT current_setting('threads')").fetchone()[0] == 3
 
 
 def test_persist_seqid_map_is_a_no_op_for_an_empty_map():

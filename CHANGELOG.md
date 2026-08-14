@@ -65,6 +65,11 @@ transactional storage, and a release pipeline gated on validation.
   See `docs/security/2026-sql-injection.md` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
+- The thread-count environment variable is now **`GFFBASE_THREADS`**.
+  `GFFUTILS2_THREADS` predates the rename to gffbase and was the last
+  `GFFUTILS2_*` name left; it still works, and the new name wins where both
+  are set. Silently ignoring an existing job script's thread limit on a shared
+  machine is worse than an untidy variable name.
 - **`GFFWriter.close()` closed a stream it did not open.** `GFFWriter` accepts
   either a path or an open file object, and closed both — so
   `GFFWriter(sys.stdout).close()` shut stdout down for the whole process and
