@@ -34,7 +34,12 @@ import pyarrow as pa
 
 from gffbase import parser as _parser
 from gffbase._dbutil import scalar
-from gffbase._options import IdSpecResolver, IngestOptions, _FeatureAdapter
+from gffbase._options import (
+    DEFAULT_ID_SPEC_GTF,
+    IdSpecResolver,
+    IngestOptions,
+    _FeatureAdapter,
+)
 from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
 from gffbase.feature import ParsedFeature
 from gffbase.modes import VALIDATION_NCBI
@@ -45,6 +50,7 @@ from gffbase.schema import (
     EDGES_FROM_GTF,
     EDGES_FROM_PARENT,
     FIND_PARENT_CYCLES,
+    GTF_PROPAGATE_ATTRIBUTE,
     GTF_PROPAGATE_GENE_ID,
     GTF_SYNTHESIZE_GENES,
     GTF_SYNTHESIZE_TRANSCRIPT_ATTRS,
@@ -671,6 +677,108 @@ def resolve_multipart(con, options, autoinc: dict, has_spatial: bool) -> int:
     return n_fused
 
 
+def resolve_synthesized_ids(con, options, autoinc: dict, fmt: str) -> int:
+    """Apply the caller's `id_spec` to GTF-synthesized features. Returns the
+    number renamed.
+
+    The synthesis SQL names each inferred feature after the attribute it
+    grouped on, which is what the default spec asks for -- so this is skipped
+    entirely unless the caller asked for something else. That fast path is not
+    an approximation: it produces output identical to gffutils on all six GTF
+    corpora.
+
+    Runs AFTER `EDGES_FROM_GTF`, which is what makes it coherent. The edges are
+    built on the grouping keys, so renaming afterwards and carrying the edges
+    along keeps the hierarchy intact. Renaming first would silently break it:
+    an exon's `transcript_id` still names the grouping key, so the join that
+    builds the edge would no longer find its parent. gffutils renames without
+    doing this, which is why a custom `id_spec` there produces disconnected
+    genes -- and one whose `gene_id` is a transcript id.
+    """
+    if not options.synthesized_ids_need_resolving(fmt):
+        return 0
+
+    # Give the synthesized rows the attribute the spec names, where the
+    # constituent rows carry one. Otherwise a spec of `{"gene": "gene_name"}`
+    # finds nothing on the synthesized gene and falls through to an
+    # autoincremented id -- applying the spec in form while ignoring the name
+    # the caller actually asked for, and which the file contains.
+    spec = options.id_spec_for(fmt)
+    if isinstance(spec, dict):
+        for featuretype, group_key in DEFAULT_ID_SPEC_GTF.items():
+            wanted = spec.get(featuretype)
+            if isinstance(wanted, str) and wanted != group_key:
+                con.execute(
+                    GTF_PROPAGATE_ATTRIBUTE,
+                    [group_key, wanted, wanted, featuretype, wanted],
+                )
+
+    rows = con.execute(
+        'SELECT id, seqid, source, featuretype, start, "end", score, strand, frame, '
+        "attributes_blob FROM features WHERE is_synthetic = TRUE ORDER BY file_order, id"
+    ).fetchall()
+    if not rows:
+        return 0
+
+    # One query for every synthesized row's attributes rather than one per row.
+    attrs: dict[str, list] = {}
+    for fid, key, value, idx in con.execute(
+        "SELECT a.feature_id, a.key, a.value, a.idx FROM attributes a "
+        "JOIN features f ON f.id = a.feature_id "
+        "WHERE f.is_synthetic = TRUE ORDER BY a.feature_id, a.idx"
+    ).fetchall():
+        attrs.setdefault(fid, []).append((key, value, int(idx)))
+
+    resolver = options.resolver_for(fmt)
+    taken = {r[0] for r in con.execute("SELECT id FROM features").fetchall()}
+    renames: list[tuple[str, str]] = []
+
+    for fid, seqid, source, featuretype, start, end, score, strand, frame, blob in rows:
+        parsed = ParsedFeature(
+            seqid=seqid,
+            source=source,
+            featuretype=featuretype,
+            start=start,
+            end=end,
+            score=score if score is not None else ".",
+            strand=strand if strand is not None else ".",
+            frame=frame if frame is not None else ".",
+            attributes_blob=bytes(blob) if blob is not None else b"",
+            attributes_pairs=attrs.get(fid, []),
+        )
+        new_id, _origin = resolver.resolve(parsed, autoinc)
+        if new_id == fid:
+            continue
+        while new_id in taken:
+            new_id = IdSpecResolver._autoincrement(featuretype, autoinc)
+        taken.discard(fid)
+        taken.add(new_id)
+        renames.append((fid, new_id))
+
+    if not renames:
+        return 0
+
+    # Carry every reference along. `edges` especially: they were built on the
+    # grouping keys a moment ago, and the closure has not been built yet.
+    for table, column in (
+        ("features", "id"),
+        ("attributes", "feature_id"),
+        ("edges", "parent"),
+        ("edges", "child"),
+    ):
+        con.executemany(
+            f"UPDATE {table} SET {column} = ? WHERE {column} = ?",
+            [(new, old) for old, new in renames],
+        )
+    con.executemany(
+        "INSERT INTO id_conflicts (raw_id, resolved_id, kind, file_order, detail) "
+        "VALUES (?, ?, 'synthesized_id_spec', NULL, 'id_spec applied to a synthesized feature')",
+        renames,
+    )
+    _log.info("applied id_spec to %d synthesized feature(s)", len(renames))
+    return len(renames)
+
+
 def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y, fmt):
     """Apply `merge` / `replace` to rows held back during the bulk load.
 
@@ -1078,6 +1186,8 @@ def _build_database(
         if not disable_infer_genes:
             n_synth_g = _synthesize_genes(con, gtf_subfeature)
         con.execute(EDGES_FROM_GTF)
+        # After the edges, deliberately -- see `resolve_synthesized_ids`.
+        resolve_synthesized_ids(con, options, autoinc, fmt)
         # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
         # them up in a single targeted UPDATE (touches only synthesized
         # rows; ~4-9 % of features at GENCODE scale).
