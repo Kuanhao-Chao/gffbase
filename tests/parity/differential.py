@@ -49,11 +49,37 @@ def requires_gffutils():
     return pytest.importorskip("gffutils", reason="differential tests need gffutils installed")
 
 
+#: Set to opt out of the hard failure below, for someone deliberately working
+#: from a checkout without the vendored corpus.
+ALLOW_MISSING_ENV = "GFFBASE_ALLOW_MISSING_FIXTURES"
+
+
 def fixture(name: str) -> str:
-    """Absolute path to a vendored upstream fixture."""
+    """Absolute path to a vendored upstream fixture.
+
+    A missing fixture is an **error**, not a skip.
+
+    It used to be a skip, and that is precisely how 23 of these files came to
+    be gitignored and untracked without anyone noticing: they existed on the
+    machine that created them, so the suite was green there, while a fresh
+    clone silently ran a fraction of the comparisons and still reported
+    success. A compatibility gate that quietly shrinks to nothing is worse than
+    no gate at all, because it is indistinguishable from a passing one.
+
+    `GFFBASE_ALLOW_MISSING_FIXTURES=1` restores the skipping behaviour for
+    anyone who genuinely wants to work without the corpus.
+    """
     path = UPSTREAM_DATA / name
     if not path.is_file():
-        pytest.skip(f"upstream fixture not vendored: {name}")
+        if os.environ.get(ALLOW_MISSING_ENV):
+            pytest.skip(f"upstream fixture not vendored: {name} ({ALLOW_MISSING_ENV} set)")
+        raise FileNotFoundError(
+            f"upstream fixture not vendored: {name}\n"
+            f"Expected at {path}.\n"
+            f"The differential corpus lives in tests/data/upstream/ and is committed; "
+            f"if it is missing, the checkout is incomplete. Set {ALLOW_MISSING_ENV}=1 "
+            f"to skip these tests instead of failing."
+        )
     return str(path)
 
 
