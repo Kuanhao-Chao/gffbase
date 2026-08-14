@@ -1319,10 +1319,17 @@ def _dialect_fmt_safe(it) -> str:
 
 
 def _apply_pragmas(con: duckdb.DuckDBPyConnection):
-    # DuckDB's defaults are excellent; we only nudge memory & threads. Anything
-    # missing here is left to the caller via DUCKDB_THREADS env var.
-    threads = os.environ.get("GFFUTILS2_THREADS")
+    # DuckDB's defaults are excellent; we only nudge threads.
+    #
+    # `GFFUTILS2_THREADS` is the old name, from before the project was called
+    # gffbase, and was the last `GFFUTILS2_*` variable left. It still works so
+    # that an existing job script does not silently start ignoring its thread
+    # limit -- which on a shared node is exactly the kind of change that makes
+    # someone else's day worse -- but `GFFBASE_THREADS` wins where both are set.
+    threads = os.environ.get("GFFBASE_THREADS") or os.environ.get("GFFUTILS2_THREADS")
     if threads:
+        # `int()` first: the value is interpolated, so it must not be able to
+        # carry syntax. See docs/security/2026-sql-injection.md.
         con.execute(f"PRAGMA threads = {int(threads)}")
     # Suppress the interactive progress bar — it floods stderr in batch and
     # subprocess scenarios and offers no value for benchmarking or scripting.
