@@ -1,5 +1,10 @@
 site_name: GFFBase
-site_description: Rust + DuckDB GFF3/GTF engine — 15× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
+# Fail the build on a broken link or a page missing from the nav. Three real
+# content files (schema-v2 and both security notes) sat outside the nav and
+# were unreachable from the site for an entire release, because the default
+# is a warning in a log nobody reads.
+strict: true
+site_description: Rust + DuckDB GFF3/GTF engine — up to 32× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
 site_url: https://gffbase.khchao.com/
 repo_url: https://github.com/Kuanhao-Chao/gffbase
 repo_name: Kuanhao-Chao/gffbase
@@ -40,6 +45,12 @@ theme:
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
+
+# The draft note to the gffutils maintainer is deliberately NOT published: it
+# is an unsent private report about a vulnerability in someone else's project.
+# `strict: true` would otherwise fail the build over it being outside the nav.
+exclude_docs: |
+  security/upstream-note-gffutils.md
 
 plugins:
   - search
@@ -95,6 +106,7 @@ nav:
   - Usage Gallery: usage_gallery.md
   - Performance: performance.md
   - Migration from gffutils: migration.md
+  - Command line: cli.md
   - Cookbooks:
       - cookbooks/index.md
       - GENCODE / Ensembl: cookbooks/gencode_ensembl.md
@@ -109,3 +121,11 @@ nav:
       - DataIterator & GFFWriter: api/io.md
       - merge_criteria: api/merge_criteria.md
       - Exceptions: api/exceptions.md
+      - Multipart features: api/multipart.md
+      - validate: api/validate.md
+      - migrate: api/migrate.md
+      - Compatibility modules: api/compat.md
+  - Design:
+      - Schema v2: design/schema-v2.md
+  - Security:
+      - SQL injection (0.1.0): security/2026-sql-injection.md

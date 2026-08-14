@@ -61,11 +61,12 @@ optimizations applied:
 | **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    21.6 s      |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
 | **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    53.6 s      |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
 
-Every corpus ingests with **zero strict-mode warnings** from the
-NCBI-spec-hardened Rust parser. RefSeq's duplicate-`ID=cds-NP_xxx`
-convention (split CDS segments) is handled transparently via the
-`duplicates` table. Full reproducible numbers + per-corpus root-cause
-analysis: see [Performance Comparison](performance.md).
+Every corpus ingests cleanly from the NCBI-spec-hardened Rust parser.
+RefSeq's duplicate-`ID=cds-NP_xxx` convention (split CDS segments) is handled
+transparently: renamed as gffutils would under the default `mode="compat"`,
+and fused into one discontinuous feature under `mode="strict"`. Full
+reproducible numbers + per-corpus root-cause analysis: see
+[Performance Comparison](performance.md).
 
 ---
 
@@ -175,7 +176,7 @@ exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 ```bash
 pip install -e '.[test,all]'
-pytest                                     # 530 passed
+pytest                                     # 1680 passed
 pytest --cov=gffbase --cov-report=term     # coverage report
 ```
 
