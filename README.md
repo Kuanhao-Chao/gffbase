@@ -306,7 +306,7 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.1.1},
+  version = {0.2.0},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```

@@ -24,8 +24,11 @@ release, which is why they share an advisory.
 | Version | Status |
 |---------|--------|
 | 0.1.0 | Affected — **the only published release** (PyPI, tag `v0.1.0`) |
-| 0.1.1 | Affected in tree, but **never released**: no tag, and `CHANGELOG.md` still marks it unreleased. Nobody can be running it unless they installed from a git checkout. |
 | 0.2.0 | Fixed |
+
+0.1.1 appears in neither row on purpose: it was prepared in tree but never
+tagged and never published, and its changes ship inside 0.2.0. Nobody can be
+running it unless they installed from a git checkout of the branch.
 
 So the exposed population is exactly the people who installed 0.1.0 from
 PyPI, plus anyone tracking the branch.

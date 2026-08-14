@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "gffbase"
-version = "0.1.1"
+version = "0.2.0"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
 requires-python = ">=3.10"
