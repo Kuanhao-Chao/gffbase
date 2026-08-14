@@ -130,7 +130,13 @@ def test_count_features_of_type_filtered():
 
 
 def test_seqids_generator_empty():
-    """Empty in-memory DuckDB → seqids() yields nothing."""
+    """Empty in-memory DuckDB -> seqids() yields nothing.
+
+    Also pins that wrapping a hand-built connection still works: the
+    incomplete-database refusal deliberately applies only to a database opened
+    from a path, since a caller who constructs and populates their own
+    connection is doing so on purpose.
+    """
     con = duckdb.connect(":memory:")
     from gffbase.schema import DDL
 

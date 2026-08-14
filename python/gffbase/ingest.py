@@ -792,7 +792,74 @@ def _insert_single(con, builder, seqid_to_y, fid, feat, file_order):
 # ---------------------------------------------------------------------------
 
 
+#: Suffix for the file an ingest writes before it is known to have succeeded.
+#: Carries the pid so two processes building the same target do not collide on
+#: the scratch file.
+_TMP_SUFFIX = ".gffbase-building"
+
+
+def _remove_quietly(path: str) -> None:
+    """Delete `path` and any DuckDB sidecar, ignoring what is not there."""
+    for candidate in (path, f"{path}.wal", f"{path}.tmp"):
+        try:
+            os.unlink(candidate)
+        except OSError:
+            pass
+
+
 def from_file(
+    path: str,
+    dbfn: str = ":memory:",
+    **kwargs,
+) -> tuple[duckdb.DuckDBPyConnection, IngestStats]:
+    """Ingest a GFF3 or GTF file into a DuckDB database, atomically.
+
+    The destination either does not exist or is a complete database: the ingest
+    writes to a scratch file beside it and renames on success, so a failure
+    part-way leaves nothing behind and an existing database is not destroyed
+    until its replacement is finished.
+
+    Before this, a failed ingest left a file that was valid DuckDB but held no
+    data and no `meta` rows. Retrying then refused with "already exists. Pass
+    force=True", and opening it silently produced an empty database that
+    reported itself as current -- the two ways this could mislead someone were
+    to make them force-overwrite something, or to believe their data had
+    loaded.
+
+    See `_build_database` for the ingest itself and the full argument list.
+    """
+    options = kwargs.get("options")
+    force = options.force if options is not None else kwargs.get("force", False)
+
+    if dbfn == ":memory:":
+        return _build_database(path, dbfn, **kwargs)
+
+    if os.path.exists(dbfn) and not force:
+        raise ValueError(f"{dbfn} already exists. Pass force=True to overwrite.")
+
+    tmp = f"{dbfn}{_TMP_SUFFIX}.{os.getpid()}"
+    _remove_quietly(tmp)
+    try:
+        con, stats = _build_database(path, tmp, **kwargs)
+    except BaseException:
+        # BaseException, not Exception: a KeyboardInterrupt during a long
+        # ingest is exactly when a half-written file would be left behind.
+        _remove_quietly(tmp)
+        raise
+
+    # Close before renaming so DuckDB checkpoints and drops its WAL; the
+    # replacement is then a single file and `os.replace` is atomic on any one
+    # filesystem.
+    con.close()
+    try:
+        os.replace(tmp, dbfn)
+    except OSError:
+        _remove_quietly(tmp)
+        raise
+    return duckdb.connect(dbfn), stats
+
+
+def _build_database(
     path: str,
     dbfn: str = ":memory:",
     *,
@@ -827,12 +894,9 @@ def from_file(
     disable_infer_transcripts = options.disable_infer_transcripts
     gtf_subfeature = options.gtf_subfeature
 
-    if dbfn != ":memory:":
-        if os.path.exists(dbfn) and not force:
-            raise ValueError(f"{dbfn} already exists. Pass force=True to overwrite.")
-        if os.path.exists(dbfn) and force:
-            os.unlink(dbfn)
-
+    # `dbfn` is already resolved by `from_file` -- either ":memory:" or the
+    # scratch path it will rename from. Existence and `force` are decided
+    # there, so that an ingest which fails never touches the real target.
     con = duckdb.connect(dbfn)
     _apply_pragmas(con)
     con.execute(DDL)
