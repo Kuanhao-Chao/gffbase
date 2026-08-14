@@ -145,6 +145,30 @@ def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
     return ", ".join(parts)
 
 
+def _sql_literal(value) -> str:
+    """Render a Python scalar as a DuckDB literal.
+
+    `SET`/`PRAGMA` take no bind parameters, so a setting's value has to be
+    written into the statement text. This is the one place that is allowed to
+    happen, and it happens by construction rather than by interpolation:
+    booleans and numbers have no syntax to escape, and a string is
+    single-quoted with its own quotes doubled, which is the only escape SQL
+    string literals have.
+    """
+    if isinstance(value, bool):
+        # Before the int branch: bool is a subclass of int, and DuckDB spells
+        # its booleans `true`/`false`, not `1`/`0`.
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError(f"cannot use {value!r} as a setting value")
+        return repr(value)
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
 def _require_feature_id(obj) -> str:
     """Coerce a `Feature`-or-id argument to a primary-key string.
 
@@ -1969,13 +1993,40 @@ class FeatureDB:
         self._analyzed_flag = True
 
     def set_pragmas(self, pragmas: dict) -> None:
-        # DuckDB pragmas. Silently skip ones DuckDB rejects (legacy callers
-        # often pass SQLite-specific pragmas like `journal_mode`).
+        """Apply DuckDB settings, ignoring pragmas that only SQLite has.
+
+        Legacy callers pass `constants.default_pragmas` -- `synchronous`,
+        `journal_mode`, `main.page_size`, `main.cache_size` -- none of which
+        DuckDB has. Those are skipped, which is what makes a gffutils script
+        run here unchanged.
+
+        Both the name and the value used to be interpolated straight into the
+        statement, and the whole loop body sat inside `except duckdb.Error:
+        continue`. DuckDB executes trailing statements, so
+
+            db.set_pragmas({"threads": "1; DROP TABLE attributes"})
+
+        dropped the table -- and because the exception was swallowed, a
+        payload that *failed* was silent too. Names are now matched against
+        DuckDB's own settings catalog and values rendered as SQL literals, so
+        nothing a caller supplies reaches the parser as syntax.
+
+        Matching the live catalog rather than a hardcoded list means the check
+        tracks whatever DuckDB build is installed, instead of going stale and
+        rejecting settings a newer version added.
+        """
+        known = {
+            row[0] for row in self.conn.execute("SELECT name FROM duckdb_settings()").fetchall()
+        }
         for k, v in pragmas.items():
-            try:
-                self.conn.execute(f"PRAGMA {k} = {v}")
-            except duckdb.Error:
+            name = str(k)
+            if name not in known:
+                # Not a DuckDB setting. Previously this was indistinguishable
+                # from "DuckDB rejected the value"; now it is a decision.
+                _log.debug("set_pragmas: skipping %r, not a DuckDB setting", name)
                 continue
+            # `name` is echoed from the catalog, so it cannot carry syntax.
+            self.conn.execute(f"SET {name} = {_sql_literal(v)}")
 
     # ------------------------------------------------------------------
     # Internal: row → Feature streaming

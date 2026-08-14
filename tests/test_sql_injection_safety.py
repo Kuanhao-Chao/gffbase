@@ -14,7 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""`order_by` is interpolated into SQL, so it has to be a whitelist.
+"""Two public parameters reached the SQL parser as syntax. Both are closed here.
+
+`order_by` and `set_pragmas` were separate instances of one defect: a caller's
+string interpolated into a statement, on a backend that executes trailing
+statements. They were found in the same review of the query builders and are
+fixed in the same release, so they are pinned in the same file.
+
+Part one: `order_by`
+--------------------
 
 This was a live SQL injection, not a theoretical one. gffbase interpolated any
 unrecognized `order_by` verbatim "for power users", and DuckDB executes
@@ -35,13 +43,33 @@ gffutils specifies that `order_by` items "must be in: 'seqid', 'source',
 'extra'" -- and of those, `attributes` and `extra` used to raise a
 BinderException here, a tuple silently sorted by nothing, and a list raised
 `TypeError: unhashable type`.
+
+Part two: `set_pragmas`
+-----------------------
+
+The same defect, one method away, and quieter. `set_pragmas` built
+`f"PRAGMA {k} = {v}"` from a caller-supplied dict -- interpolating BOTH the
+name and the value -- with the whole loop body inside `except duckdb.Error:
+continue`. So
+
+    db.set_pragmas({"threads": "1; DROP TABLE attributes"})
+
+dropped the table, and a payload that *failed* raised nothing either. The
+swallow existed for a real reason -- legacy callers pass SQLite's
+`default_pragmas`, which DuckDB has never had -- but it could not tell "this
+is a SQLite pragma" from "DuckDB rejected this". Names are now matched against
+DuckDB's own settings catalog, so that distinction is made rather than guessed.
+
+Unlike `order_by`, gffutils is genuinely vulnerable here too: its version calls
+`cursor.executescript()`, which exists precisely to run several statements.
 """
 
 from __future__ import annotations
 
+import duckdb
 import pytest
 from gffbase import create_db
-from gffbase.interface import _ORDER_BY_COLUMNS, FeatureDB
+from gffbase.interface import _ORDER_BY_COLUMNS, FeatureDB, _sql_literal
 
 SRC = """##gff-version 3
 chr2\trs\tgene\t50\t99\t.\t+\t.\tID=g2
@@ -214,3 +242,99 @@ def test_every_whitelisted_name_produces_runnable_sql(db):
     for name in _ORDER_BY_COLUMNS:
         assert len(list(db.all_features(order_by=name))) == 3, name
         assert len(list(db.children("g2", order_by=name))) == 2, name
+
+
+# ---------------------------------------------------------------------------
+# set_pragmas
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # The value carries the statement -- the original report.
+        {"threads": "1; DROP TABLE attributes"},
+        # The NAME carries it instead. The old code interpolated both, so a
+        # fix that guarded only the value would still be open.
+        {"threads = 1; DROP TABLE attributes; SET threads": 1},
+        # No trailing statement at all: a bare identifier is still not a
+        # literal, and `attributes` is a real table name.
+        {"temp_directory": "(SELECT 1 FROM attributes)"},
+    ],
+    ids=["value", "name", "subquery"],
+)
+def test_set_pragmas_cannot_smuggle_a_statement(db, payload):
+    before = _tables(db)
+    try:
+        db.set_pragmas(payload)
+    except duckdb.Error:
+        # Refusing loudly is fine. Executing is not.
+        pass
+    assert "attributes" in _tables(db), f"{payload!r} dropped a table"
+    assert _tables(db) == before
+
+
+def test_set_pragmas_still_applies_a_real_setting(db):
+    """The fix must not turn the method into a no-op."""
+    db.set_pragmas({"threads": 3})
+    assert db.conn.execute("SELECT current_setting('threads')").fetchone()[0] == 3
+
+
+def test_set_pragmas_skips_sqlite_pragmas_without_raising(db):
+    """`constants.default_pragmas` verbatim -- what a ported gffutils script
+    passes. None of these exist in DuckDB; all four must be ignored quietly,
+    because raising would break the drop-in promise."""
+    db.set_pragmas(
+        {
+            "synchronous": "NORMAL",
+            "journal_mode": "MEMORY",
+            "main.page_size": 4096,
+            "main.cache_size": 10000,
+        }
+    )
+    assert "attributes" in _tables(db)
+
+
+def test_set_pragmas_applies_the_valid_entries_of_a_mixed_dict(db):
+    """One unrecognized name must not stop the loop -- the behaviour the old
+    `except: continue` provided, now provided deliberately."""
+    db.set_pragmas({"not_a_pragma": "x", "threads": 5})
+    assert db.conn.execute("SELECT current_setting('threads')").fetchone()[0] == 5
+
+
+def test_a_quote_in_a_setting_value_is_escaped_not_executed(db):
+    """A value containing a single quote must terminate no string. DuckDB
+    rejects this particular path as a directory, which is the point: it
+    reached the value slot, not the parser."""
+    before = _tables(db)
+    try:
+        db.set_pragmas({"temp_directory": "/tmp/o'brien'; DROP TABLE attributes; --"})
+    except duckdb.Error:
+        pass
+    assert _tables(db) == before
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, "true"),
+        (False, "false"),
+        (3, "3"),
+        (-2, "-2"),
+        (1.5, "1.5"),
+        ("plain", "'plain'"),
+        ("it's", "'it''s'"),
+        ("'; DROP TABLE t; --", "'''; DROP TABLE t; --'"),
+    ],
+)
+def test_sql_literal_rendering(value, expected):
+    """`bool` before `int` matters: `True` is an `int` in Python, and DuckDB
+    spells booleans `true`/`false`."""
+    assert _sql_literal(value) == expected
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_sql_literal_refuses_non_finite_floats(value):
+    """`repr(float('inf'))` is `inf`, a bare identifier rather than a number."""
+    with pytest.raises(ValueError, match="as a setting value"):
+        _sql_literal(value)

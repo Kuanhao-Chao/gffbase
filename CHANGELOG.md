@@ -11,6 +11,67 @@ Work toward 0.2.0: genuine `gffutils` 0.14 API/CLI parity, first-class support
 for discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
 transactional storage, and a release pipeline gated on validation.
 
+### Security
+
+- **SQL injection through `order_by` (affects 0.1.0 and 0.1.1).** The parameter
+  was interpolated into the query, with anything outside a small set of known
+  column names passed through verbatim as a deliberate escape hatch "for power
+  users". DuckDB executes trailing statements, so
+
+      db.all_features(order_by='start ASC; DROP TABLE attributes; SELECT …')
+
+  dropped the table **and still returned rows** — the trailing `SELECT`
+  re-supplies the projection the result generator expects, so the call raises
+  nothing and the damage is invisible from the call site. Any statement DuckDB
+  accepts could be substituted, including `COPY … TO` to write local files.
+  All four entry points were affected (`all_features`, `features_of_type`,
+  `children`, `parents`); the joined paths had their own copy of the
+  pass-through.
+
+  gffutils contains the same interpolation and is **not** exploitable, because
+  SQLite refuses to execute more than one statement per call. gffbase inherited
+  the API shape and lost that accidental protection when it changed storage
+  engine.
+
+  `order_by` is now a whitelist, shared by both clause builders so no future
+  entry point can reacquire an escape hatch.
+
+- **SQL injection through `set_pragmas` (affects 0.1.0 and 0.1.1).** The same
+  defect one method away, and quieter. `FeatureDB.set_pragmas()` built
+  `PRAGMA {name} = {value}` by interpolating **both** halves of a
+  caller-supplied dict, with the whole loop body inside
+  `except duckdb.Error: continue` — so
+
+      db.set_pragmas({"threads": "1; DROP TABLE attributes"})
+
+  dropped the table, and a payload that *failed* was swallowed too, leaving no
+  trace anywhere. The swallow existed for a real reason — ported gffutils code
+  passes `constants.default_pragmas` (`synchronous`, `journal_mode`,
+  `main.page_size`, `main.cache_size`), none of which DuckDB has — but it could
+  not tell "this is a SQLite pragma" from "DuckDB rejected this".
+
+  Names are now matched against DuckDB's own settings catalog and values
+  rendered as SQL literals, so neither reaches the parser as syntax. Matching
+  the live catalog rather than a hardcoded list means the check cannot go stale
+  against a newer DuckDB, and the compatibility behaviour is unchanged but now
+  deliberate: an unrecognized name is skipped and logged, not guessed at.
+
+  Unlike `order_by`, **gffutils is vulnerable here too** — its version calls
+  `cursor.executescript()`, which exists precisely to run several statements.
+  Verified against 0.14. Not reported upstream; that is a maintainer decision.
+
+  An audit of every remaining f-string SQL site found no third instance.
+
+  See `docs/security/2026-sql-injection.md` for both write-ups and mitigations
+  for anyone who cannot upgrade.
+
+- **The B-tree CI job was red.** `test_every_invariant_actually_ran` required
+  INV-8 to have run and `report.skipped` to be empty, but INV-8 compares `bbox`
+  against the coordinates it was built from and therefore only exists when an
+  R-tree does. Under `GFFBASE_TEST_DISABLE_RTREE=1` the validator correctly
+  records it as skipped, which the test read as a failure. The skip is the
+  designed behaviour, so it is now what the test asserts.
+
 ### Changed (breaking)
 
 - **Minimum Python is now 3.10** (was 3.9), and 3.14 is supported. The wheel
@@ -52,9 +113,103 @@ transactional storage, and a release pipeline gated on validation.
   attribute and the oracle stores directives with the prefix stripped
   (`gff-version 3`, not `##gff-version 3`), so every consumer reading them
   saw the wrong strings.
+- **Every synthesized GTF gene and transcript was invisible to R-tree
+  `region()` queries.** `seqid_map` was populated during the R-tree build,
+  which runs *after* GTF synthesis — so the pass that stamps a synthesized
+  row's `seqid_y` and `bbox` joined an empty table and those rows kept a NULL
+  envelope. On `ensembl_gtf.txt` the R-tree path returned 32 features where the
+  B-tree path returned 33, silently omitting the transcript itself. Found by
+  the new INV-8 within minutes of the validator existing.
+- **`closure` could contain duplicate rows.** GFF3 permits a DAG — a feature
+  may name several `Parent`s — so the same descendant is reachable by two paths
+  of equal length, and the recursive CTE's `UNION ALL` emitted one row per
+  path. On `random-chr.gff`, `children(gene, level=2)` returned five features
+  of which only three were distinct. gffutils never had this because its
+  `relations` table is keyed on exactly that triple.
+- **A cyclic `Parent` graph made the hierarchy walks lap rather than
+  terminate.** All three recursive walks followed the cycle until the depth
+  budget ran out, so a two-feature cycle made `children()` return 64 rows — the
+  same two features, thirty-two times each. Each walk now carries its path and
+  refuses to revisit a node, which is free on well-formed data (in a DAG the
+  filter cannot fire) and verified identical on the FlyBase 50k corpus. Cycles
+  are logged and recorded rather than silently repaired.
+- **A failed ingest left a file behind**: valid DuckDB with the full schema, no
+  data and no metadata. Retrying then refused with "already exists. Pass
+  force=True", and *opening the leftover produced an empty database that
+  reported itself as current* — a missing `schema_version` looked like a v1
+  database and was dutifully migrated. Ingest now builds beside the target and
+  renames on success, so a failed `force=True` overwrite also leaves the
+  original intact; being handed such a file from elsewhere is refused at open.
+- **The UCSC `bin` column in the SQLite export was computed one level off** —
+  `_BINOFFSETS` was missing its top entry and used 0 where the oracle uses 1,
+  differing from `gffutils.bins` on ten of eleven representative ranges. Since
+  `gffutils.FeatureDB.region(completely_within=True)` filters on `bin`, an
+  exported database answered those queries with nothing at all.
+- `export_sqlite` wrote one row per *logical* feature, so a discontinuous
+  feature was exported with its envelope coordinates rather than its lines. It
+  now flattens through `segments_all` into the N features gffutils itself would
+  have made, fanning relations out over both endpoints and recording the
+  grouping in `duplicates`.
+- The `attributes` table disagreed with `Feature.attributes` for a wholly empty
+  value: `pseudo=` was indexed as a row while the object reported `[]`, so a
+  SQL query and the object model gave different answers for the same feature —
+  and a bare `Parent=` created an edge to the empty id.
+- GTF-synthesized gene and transcript rows ignored a caller-supplied `id_spec`,
+  taking the grouping key regardless. They now honour it, with the named
+  attribute carried onto the inferred row first (so `{"gene": "gene_name"}`
+  yields a gene actually named after `gene_name`, not an autoincremented
+  fallback), and the rename applied *after* the edges are built so the
+  hierarchy survives it.
+- `merge_strategy="merge"` never regenerated `attributes_blob`, so a merge was
+  invisible to every caller: the table held both values while the feature
+  reported one.
 
 ### Added
 
+- **First-class discontinuous (multipart) GFF3 features.** Several lines sharing
+  one `ID` — how NCBI represents a split CDS — are now one logical feature.
+  Previously the second line collided against the primary key and every merge
+  strategy lost information.
+  - **Schema v2.** `features` keeps one row per *logical* feature, with its
+    coordinates widened to the envelope, and `segments` is a sparse side table
+    holding physical lines only where `n_segments > 1`. Logical dedup stays
+    structural (no `DISTINCT` anywhere), the R-tree stays the primary access
+    path, storage grows with duplicate lines rather than corpus size, and a
+    v1 → v2 migration touches zero feature rows. `segments_all` gives the
+    one-row-per-input-line view.
+  - `MultipartFeature` and `FeatureSegment`, both subclassing `Feature` and
+    overriding none of `__str__`, `__len__`, `__hash__`, `__eq__`,
+    `__getitem__` or `astuple` — the compatibility surface is preserved by
+    inaction. `len()` stays the envelope span; `covered_length` is the new
+    quantity that excludes the gaps. Each segment carries its own phase, which
+    is the reason the storage exists.
+  - Fusing happens only under `mode="strict"`, deliberately: gffutils' `merge`
+    requires all eight non-attribute columns to match, so it never merges a
+    genuine split feature. `on_multipart_conflict` chooses between raising
+    `MultipartConstraintError` and splitting when lines sharing an `ID`
+    disagree on seqid, source, featuretype or strand.
+  - `explode_segments=True` on `region_batched` / `children_batched` /
+    `parents_batched` yields one row per input line. Offered on the tabular
+    APIs only — a `FeatureSegment` leaking into `region()` or `children()`
+    would corrupt legacy consumers.
+  - Measured on the FlyBase 50k corpus: 345 discontinuous features over 690
+    lines, and all 49,981 input lines round-trip byte for byte.
+- `Feature.to_line(normalized=False)` and `to_lines()`. The default is
+  byte-faithful; `normalized=True` re-renders column 9 from the parsed mapping,
+  which is what the oracle always does.
+- **`gffbase.migrate`** — `migrate_v1_to_v2()` upgrades in place, in one
+  transaction, idempotently, and is run automatically when a v1 database is
+  opened (`FeatureDB(..., upgrade="auto"|"never"|"error")`). It is structural
+  only and changes no query result, which is what makes doing it unasked
+  acceptable. `coalesce_multipart()` is the separate, opt-in second step that
+  re-fuses v1's `x_1` rows — it changes results, so the caller has to ask.
+  Tested against a real v1 database built by the pre-v2 code, committed as
+  `tests/data/v1/`.
+- **`gffbase.validate`** — 14 post-ingest invariants, run automatically at the
+  end of a strict-mode ingest and available as `db.validate()`. Every check is
+  a single set-based query. The one that matters most is INV-5: a fused
+  feature whose envelope is narrower than its segments simply stops being
+  returned by `region()`, with nothing raised anywhere.
 - `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
   `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
 - **Full `create_db` option fidelity.** Twelve parameters were previously

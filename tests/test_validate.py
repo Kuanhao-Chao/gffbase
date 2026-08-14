@@ -94,12 +94,29 @@ def test_a_freshly_built_database_validates(db):
 
 
 def test_every_invariant_actually_ran(db):
-    """A green report must not mean "nothing was looked at"."""
+    """A green report must not mean "nothing was looked at".
+
+    INV-8 compares `bbox` against the coordinates it was built from, so it
+    only exists to run when an R-tree was built. Under
+    `GFFBASE_TEST_DISABLE_RTREE=1` there is no `bbox` column and `validate_db`
+    records it as skipped -- which this test used to read as a failure, making
+    the whole B-tree CI job red. Asserting it unconditionally was the bug; the
+    skip is the designed behaviour, so assert *that* instead, and keep
+    requiring it whenever the column is there.
+    """
     report = validate_db(db, level="full")
     numbers = {c.split(" ", 1)[0] for c in report.checked}
-    assert numbers >= {f"INV-{i}" for i in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14)}
+    always = {f"INV-{i}" for i in (1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13, 14)}
+    assert numbers >= always
     assert "INV-12" in numbers
-    assert report.skipped == []
+
+    if db._rtree_built:
+        assert "INV-8" in numbers
+        assert report.skipped == []
+    else:
+        assert "INV-8" not in numbers
+        assert [s.split(" ", 1)[0] for s in report.skipped] == ["INV-8"]
+        assert "no R-tree" in report.skipped[0]
 
 
 @pytest.mark.parametrize(
