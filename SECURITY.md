@@ -4,10 +4,17 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅ Security fixes |
+| 0.2.x   | ✅ Current |
+| 0.1.0   | ❌ Superseded — upgrade to 0.2.0 |
 | < 0.1   | ❌ |
 
-Once 0.2.0 is released, 0.1.x moves to security-fix-only for six months.
+0.1.0 is the only release before 0.2.0 (0.1.1 was prepared but never tagged or
+published, and its changes ship inside 0.2.0). It carries two SQL injection
+vulnerabilities that are fixed in 0.2.0 and are **not** backported — see
+`docs/security/2026-sql-injection.md`, which includes a mitigation for anyone
+who cannot upgrade immediately. Backporting to a single superseded release,
+rather than shipping the fix in the version everyone should move to, would
+mean maintaining two vulnerable-adjacent branches for one artifact.
 
 ## Reporting a vulnerability
 

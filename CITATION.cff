@@ -12,7 +12,7 @@ authors:
 repository-code: https://github.com/Kuanhao-Chao/gffbase
 url: https://gffbase.khchao.com/
 license: Apache-2.0
-version: 0.1.1
+version: 0.2.0
 keywords:
   - bioinformatics
   - genomics

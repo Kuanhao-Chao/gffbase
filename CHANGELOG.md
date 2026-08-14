@@ -5,15 +5,20 @@ All notable changes to GFFBase are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — 2026-08-14
 
-Work toward 0.2.0: genuine `gffutils` 0.14 API/CLI parity, first-class support
-for discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
+Genuine `gffutils` 0.14 API and CLI parity, first-class support for
+discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
 transactional storage, and a release pipeline gated on validation.
+
+**0.1.1 is folded into this release.** It was prepared but never tagged and
+never published, so its changes ship here; a changelog section for a version
+nobody can install would only mislead. Everything below is the delta from
+0.1.0, which remains the only prior release.
 
 ### Security
 
-- **SQL injection through `order_by` (affects 0.1.0 and 0.1.1).** The parameter
+- **SQL injection through `order_by` (affects 0.1.0, the only published release).** The parameter
   was interpolated into the query, with anything outside a small set of known
   column names passed through verbatim as a deliberate escape hatch "for power
   users". DuckDB executes trailing statements, so
@@ -36,7 +41,7 @@ transactional storage, and a release pipeline gated on validation.
   `order_by` is now a whitelist, shared by both clause builders so no future
   entry point can reacquire an escape hatch.
 
-- **SQL injection through `set_pragmas` (affects 0.1.0 and 0.1.1).** The same
+- **SQL injection through `set_pragmas` (affects 0.1.0, the only published release).** The same
   defect one method away, and quieter. `FeatureDB.set_pragmas()` built
   `PRAGMA {name} = {value}` by interpolating **both** halves of a
   caller-supplied dict, with the whole loop body inside
@@ -93,6 +98,256 @@ transactional storage, and a release pipeline gated on validation.
   from the previously untested `duckdb>=1.0`, `pyarrow>=14`.
 - **PyO3 0.22 → 0.29.** Migrated off the removed `*_bound` constructors,
   `into_py`, `value_bound`, and `get_type_bound`.
+
+- **`FeatureDB.schema` is a method again**, not a property. gffutils documents
+  `db.schema()` and callers write it that way; as a property the documented
+  call raised `TypeError: 'str' object is not callable`.
+- **`merge_strategy="error"` is now the real default**, so a file with
+  duplicate IDs raises instead of loading with silently renamed rows.
+  Ingestion previously renamed every duplicate to `<id>__2` unconditionally,
+  which made the documented default unreachable. `create_unique` now produces
+  the oracle's `<id>_1`, `<id>_2` rather than `<id>__2`, `<id>__3`, and no
+  longer writes `duplicates` rows -- the oracle records a rename only when
+  `merge` falls back to `create_unique`, because that table exists so a later
+  merge can find the sibling rows.
+- **`DuplicateIDError`, `AttributeStringError` and `EmptyInputError` now
+  subclass `ValueError`.** gffutils exports `DuplicateIDError` but raises a
+  bare `ValueError("Duplicate ID ...")`, so real callers write
+  `except ValueError`. Subclassing satisfies both the documented type and
+  those callers instead of forcing a choice. `FeatureNotFoundError` is
+  deliberately left on `Exception`.
+
+### Changed
+
+- **`rust/Cargo.lock` is now committed.** `rust/Cargo.toml` and `MANIFEST.in`
+  both already claimed it was shipped; `.gitignore` excluded it. Dependency
+  resolution for the published wheel therefore varied with build time and
+  platform, contradicting the declared MSRV.
+- **Coverage flags moved out of the default `pytest` invocation.** `addopts`
+  hard-required `pytest-cov` (absent from the `dev` extra) and made a bare
+  `pytest` fail on coverage rather than on tests. Coverage is now applied
+  explicitly in CI. `pytest-cov` was added to the `dev` extra.
+- **Declared Rust MSRV raised from 1.69 to 1.83.** The 1.69 claim was justified
+  by a `Cargo.lock` that was gitignored and absent, so it had never been
+  verified; with the lock now committed, the resolved graph includes
+  `flate2 1.1.x`, which does not build on 1.69. 1.83 is the toolchain the
+  `lint` CI job now compiles the whole crate with, so the floor is enforced
+  rather than asserted. This affects source builds only — the published wheels
+  are `abi3` and need no Rust toolchain.
+- **CI now enforces what it claimed to.** The lint job runs
+  `ruff format --check` (never run before, 42 files were drifting), includes
+  `benchmarks/` in its scope (70 errors were invisible), and finally invokes
+  the clippy that was being installed and discarded. The test job runs the full
+  `cargo test` rather than `--lib`, asserts `native_available()` instead of
+  letting a broken extension build silently skip every Rust cell, and installs
+  the `all` extra so the `format="df"` / `format="polars"` paths are exercised
+  instead of skipped.
+- Ruff configuration gained a `[tool.ruff.format]` section and per-file `E402`
+  ignores for the `bench/` and `benchmarks/` entry-point scripts, which must
+  bootstrap `sys.path` before importing. The whole tree is now
+  `ruff format` clean.
+- `UP006`/`UP007`/`UP035`/`UP045` are ignored for this release. Every module
+  carries `from __future__ import annotations`, so ruff proposes PEP 585/604
+  rewrites regardless of `target-version`; applying them wholesale is not safe
+  while 3.9 is supported. They are re-enabled in 0.2.0 when the floor moves
+  to 3.10.
+
+### Added
+
+- **A `gffbase` command-line interface**, registered as a console script and
+  runnable as `python -m gffbase`. Ten commands: `create`, `fetch`,
+  `children`, `parents`, `region`, `search`, `rmdups`, `sanitize`, plus
+  gffbase-only `validate` and `migrate`.
+
+  Argument names and output shapes follow `gffutils-cli` so a script written
+  against it keeps working. What does not follow it is how much of it runs. Of
+  the thirteen commands `gffutils-cli` defines, **five work**: `annotate` and
+  `convert` are defined but never registered, so they are unreachable from the
+  shell; `clean`, `common` and `region` raise `NotImplementedError`; `fetch`
+  raises `TypeError` because `helpers.get_gff_db` hands it a path string on
+  its common branch and it indexes that as a database; and `search` raises
+  `AttributeError` because it calls `db.attribute_search(...)`, a method that
+  exists nowhere in gffutils. All ten gffbase commands work.
+
+  Two conventions the tests enforce: **feature output goes to stdout and
+  progress to stderr**, so `gffbase rmdups in.gff > out.gff` produces a valid
+  file — upstream's `rmdups` prints its banner into the middle of the GFF it
+  is writing — and a command that could not do what was asked says so in its
+  **exit status**, not only in a message. `gffbase validate --strict` is the
+  CI form.
+
+  Uses `argparse`, adding no dependency. `gffutils` makes `argh` and
+  `argcomplete` hard runtime requirements of the library itself, so importing
+  it at all pulls in a CLI framework.
+- `FeatureDB.attribute_search(text, featuretype=None)` — case-insensitive
+  `LIKE` over attribute values. gffutils' CLI calls this method; gffutils does
+  not have it.
+- **The gffutils module surface is complete.** All ten missing compatibility
+  modules and every one of the 38 planned symbols are implemented — parity goes
+  from **30/90 symbols (33%) to 87/90 (97%)**, with zero modules outstanding.
+  `deviations.toml` no longer contains a single `planned` entry; what remains
+  is a register of deliberate differences, each naming the test that pins it.
+
+  New modules: `gffbase.bins`, `attributes`, `constants`, `convert`, `create`,
+  `inspect`, `version`, `biopython_integration`, `pybedtools_integration` and
+  `contrib.plotting`. `gffbase.helpers` grows from one function to thirteen,
+  including `make_query`, `infer_dialect`, `sanitize_gff_db`,
+  `canonical_transcripts` and `get_gff_db`.
+
+  These are not import shims. Each is tested for behaviour
+  (`tests/test_compat_surface.py`), `bins` is differential-tested against the
+  oracle over 20,044 comparisons with zero mismatches, and the two documented
+  global toggles are wired into live code rather than merely exported:
+  `constants.always_return_list` changes what `feature.attributes[key]`
+  returns, and `constants.ignore_url_escape_characters` turns percent
+  decoding *and* re-encoding off together.
+
+  Several upstream defects are deliberately not reproduced, and each is
+  recorded with its reason: `helpers.get_gff_db` returns a `FeatureDB` rather
+  than sometimes a path string (the inconsistency that makes
+  `gffutils-cli fetch` raise `TypeError` in its common case);
+  `helpers.dialect_compare` works on dialects carrying an `order` list, where
+  the oracle raises `TypeError: unhashable type: 'list'` on all of them;
+  `helpers.to_unicode` actually decodes bytes, where a `2to3` artifact left
+  the oracle's body unreachable; `helpers.canonical_transcripts` selects the
+  longest transcript rather than the shortest and does not print to stdout;
+  `helpers.make_query` validates a string `order_by` instead of interpolating
+  it verbatim; and `helpers.annotate_gff_db` raises rather than silently
+  doing nothing.
+
+  `biopython_integration` also fixes a genuine incompatibility: BioPython
+  removed the `SeqFeature(strand=...)` argument and moved strand onto the
+  location, so the oracle's call raises `TypeError` on any current install.
+  The round trip here is exact for `+`, `-` and `.`.
+- **`create_db` accepts an iterable of features**, not just a path or a
+  string. This is what `_FeatureIterator` exists for upstream and what
+  `helpers.sanitize_gff_db` needs.
+- `gffbase.interface.assign_child` and `no_children`, the two symbols
+  `merge_all` is built from upstream, plus `FeatureDB.add_relations` for
+  linking many pairs with a single closure rebuild.
+- `gffbase.helpers.merge_attributes`, the sorted-set union of two attribute
+  mappings that every derived-feature method needs.
+- `FeatureDB.mode`, `.validation` and `.on_error`, recovered from the database
+  rather than assumed, and `FeatureDB.derived_source` — the `source` stamped on
+  features gffbase derives rather than reads. It is `gffutils_derived` under
+  `mode="compat"` so a ported script filtering on that string keeps working,
+  and `gffbase_derived` under `mode="strict"`, which reports honest provenance.
+- **First-class discontinuous (multipart) GFF3 features.** Several lines sharing
+  one `ID` — how NCBI represents a split CDS — are now one logical feature.
+  Previously the second line collided against the primary key and every merge
+  strategy lost information.
+  - **Schema v2.** `features` keeps one row per *logical* feature, with its
+    coordinates widened to the envelope, and `segments` is a sparse side table
+    holding physical lines only where `n_segments > 1`. Logical dedup stays
+    structural (no `DISTINCT` anywhere), the R-tree stays the primary access
+    path, storage grows with duplicate lines rather than corpus size, and a
+    v1 → v2 migration touches zero feature rows. `segments_all` gives the
+    one-row-per-input-line view.
+  - `MultipartFeature` and `FeatureSegment`, both subclassing `Feature` and
+    overriding none of `__str__`, `__len__`, `__hash__`, `__eq__`,
+    `__getitem__` or `astuple` — the compatibility surface is preserved by
+    inaction. `len()` stays the envelope span; `covered_length` is the new
+    quantity that excludes the gaps. Each segment carries its own phase, which
+    is the reason the storage exists.
+  - Fusing happens only under `mode="strict"`, deliberately: gffutils' `merge`
+    requires all eight non-attribute columns to match, so it never merges a
+    genuine split feature. `on_multipart_conflict` chooses between raising
+    `MultipartConstraintError` and splitting when lines sharing an `ID`
+    disagree on seqid, source, featuretype or strand.
+  - `explode_segments=True` on `region_batched` / `children_batched` /
+    `parents_batched` yields one row per input line. Offered on the tabular
+    APIs only — a `FeatureSegment` leaking into `region()` or `children()`
+    would corrupt legacy consumers.
+  - Measured on the FlyBase 50k corpus: 345 discontinuous features over 690
+    lines, and all 49,981 input lines round-trip byte for byte.
+- `Feature.to_line(normalized=False)` and `to_lines()`. The default is
+  byte-faithful; `normalized=True` re-renders column 9 from the parsed mapping,
+  which is what the oracle always does.
+- **`gffbase.migrate`** — `migrate_v1_to_v2()` upgrades in place, in one
+  transaction, idempotently, and is run automatically when a v1 database is
+  opened (`FeatureDB(..., upgrade="auto"|"never"|"error")`). It is structural
+  only and changes no query result, which is what makes doing it unasked
+  acceptable. `coalesce_multipart()` is the separate, opt-in second step that
+  re-fuses v1's `x_1` rows — it changes results, so the caller has to ask.
+  Tested against a real v1 database built by the pre-v2 code, committed as
+  `tests/data/v1/`.
+- **`gffbase.validate`** — 14 post-ingest invariants, run automatically at the
+  end of a strict-mode ingest and available as `db.validate()`. Every check is
+  a single set-based query. The one that matters most is INV-5: a fused
+  feature whose envelope is narrower than its segments simply stops being
+  returned by `region()`, with nothing raised anywhere.
+- `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
+  `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
+- **Full `create_db` option fidelity.** Twelve parameters were previously
+  accepted and ignored; every one now changes behaviour or raises.
+  - `gffbase._options.IngestOptions` validates the whole option set before any
+    work starts -- in particular before the destination database is touched.
+  - `id_spec` in all four shapes (attribute name, ordered list, per-featuretype
+    mapping, callable), plus `autoincrement:BASE` and the `:seqid:` syntax for
+    keying on a GFF column instead of an attribute. Defaults follow the
+    dialect: `"ID"` for GFF3, `{"gene": "gene_id", "transcript":
+    "transcript_id"}` for GTF -- which is what fixes `gencode-v19.gtf`
+    yielding 26 features against the oracle's 21, and `ID=` yielding an
+    empty-string primary key instead of `protein_1`.
+  - All five `merge_strategy` values, and `force_merge_fields` with the
+    oracle's `ValueError` on `start`/`end` and its warning on `frame`/`strand`.
+  - `transform` (a falsy return drops the feature, and mutations are
+    persisted), `checklines`, `force_gff`, `force_dialect_check`,
+    `from_string`, `dialect`, `_keep_tempfiles`, `pragmas`, `text_factory`,
+    `verbose`, and `infer_gene_extent` (deprecated: warns, then sets both
+    `disable_infer_*` flags).
+  - `keep_order` and `sort_attribute_values` now reach materialized features.
+    They were stored on `FeatureDB` and never passed on, so both were inert.
+  - Positional arguments work again, in the oracle's exact order. Every option
+    had been made keyword-only, so any positional call written against
+    gffutils raised `TypeError`.
+  - An unrecognized keyword raises `TypeError`, matching the oracle's
+    `deprecation_handler`, rather than being absorbed by `**kwargs`.
+- Attribute values now follow the oracle's empty-value rule exactly: a wholly
+  empty value (`ID=`) yields the key with *no* values, while a multi-valued
+  attribute keeps its empty parts (`Parent=x,` stays `["x", ""]`). This
+  matters because callers write `if f.attributes["ID"]:`, and `[""]` is truthy
+  where `[]` is not.
+- **A gffutils parity harness**, pinned to upstream commit `6b84330`:
+  - `tools/gen_parity_manifest.py` generates a machine-readable inventory of
+    the oracle's 19 modules and 90 public symbols, committed as
+    `tests/parity/gffutils_manifest.json` so the structural checks run without
+    gffutils installed. `--check` verifies it has not drifted.
+  - `tests/parity/deviations.toml` records every difference, enforced in both
+    directions: an undeclared gap fails, and so does a declaration that
+    outlives the work it describes. Current state: **26 of 90 symbols (29%)**,
+    with the remaining 10 modules and 30 symbols each declared and attributed
+    to a delivering phase.
+  - `tests/parity/test_differential.py` runs 30 vendored upstream fixtures
+    through both libraries and compares feature ids, all nine GFF columns,
+    attributes, dialect, directives, relations at every level, query results,
+    serialization and failure modes. Known failures are `xfail(strict=True)`
+    per fixture, so a fix cannot land unnoticed.
+  - `tests/data/upstream/` vendors the upstream corpus with full MIT
+    attribution and provenance.
+
+- **`mode="compat"` / `mode="strict"`.** Validation conflated two independent
+  questions -- which rules apply, and what a violation does. They are now
+  separate axes (`validation`, `on_error`) behind one switch, with `compat` as
+  the default for `create_db` and `strict` for `parse_gff`. `strict=` keeps
+  working for one deprecation cycle; passing it together with `on_error=`
+  raises `TypeError`.
+- `FeatureDB.warnings` reports every specification violation tolerated while
+  building the database, with kind, line number and message -- so a compat-mode
+  caller gets exactly gffutils' data *plus* a diagnostic gffutils never
+  offered.
+- `docs/design/schema-v2.md` records the design for schema v2, the multipart
+  feature model, and this mode axis.
+
+- `python/gffbase/py.typed`. The `Typing :: Typed` classifier was declared but
+  no PEP 561 marker shipped, so downstream type checkers saw nothing.
+- `CODE_OF_CONDUCT.md` — referenced by `CONTRIBUTING.md` but missing.
+- `CITATION.cff` — referenced by `README.md` but missing.
+- `SECURITY.md` and this `CHANGELOG.md`.
+- `pandas`, `polars`, `fasta`, and `all` optional-dependency extras. The
+  `format="df"` and `format="polars"` code paths were advertised with no way to
+  install what they need.
+- `native`, `rtree`, and `slow` pytest markers.
 
 ### Fixed
 
@@ -287,217 +542,6 @@ transactional storage, and a release pipeline gated on validation.
   invisible to every caller: the table held both values while the feature
   reported one.
 
-### Added
-
-- **A `gffbase` command-line interface**, registered as a console script and
-  runnable as `python -m gffbase`. Ten commands: `create`, `fetch`,
-  `children`, `parents`, `region`, `search`, `rmdups`, `sanitize`, plus
-  gffbase-only `validate` and `migrate`.
-
-  Argument names and output shapes follow `gffutils-cli` so a script written
-  against it keeps working. What does not follow it is how much of it runs. Of
-  the thirteen commands `gffutils-cli` defines, **five work**: `annotate` and
-  `convert` are defined but never registered, so they are unreachable from the
-  shell; `clean`, `common` and `region` raise `NotImplementedError`; `fetch`
-  raises `TypeError` because `helpers.get_gff_db` hands it a path string on
-  its common branch and it indexes that as a database; and `search` raises
-  `AttributeError` because it calls `db.attribute_search(...)`, a method that
-  exists nowhere in gffutils. All ten gffbase commands work.
-
-  Two conventions the tests enforce: **feature output goes to stdout and
-  progress to stderr**, so `gffbase rmdups in.gff > out.gff` produces a valid
-  file — upstream's `rmdups` prints its banner into the middle of the GFF it
-  is writing — and a command that could not do what was asked says so in its
-  **exit status**, not only in a message. `gffbase validate --strict` is the
-  CI form.
-
-  Uses `argparse`, adding no dependency. `gffutils` makes `argh` and
-  `argcomplete` hard runtime requirements of the library itself, so importing
-  it at all pulls in a CLI framework.
-- `FeatureDB.attribute_search(text, featuretype=None)` — case-insensitive
-  `LIKE` over attribute values. gffutils' CLI calls this method; gffutils does
-  not have it.
-- **The gffutils module surface is complete.** All ten missing compatibility
-  modules and every one of the 38 planned symbols are implemented — parity goes
-  from **30/90 symbols (33%) to 87/90 (97%)**, with zero modules outstanding.
-  `deviations.toml` no longer contains a single `planned` entry; what remains
-  is a register of deliberate differences, each naming the test that pins it.
-
-  New modules: `gffbase.bins`, `attributes`, `constants`, `convert`, `create`,
-  `inspect`, `version`, `biopython_integration`, `pybedtools_integration` and
-  `contrib.plotting`. `gffbase.helpers` grows from one function to thirteen,
-  including `make_query`, `infer_dialect`, `sanitize_gff_db`,
-  `canonical_transcripts` and `get_gff_db`.
-
-  These are not import shims. Each is tested for behaviour
-  (`tests/test_compat_surface.py`), `bins` is differential-tested against the
-  oracle over 20,044 comparisons with zero mismatches, and the two documented
-  global toggles are wired into live code rather than merely exported:
-  `constants.always_return_list` changes what `feature.attributes[key]`
-  returns, and `constants.ignore_url_escape_characters` turns percent
-  decoding *and* re-encoding off together.
-
-  Several upstream defects are deliberately not reproduced, and each is
-  recorded with its reason: `helpers.get_gff_db` returns a `FeatureDB` rather
-  than sometimes a path string (the inconsistency that makes
-  `gffutils-cli fetch` raise `TypeError` in its common case);
-  `helpers.dialect_compare` works on dialects carrying an `order` list, where
-  the oracle raises `TypeError: unhashable type: 'list'` on all of them;
-  `helpers.to_unicode` actually decodes bytes, where a `2to3` artifact left
-  the oracle's body unreachable; `helpers.canonical_transcripts` selects the
-  longest transcript rather than the shortest and does not print to stdout;
-  `helpers.make_query` validates a string `order_by` instead of interpolating
-  it verbatim; and `helpers.annotate_gff_db` raises rather than silently
-  doing nothing.
-
-  `biopython_integration` also fixes a genuine incompatibility: BioPython
-  removed the `SeqFeature(strand=...)` argument and moved strand onto the
-  location, so the oracle's call raises `TypeError` on any current install.
-  The round trip here is exact for `+`, `-` and `.`.
-- **`create_db` accepts an iterable of features**, not just a path or a
-  string. This is what `_FeatureIterator` exists for upstream and what
-  `helpers.sanitize_gff_db` needs.
-- `gffbase.interface.assign_child` and `no_children`, the two symbols
-  `merge_all` is built from upstream, plus `FeatureDB.add_relations` for
-  linking many pairs with a single closure rebuild.
-- `gffbase.helpers.merge_attributes`, the sorted-set union of two attribute
-  mappings that every derived-feature method needs.
-- `FeatureDB.mode`, `.validation` and `.on_error`, recovered from the database
-  rather than assumed, and `FeatureDB.derived_source` — the `source` stamped on
-  features gffbase derives rather than reads. It is `gffutils_derived` under
-  `mode="compat"` so a ported script filtering on that string keeps working,
-  and `gffbase_derived` under `mode="strict"`, which reports honest provenance.
-- **First-class discontinuous (multipart) GFF3 features.** Several lines sharing
-  one `ID` — how NCBI represents a split CDS — are now one logical feature.
-  Previously the second line collided against the primary key and every merge
-  strategy lost information.
-  - **Schema v2.** `features` keeps one row per *logical* feature, with its
-    coordinates widened to the envelope, and `segments` is a sparse side table
-    holding physical lines only where `n_segments > 1`. Logical dedup stays
-    structural (no `DISTINCT` anywhere), the R-tree stays the primary access
-    path, storage grows with duplicate lines rather than corpus size, and a
-    v1 → v2 migration touches zero feature rows. `segments_all` gives the
-    one-row-per-input-line view.
-  - `MultipartFeature` and `FeatureSegment`, both subclassing `Feature` and
-    overriding none of `__str__`, `__len__`, `__hash__`, `__eq__`,
-    `__getitem__` or `astuple` — the compatibility surface is preserved by
-    inaction. `len()` stays the envelope span; `covered_length` is the new
-    quantity that excludes the gaps. Each segment carries its own phase, which
-    is the reason the storage exists.
-  - Fusing happens only under `mode="strict"`, deliberately: gffutils' `merge`
-    requires all eight non-attribute columns to match, so it never merges a
-    genuine split feature. `on_multipart_conflict` chooses between raising
-    `MultipartConstraintError` and splitting when lines sharing an `ID`
-    disagree on seqid, source, featuretype or strand.
-  - `explode_segments=True` on `region_batched` / `children_batched` /
-    `parents_batched` yields one row per input line. Offered on the tabular
-    APIs only — a `FeatureSegment` leaking into `region()` or `children()`
-    would corrupt legacy consumers.
-  - Measured on the FlyBase 50k corpus: 345 discontinuous features over 690
-    lines, and all 49,981 input lines round-trip byte for byte.
-- `Feature.to_line(normalized=False)` and `to_lines()`. The default is
-  byte-faithful; `normalized=True` re-renders column 9 from the parsed mapping,
-  which is what the oracle always does.
-- **`gffbase.migrate`** — `migrate_v1_to_v2()` upgrades in place, in one
-  transaction, idempotently, and is run automatically when a v1 database is
-  opened (`FeatureDB(..., upgrade="auto"|"never"|"error")`). It is structural
-  only and changes no query result, which is what makes doing it unasked
-  acceptable. `coalesce_multipart()` is the separate, opt-in second step that
-  re-fuses v1's `x_1` rows — it changes results, so the caller has to ask.
-  Tested against a real v1 database built by the pre-v2 code, committed as
-  `tests/data/v1/`.
-- **`gffbase.validate`** — 14 post-ingest invariants, run automatically at the
-  end of a strict-mode ingest and available as `db.validate()`. Every check is
-  a single set-based query. The one that matters most is INV-5: a fused
-  feature whose envelope is narrower than its segments simply stops being
-  returned by `region()`, with nothing raised anywhere.
-- `mypy` runs clean over `python/gffbase` and is a CI gate, backing the
-  `Typing :: Typed` classifier that 0.1.1 made honest by shipping `py.typed`.
-- **Full `create_db` option fidelity.** Twelve parameters were previously
-  accepted and ignored; every one now changes behaviour or raises.
-  - `gffbase._options.IngestOptions` validates the whole option set before any
-    work starts -- in particular before the destination database is touched.
-  - `id_spec` in all four shapes (attribute name, ordered list, per-featuretype
-    mapping, callable), plus `autoincrement:BASE` and the `:seqid:` syntax for
-    keying on a GFF column instead of an attribute. Defaults follow the
-    dialect: `"ID"` for GFF3, `{"gene": "gene_id", "transcript":
-    "transcript_id"}` for GTF -- which is what fixes `gencode-v19.gtf`
-    yielding 26 features against the oracle's 21, and `ID=` yielding an
-    empty-string primary key instead of `protein_1`.
-  - All five `merge_strategy` values, and `force_merge_fields` with the
-    oracle's `ValueError` on `start`/`end` and its warning on `frame`/`strand`.
-  - `transform` (a falsy return drops the feature, and mutations are
-    persisted), `checklines`, `force_gff`, `force_dialect_check`,
-    `from_string`, `dialect`, `_keep_tempfiles`, `pragmas`, `text_factory`,
-    `verbose`, and `infer_gene_extent` (deprecated: warns, then sets both
-    `disable_infer_*` flags).
-  - `keep_order` and `sort_attribute_values` now reach materialized features.
-    They were stored on `FeatureDB` and never passed on, so both were inert.
-  - Positional arguments work again, in the oracle's exact order. Every option
-    had been made keyword-only, so any positional call written against
-    gffutils raised `TypeError`.
-  - An unrecognized keyword raises `TypeError`, matching the oracle's
-    `deprecation_handler`, rather than being absorbed by `**kwargs`.
-- Attribute values now follow the oracle's empty-value rule exactly: a wholly
-  empty value (`ID=`) yields the key with *no* values, while a multi-valued
-  attribute keeps its empty parts (`Parent=x,` stays `["x", ""]`). This
-  matters because callers write `if f.attributes["ID"]:`, and `[""]` is truthy
-  where `[]` is not.
-- **A gffutils parity harness**, pinned to upstream commit `6b84330`:
-  - `tools/gen_parity_manifest.py` generates a machine-readable inventory of
-    the oracle's 19 modules and 90 public symbols, committed as
-    `tests/parity/gffutils_manifest.json` so the structural checks run without
-    gffutils installed. `--check` verifies it has not drifted.
-  - `tests/parity/deviations.toml` records every difference, enforced in both
-    directions: an undeclared gap fails, and so does a declaration that
-    outlives the work it describes. Current state: **26 of 90 symbols (29%)**,
-    with the remaining 10 modules and 30 symbols each declared and attributed
-    to a delivering phase.
-  - `tests/parity/test_differential.py` runs 30 vendored upstream fixtures
-    through both libraries and compares feature ids, all nine GFF columns,
-    attributes, dialect, directives, relations at every level, query results,
-    serialization and failure modes. Known failures are `xfail(strict=True)`
-    per fixture, so a fix cannot land unnoticed.
-  - `tests/data/upstream/` vendors the upstream corpus with full MIT
-    attribution and provenance.
-
-### Changed (breaking)
-
-- **`FeatureDB.schema` is a method again**, not a property. gffutils documents
-  `db.schema()` and callers write it that way; as a property the documented
-  call raised `TypeError: 'str' object is not callable`.
-- **`merge_strategy="error"` is now the real default**, so a file with
-  duplicate IDs raises instead of loading with silently renamed rows.
-  Ingestion previously renamed every duplicate to `<id>__2` unconditionally,
-  which made the documented default unreachable. `create_unique` now produces
-  the oracle's `<id>_1`, `<id>_2` rather than `<id>__2`, `<id>__3`, and no
-  longer writes `duplicates` rows -- the oracle records a rename only when
-  `merge` falls back to `create_unique`, because that table exists so a later
-  merge can find the sibling rows.
-- **`DuplicateIDError`, `AttributeStringError` and `EmptyInputError` now
-  subclass `ValueError`.** gffutils exports `DuplicateIDError` but raises a
-  bare `ValueError("Duplicate ID ...")`, so real callers write
-  `except ValueError`. Subclassing satisfies both the documented type and
-  those callers instead of forcing a choice. `FeatureNotFoundError` is
-  deliberately left on `Exception`.
-
-### Added
-
-- **`mode="compat"` / `mode="strict"`.** Validation conflated two independent
-  questions -- which rules apply, and what a violation does. They are now
-  separate axes (`validation`, `on_error`) behind one switch, with `compat` as
-  the default for `create_db` and `strict` for `parse_gff`. `strict=` keeps
-  working for one deprecation cycle; passing it together with `on_error=`
-  raises `TypeError`.
-- `FeatureDB.warnings` reports every specification violation tolerated while
-  building the database, with kind, line number and message -- so a compat-mode
-  caller gets exactly gffutils' data *plus* a diagnostic gffutils never
-  offered.
-- `docs/design/schema-v2.md` records the design for schema v2, the multipart
-  feature model, and this mode axis.
-
-### Fixed
-
 - **gffbase rejected 6 of the 23 upstream fixtures gffutils reads**, including
   `FBgn0031208.gff`, gffutils' own canonical fixture. `rust/src/validate.rs`
   validated to the NCBI GFF3 specification unconditionally, but `create_db()`
@@ -514,8 +558,6 @@ transactional storage, and a release pipeline gated on validation.
   engine dropped any record with a coordinate like `944828 ` while the
   pure-Python fallback kept it -- a silent, engine-dependent difference in
   which records exist. `wormbase_gff2.txt` exercises it.
-
-### Fixed (continued)
 
 - **Null coordinates now round-trip.** `features.start`/`"end"` were declared
   `NOT NULL`, so the Arrow batch builder coerced a `.` column to `0`: the
@@ -543,6 +585,29 @@ transactional storage, and a release pipeline gated on validation.
   blob -- so the table held both values and the feature reported one. Merged
   attributes now match the oracle exactly.
 - Removed `ingest._derive_id`, dead since the id_spec work replaced it.
+
+- **`import gffbase` crashed on Python 3.9.** `ParsedFeature` used
+  `@dataclass(slots=True)`, which is Python 3.10+, while the package declared
+  `requires-python >=3.9`, shipped an `abi3-py39` wheel, and advertised a 3.9
+  classifier. Every 3.9 install succeeded and then failed on first import with
+  `TypeError: dataclass() got an unexpected keyword argument 'slots'`. `slots`
+  is now applied conditionally, so 3.10+ keeps the per-record memory saving and
+  3.9 works.
+- `gffbase.gffwriter` referenced an undefined `io` name in the `GFFWriter.__init__`
+  type annotation (`F821`). The module is now imported.
+- `_pyfallback.parser` re-raised a coordinate parse failure without chaining,
+  masking the original `ValueError` (`B904`).
+- The `cargo test` doc-test target failed to compile: a module doc comment in
+  `rust/src/lib.rs` used an indented block that rustdoc interpreted as Rust
+  source. CI only ran `cargo test --lib`, so this was never seen.
+- Removed a dead `parse_coord` in `rust/src/parser.rs`, superseded by
+  `parse_coord_strict`, which caused a `dead_code` warning.
+
+### Removed
+
+- Six `PHASE*.md` entries from `pyproject.toml` and `MANIFEST.in` referring to
+  files deleted in `44268ce`, plus a `recursive-include python/gffbase *.pyi`
+  matching no files.
 
 ### Intentional deviations
 
@@ -576,82 +641,6 @@ attribute escaping now survives materialization.)
 
 ---
 
-## [0.1.1] — unreleased
-
-A correctness and release-hygiene patch. No API changes.
-
-### Fixed
-
-- **`import gffbase` crashed on Python 3.9.** `ParsedFeature` used
-  `@dataclass(slots=True)`, which is Python 3.10+, while the package declared
-  `requires-python >=3.9`, shipped an `abi3-py39` wheel, and advertised a 3.9
-  classifier. Every 3.9 install succeeded and then failed on first import with
-  `TypeError: dataclass() got an unexpected keyword argument 'slots'`. `slots`
-  is now applied conditionally, so 3.10+ keeps the per-record memory saving and
-  3.9 works.
-- `gffbase.gffwriter` referenced an undefined `io` name in the `GFFWriter.__init__`
-  type annotation (`F821`). The module is now imported.
-- `_pyfallback.parser` re-raised a coordinate parse failure without chaining,
-  masking the original `ValueError` (`B904`).
-- The `cargo test` doc-test target failed to compile: a module doc comment in
-  `rust/src/lib.rs` used an indented block that rustdoc interpreted as Rust
-  source. CI only ran `cargo test --lib`, so this was never seen.
-- Removed a dead `parse_coord` in `rust/src/parser.rs`, superseded by
-  `parse_coord_strict`, which caused a `dead_code` warning.
-
-### Changed
-
-- **`rust/Cargo.lock` is now committed.** `rust/Cargo.toml` and `MANIFEST.in`
-  both already claimed it was shipped; `.gitignore` excluded it. Dependency
-  resolution for the published wheel therefore varied with build time and
-  platform, contradicting the declared MSRV.
-- **Coverage flags moved out of the default `pytest` invocation.** `addopts`
-  hard-required `pytest-cov` (absent from the `dev` extra) and made a bare
-  `pytest` fail on coverage rather than on tests. Coverage is now applied
-  explicitly in CI. `pytest-cov` was added to the `dev` extra.
-- **Declared Rust MSRV raised from 1.69 to 1.83.** The 1.69 claim was justified
-  by a `Cargo.lock` that was gitignored and absent, so it had never been
-  verified; with the lock now committed, the resolved graph includes
-  `flate2 1.1.x`, which does not build on 1.69. 1.83 is the toolchain the
-  `lint` CI job now compiles the whole crate with, so the floor is enforced
-  rather than asserted. This affects source builds only — the published wheels
-  are `abi3` and need no Rust toolchain.
-- **CI now enforces what it claimed to.** The lint job runs
-  `ruff format --check` (never run before, 42 files were drifting), includes
-  `benchmarks/` in its scope (70 errors were invisible), and finally invokes
-  the clippy that was being installed and discarded. The test job runs the full
-  `cargo test` rather than `--lib`, asserts `native_available()` instead of
-  letting a broken extension build silently skip every Rust cell, and installs
-  the `all` extra so the `format="df"` / `format="polars"` paths are exercised
-  instead of skipped.
-- Ruff configuration gained a `[tool.ruff.format]` section and per-file `E402`
-  ignores for the `bench/` and `benchmarks/` entry-point scripts, which must
-  bootstrap `sys.path` before importing. The whole tree is now
-  `ruff format` clean.
-- `UP006`/`UP007`/`UP035`/`UP045` are ignored for this release. Every module
-  carries `from __future__ import annotations`, so ruff proposes PEP 585/604
-  rewrites regardless of `target-version`; applying them wholesale is not safe
-  while 3.9 is supported. They are re-enabled in 0.2.0 when the floor moves
-  to 3.10.
-
-### Added
-
-- `python/gffbase/py.typed`. The `Typing :: Typed` classifier was declared but
-  no PEP 561 marker shipped, so downstream type checkers saw nothing.
-- `CODE_OF_CONDUCT.md` — referenced by `CONTRIBUTING.md` but missing.
-- `CITATION.cff` — referenced by `README.md` but missing.
-- `SECURITY.md` and this `CHANGELOG.md`.
-- `pandas`, `polars`, `fasta`, and `all` optional-dependency extras. The
-  `format="df"` and `format="polars"` code paths were advertised with no way to
-  install what they need.
-- `native`, `rtree`, and `slow` pytest markers.
-
-### Removed
-
-- Six `PHASE*.md` entries from `pyproject.toml` and `MANIFEST.in` referring to
-  files deleted in `44268ce`, plus a `recursive-include python/gffbase *.pyi`
-  matching no files.
-
 ### Notes
 
 Version 0.1.0 is being yanked from PyPI: its metadata advertises Python 3.9
@@ -659,10 +648,11 @@ support that the artifact cannot deliver.
 
 ---
 
+---
+
 ## [0.1.0] — 2026-05-07
 
 Initial public release.
 
-[Unreleased]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.1.1
+[0.2.0]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kuanhao-Chao/gffbase/releases/tag/v0.1.0
