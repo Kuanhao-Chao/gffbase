@@ -113,6 +113,42 @@ transactional storage, and a release pipeline gated on validation.
   attribute and the oracle stores directives with the prefix stripped
   (`gff-version 3`, not `##gff-version 3`), so every consumer reading them
   saw the wrong strings.
+- **Reading an attribute and writing the feature back out could emit
+  structurally invalid GFF3.** Materializing `feature.attributes` takes
+  serialization off the raw-bytes fast path, and there was no re-encode step,
+  so percent-escaping was simply lost: `Note=hello%20world` came back as
+  `Note=hello world`, and — far worse — a value containing `;` or `,` came
+  back bare. On `tests/data/upstream/nonascii` one attribute became five and
+  column 9 gained three separators it should not have had. Nothing raised, in
+  about the most ordinary usage pattern there is.
+
+  The same defect had a *persistent* form: `merge_strategy="merge"` rebuilds
+  `features.attributes_blob` from the decoded `attributes` rows, so an
+  unescaped value was written into the database and every later read of that
+  feature parsed one value as several.
+
+  gffbase now has an encoder (`gffbase._serialize`), and `gffutils.parser`'s
+  `Quoter`, `quoter`, `_reconstruct` and `quoted_semicolon_patterns` are
+  available under their upstream names. Note that it is deliberately **not**
+  `urllib.parse.quote`: the space is not a reserved character in GFF3 and
+  non-ASCII is not escaped, so `Name=CkIIα[Tik]-1` survives unchanged where
+  `quote()` would have produced `CkII%CE%B1[Tik]-1`.
+
+  Porting `_reconstruct` wholesale rather than only the encoder also fixed
+  three things that were silently wrong on the normalized path: `keep_order`
+  and `dialect["order"]` were ignored, `repeated keys` was ignored (so
+  `Parent=a;Parent=b` always collapsed to `Parent=a,b`), and the field
+  separator was flattened to `;` or `; `, losing ` ; `.
+
+  Verified two ways. The vendored `attr_test_cases.py` table — upstream's own
+  ground truth, 18 cases, shipped in `tests/data/upstream/` and until now used
+  by nothing — round-trips exactly. And a new differential test asserts that
+  `to_line(normalized=True)` reproduces the oracle's bytes for whole rendered
+  lines across the shared corpus: 11 of 15 GFF3 fixtures match exactly, and
+  the four that do not are dialect-inference differences, measured and
+  recorded, not serialization ones.
+
+  Three strict xfails retire.
 - **Every synthesized GTF gene and transcript was invisible to R-tree
   `region()` queries.** `seqid_map` was populated during the R-tree build,
   which runs *after* GTF synthesis — so the pass that stamps a synthesized
@@ -358,13 +394,20 @@ transactional storage, and a release pipeline gated on validation.
 
 Not yet fixed, but now measured and pinned rather than unknown:
 
-- **GTF synthesis ignores `id_spec`.** The oracle applies the id_spec to
-  inferred gene/transcript rows as well as authored ones; gffbase keys
-  inferred rows on the `transcript_id` attribute unconditionally, so a custom
-  scalar id_spec over a GTF yields extra rows.
-- Attribute escaping is lost once attributes are materialized.
 - The oracle weights its dialect vote by attribute count; gffbase weights all
-  sampled lines equally.
+  sampled lines equally. Both are deterministic; only the winner can differ,
+  and only where a file's attribute strings vary in length.
+- The oracle renders a valueless attribute as a bare `ID` where gffbase
+  re-emits the source's `ID=`. This one is deliberate — `str(feature)` is
+  byte-faithful by design, so gffbase reproduces the input and the oracle does
+  not. `to_line(normalized=True)` matches the oracle exactly.
+- gffbase strips whitespace around attribute keys where the oracle keeps it
+  literally. Also deliberate: on `FBgn0031208.gff` the oracle's behaviour
+  silently loses a `Parent` edge, and compatibility mode preserves quirks but
+  not data-loss defects.
+
+(Two entries left this list: GTF synthesis now honours `id_spec`, and
+attribute escaping now survives materialization.)
 
 ---
 
