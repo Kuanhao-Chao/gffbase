@@ -105,6 +105,12 @@ docs = [
     "pymdown-extensions>=10.7",
 ]
 
+[project.scripts]
+# argparse only -- no CLI framework dependency. gffutils makes `argh` and
+# `argcomplete` hard runtime requirements of the library itself, so importing
+# it at all pulls in a CLI parser.
+gffbase = "gffbase.cli:main"
+
 [project.urls]
 Homepage      = "https://github.com/Kuanhao-Chao/gffbase"
 Source        = "https://github.com/Kuanhao-Chao/gffbase"

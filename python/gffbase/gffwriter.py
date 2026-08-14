@@ -94,9 +94,19 @@ class GFFWriter:
             self.write_rec(child)
 
     def close(self) -> None:
+        """Flush, and close only a handle this writer opened.
+
+        A stream the caller passed in belongs to the caller. Closing it -- as
+        this used to, and as gffutils still does -- means
+        `GFFWriter(sys.stdout)` shuts stdout down for the whole process, so
+        anything written afterwards raises `ValueError: I/O operation on closed
+        file`. It is flushed instead, which is the part that actually matters
+        for the output being complete.
+        """
         if self._fh is not None and not self._fh.closed:
             self._fh.flush()
-            self._fh.close()
+            if self._opened_path is not None:
+                self._fh.close()
         if self.in_place and self._opened_path and self._target_path:
             shutil.move(self._opened_path, self._target_path)
 
