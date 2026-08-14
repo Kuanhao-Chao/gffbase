@@ -348,6 +348,40 @@ JOIN ranked r ON r.transcript_id = t.id AND r.rn = 1
 WHERE t.featuretype = 'transcript' AND t.is_synthetic = TRUE;
 """
 
+# 3d. Carry an arbitrary attribute onto synthesized rows, the same way 3c
+#     carries `gene_id`. Needed when the caller's `id_spec` names an attribute
+#     the synthesis SQL did not group on -- `gene_name` for genes, say. Without
+#     it the synthesized row has no such attribute, the spec finds nothing, and
+#     the id falls through to an autoincremented `gene_1`: technically the spec
+#     applied, but not the name the caller asked for and the data contains.
+#
+#     `{group_key}` is the attribute the row was grouped on (`gene_id` /
+#     `transcript_id`); `{attribute}` is the one to carry across. Ties are
+#     broken the same way as 3c -- most common wins, then lexical -- so an
+#     inconsistent GTF still resolves deterministically.
+GTF_PROPAGATE_ATTRIBUTE = """
+INSERT INTO attributes (feature_id, key, value, idx)
+WITH pairs AS (
+    SELECT g.value AS group_value, a.value AS carried, COUNT(*) AS cnt
+    FROM attributes g
+    JOIN attributes a ON a.feature_id = g.feature_id
+    WHERE g.key = ? AND a.key = ?
+    GROUP BY g.value, a.value
+),
+ranked AS (
+    SELECT group_value, carried,
+           ROW_NUMBER() OVER (PARTITION BY group_value ORDER BY cnt DESC, carried) AS rn
+    FROM pairs
+)
+SELECT f.id, ?, r.carried, 0
+FROM features f
+JOIN ranked r ON r.group_value = f.id AND r.rn = 1
+WHERE f.featuretype = ? AND f.is_synthetic = TRUE
+  AND NOT EXISTS (SELECT 1 FROM attributes x
+                  WHERE x.feature_id = f.id AND x.key = ?);
+"""
+
+
 # 4. GTF gene synthesis. Same shape as transcript synthesis, but groups over
 #    all rows whose featuretype IN ('transcript', subfeature) carrying a
 #    gene_id attribute.

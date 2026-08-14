@@ -330,3 +330,26 @@ class IngestOptions:
 
     def resolver_for(self, fmt: str) -> IdSpecResolver:
         return IdSpecResolver(self.id_spec_for(fmt))
+
+    def synthesized_ids_need_resolving(self, fmt: str) -> bool:
+        """Whether GTF-synthesized rows must have `id_spec` applied to them.
+
+        The synthesis SQL names each inferred feature after the attribute it
+        grouped on -- `gene_id` for a gene, `transcript_id` for a transcript --
+        which is exactly what the default spec asks for. So for the default,
+        and for any spec that names those same attributes, the SQL answer is
+        already the right one and the resolve pass can be skipped entirely.
+        Measured identical to gffutils on all six GTF corpora.
+
+        It is only a caller who asks for something else -- `gene_name`, a
+        callable -- who needs the slower path.
+        """
+        if fmt != "gtf":
+            return False
+        spec = self.id_spec_for(fmt)
+        if not isinstance(spec, dict):
+            return True
+        return any(
+            spec.get(featuretype) != attribute
+            for featuretype, attribute in DEFAULT_ID_SPEC_GTF.items()
+        )
