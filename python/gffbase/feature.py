@@ -221,7 +221,19 @@ class _LazyAttributes(MutableMapping):
 
     def __getitem__(self, key: str):
         self._materialize()
-        return self._d[key]
+        value = self._d[key]
+        # `constants.always_return_list` is a documented global that callers
+        # flip at runtime, so it is read here on every access rather than
+        # captured once -- upstream's own doctests toggle it mid-test and
+        # expect the very next lookup to change shape. Imported inside the
+        # method because `gffbase.constants` is a compatibility module and
+        # importing it at module scope would make it load on every import of
+        # `gffbase`.
+        from gffbase import constants
+
+        if not constants.always_return_list and isinstance(value, list) and len(value) == 1:
+            return value[0]
+        return value
 
     def __setitem__(self, key: str, value):
         self._materialize()
@@ -891,4 +903,66 @@ def feature_from_row(
         n_segments=len(parts),
         segments=parts,
         **shared,
+    )
+
+
+#: Integer index -> field name, backing `Feature[0]`. Same mapping as
+#: `_FIELD_ORDER`, exposed under the name upstream's tests import.
+_position_lookup = dict(enumerate(_FIELD_ORDER))
+
+
+def feature_from_line(line: str, dialect=None, strict: bool = True, keep_order: bool = False):
+    """Build a `Feature` from a single GFF/GTF line.
+
+    Parameters
+    ----------
+    line : str
+        One tab-delimited record.
+    dialect : dict, optional
+        Use this dialect instead of inferring one from the line.
+    strict : bool
+        True (default) requires a single tab-delimited line. False accepts a
+        multi-line string with exactly one non-blank line, and -- when there
+        are no more than nine fields -- allows runs of spaces instead of tabs.
+        That is for hand-written test data, not for parsing files: with more
+        than nine fields the ninth would swallow the rest, so tabs are still
+        required there.
+    keep_order : bool
+        Passed through to `Feature`.
+    """
+    from gffbase._pyfallback.attributes import parse_attributes
+    from gffbase.dialect import default_dialect
+
+    if not strict:
+        candidates = [chunk.strip() for chunk in line.splitlines() if chunk.strip()]
+        if len(candidates) != 1:
+            raise ValueError(
+                f"expected exactly one non-blank line, got {len(candidates)}: {candidates!r}"
+            )
+        line = candidates[0]
+        fields = line.split("\t") if "\t" in line else line.split(None, 8)
+    else:
+        fields = line.rstrip("\n\r").split("\t")
+
+    attr_string = fields[8] if len(fields) > 8 else ""
+    pairs, observed = parse_attributes(attr_string)
+    if dialect is None:
+        dialect = {**default_dialect(), **observed}
+
+    # `strict=False`: a lenient line may carry fewer than eight columns, and
+    # the defaults below fill in what is missing.
+    values = dict(zip(_FIELD_ORDER[:8], fields, strict=False))
+    return Feature(
+        seqid=values.get("seqid", "."),
+        source=values.get("source", "."),
+        featuretype=values.get("featuretype", "."),
+        start=values.get("start"),
+        end=values.get("end"),
+        score=values.get("score", "."),
+        strand=values.get("strand", "."),
+        frame=values.get("frame", "."),
+        attributes=pairs,
+        extra=fields[9:],
+        dialect=dialect,
+        keep_order=keep_order,
     )

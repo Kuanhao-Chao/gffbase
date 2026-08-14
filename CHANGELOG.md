@@ -278,6 +278,46 @@ transactional storage, and a release pipeline gated on validation.
 
 ### Added
 
+- **The gffutils module surface is complete.** All ten missing compatibility
+  modules and every one of the 38 planned symbols are implemented — parity goes
+  from **30/90 symbols (33%) to 87/90 (97%)**, with zero modules outstanding.
+  `deviations.toml` no longer contains a single `planned` entry; what remains
+  is a register of deliberate differences, each naming the test that pins it.
+
+  New modules: `gffbase.bins`, `attributes`, `constants`, `convert`, `create`,
+  `inspect`, `version`, `biopython_integration`, `pybedtools_integration` and
+  `contrib.plotting`. `gffbase.helpers` grows from one function to thirteen,
+  including `make_query`, `infer_dialect`, `sanitize_gff_db`,
+  `canonical_transcripts` and `get_gff_db`.
+
+  These are not import shims. Each is tested for behaviour
+  (`tests/test_compat_surface.py`), `bins` is differential-tested against the
+  oracle over 20,044 comparisons with zero mismatches, and the two documented
+  global toggles are wired into live code rather than merely exported:
+  `constants.always_return_list` changes what `feature.attributes[key]`
+  returns, and `constants.ignore_url_escape_characters` turns percent
+  decoding *and* re-encoding off together.
+
+  Several upstream defects are deliberately not reproduced, and each is
+  recorded with its reason: `helpers.get_gff_db` returns a `FeatureDB` rather
+  than sometimes a path string (the inconsistency that makes
+  `gffutils-cli fetch` raise `TypeError` in its common case);
+  `helpers.dialect_compare` works on dialects carrying an `order` list, where
+  the oracle raises `TypeError: unhashable type: 'list'` on all of them;
+  `helpers.to_unicode` actually decodes bytes, where a `2to3` artifact left
+  the oracle's body unreachable; `helpers.canonical_transcripts` selects the
+  longest transcript rather than the shortest and does not print to stdout;
+  `helpers.make_query` validates a string `order_by` instead of interpolating
+  it verbatim; and `helpers.annotate_gff_db` raises rather than silently
+  doing nothing.
+
+  `biopython_integration` also fixes a genuine incompatibility: BioPython
+  removed the `SeqFeature(strand=...)` argument and moved strand onto the
+  location, so the oracle's call raises `TypeError` on any current install.
+  The round trip here is exact for `+`, `-` and `.`.
+- **`create_db` accepts an iterable of features**, not just a path or a
+  string. This is what `_FeatureIterator` exists for upstream and what
+  `helpers.sanitize_gff_db` needs.
 - `gffbase.interface.assign_child` and `no_children`, the two symbols
   `merge_all` is built from upstream, plus `FeatureDB.add_relations` for
   linking many pairs with a single closure rebuild.

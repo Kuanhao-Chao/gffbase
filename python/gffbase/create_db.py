@@ -28,7 +28,24 @@ import tempfile
 
 from gffbase import ingest as _ingest
 from gffbase._options import IngestOptions
+from gffbase.exceptions import EmptyInputError
 from gffbase.interface import FeatureDB
+
+
+def _render_features(features) -> str:
+    """Serialize an iterable of features into GFF text.
+
+    Directives are not emitted: a feature iterable carries none, and inventing
+    a `##gff-version` line would let the format be inferred from something the
+    caller never supplied.
+    """
+    lines = []
+    for feature in features:
+        line = str(feature)
+        lines.append(line if line.endswith("\n") else line + "\n")
+    if not lines:
+        raise EmptyInputError("cannot build a database from an empty feature iterable")
+    return "".join(lines)
 
 
 def create_db(
@@ -167,6 +184,16 @@ def create_db(
         disable_infer_transcripts=disable_infer_transcripts,
         mode=mode,
     )
+
+    # An iterable of features is a documented input: `helpers.sanitize_gff_db`
+    # builds a database out of a generator, and the oracle's `_FeatureIterator`
+    # exists for exactly this. Render it and take the `from_string` path, which
+    # is the honest route here -- the ingest pipeline is file-oriented all the
+    # way down to the Rust parser, so "accepting features directly" would mean
+    # serializing them anyway, just less visibly.
+    if not from_string and not isinstance(data, (str, bytes, os.PathLike)):
+        data = _render_features(data)
+        from_string = True
 
     cleanup_path: str | None = None
     if from_string:
