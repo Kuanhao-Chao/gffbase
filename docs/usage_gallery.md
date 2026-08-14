@@ -94,20 +94,30 @@ db = FeatureDB("deep.duckdb")
 db.set_pragmas({"threads": 8})       # also tunable post-open
 ```
 
-### 1.6 Strict vs non-strict parsing
+### 1.6 `compat` vs `strict`
 
 ```python
 from gffbase import create_db, GFFFormatError
 
-# Strict (default) — first malformed line raises.
+# The DEFAULT is mode="compat": it reads what gffutils reads, including the
+# specification violations real annotation files are full of.
+db = create_db("messy.gff3", "messy.duckdb", force=True)
+
+# mode="strict" applies the full GFF3 specification and refuses.
 try:
-    db = create_db("messy.gff3", "messy.duckdb", force=True)
+    db = create_db("messy.gff3", "strict.duckdb", force=True, mode="strict")
 except GFFFormatError as e:
     print(f"line {e.line_no}: [{e.kind}] {e.message}")
 ```
 
-The line-by-line iterator API supports an opt-in non-strict mode
-(see [§7.2](#72-iterate-a-raw-file-without-building-a-database)).
+`strict` is also the only mode that fuses several lines sharing one `ID` into
+a single discontinuous feature — see [§6.7](#67-discontinuous-multipart-features).
+`on_multipart_conflict=` chooses between raising and splitting when those
+lines disagree on seqid, source, featuretype or strand.
+
+The two axes underneath (`validation=` selects the rule set, `on_error=`
+selects what a violation does) can be set independently; `mode=` is the
+shorthand for the two combinations that make sense together.
 
 ---
 
@@ -424,21 +434,38 @@ exons_chr1 = list(db.features_of_type("exon", limit="chr1"))
 for merged in db.merge(exons_chr1, merge_criteria=(mc.overlap_end_inclusive,)):
     print(merged.start, merged.end, len(merged.children))
 
-# Whole-DB sweep:
-for merged in db.merge_all():
-    pass
+# Whole-DB sweep. NOTE: merge_all returns a LIST and WRITES the merged
+# features back to the database -- it always documented that it did, and as
+# of 0.2.0 it actually does. Only genuine merges are returned; a feature that
+# merged with nothing is left alone.
+merged = db.merge_all(featuretypes_groups=("exon",))
+print(f"{len(merged)} merged features written back")
+
+# The components stay, linked to the merged feature by a Parent attribute...
+merged = db.merge_all(featuretypes_groups=("exon",), exclude_components=False)
+# ...or are deleted outright.
+merged = db.merge_all(featuretypes_groups=("exon",), exclude_components=True)
 ```
 
 ### 6.3 `create_introns()` / `create_splice_sites()`
 
 ```python
-# Synthesize intron features from existing exon hierarchy.
+# Introns are computed PER TRANSCRIPT: with grandparent_featuretype="gene",
+# gffbase descends one level first, so a multi-isoform gene yields each
+# isoform's introns rather than gaps spanning transcript boundaries.
 introns = list(db.create_introns(exon_featuretype="exon",
                                  grandparent_featuretype="gene"))
 print(f"{len(introns):,} introns")
 
-# Synthesize splice-site features.
+# Or anchor directly on the transcript.
+introns = list(db.create_introns(grandparent_featuretype=None,
+                                 parent_featuretype="mRNA"))
+
+# Splice sites are 2 bp -- a dinucleotide -- and typed by their position in
+# the transcript: the left site of a minus-strand transcript is its 3' site.
 sites = list(db.create_splice_sites(exon_featuretype="exon"))
+print({s.featuretype for s in sites})
+# {'five_prime_cis_splice_site', 'three_prime_cis_splice_site'}
 ```
 
 ### 6.4 `bed12()` — UCSC track export
@@ -448,7 +475,17 @@ sites = list(db.create_splice_sites(exon_featuretype="exon"))
 with open("transcripts.bed", "w") as fout:
     for tx in db.features_of_type("transcript", limit="chr1"):
         fout.write(db.bed12(tx, name_field="transcript_id") + "\n")
+
+# `thick` is the translated span, taken from CDS children by default. Name the
+# UNtranslated parts instead with thin_featuretype; the two are mutually
+# exclusive and passing both raises.
+line = db.bed12(tx, thin_featuretype=["five_prime_UTR", "three_prime_UTR"])
 ```
+
+No trailing comma is emitted on `blockSizes` / `blockStarts`, and a feature
+with no CDS children is marked entirely thick rather than entirely thin --
+both were wrong before 0.2.0 and both made every line differ from what
+gffutils writes.
 
 ### 6.5 `children_bp()` — total length of nested children
 
@@ -468,6 +505,60 @@ for gene, *children in db.iter_by_parent_childs(featuretype="gene"):
 ```
 
 ---
+
+### 6.7 Discontinuous (multipart) features
+
+Several GFF3 lines may share one `ID` — a CDS interrupted by a frameshift, or
+NCBI RefSeq's split CDS convention. Under `mode="strict"` they are one logical
+feature.
+
+```python
+db = create_db("refseq.gff3", "refseq.duckdb", mode="strict")
+
+cds = db["cds-NP_000001.1"]
+len(cds)                 # envelope span, first start to last end
+cds.covered_length       # the same, MINUS the gaps
+len(cds.segments)        # the physical input lines
+[s.frame for s in cds.segments]   # per-segment phase, the reason this exists
+
+cds.to_lines()           # every line back, byte for byte
+```
+
+An ordinary feature is its own sole segment, so `for s in f.segments` works
+without asking whether the feature is discontinuous first.
+
+The batched APIs can emit one row per physical line instead of per feature:
+
+```python
+exons = db.children_batched(ids, format="arrow", explode_segments=True)
+```
+
+That is offered on the tabular APIs only, deliberately: a `FeatureSegment`
+leaking out of `region()` or `children()` would confuse legacy consumers.
+
+### 6.8 Validating a database
+
+```python
+report = db.validate()          # 15 invariants, each a single set-based query
+report.ok                       # False if any ERROR-severity check failed
+report.errors, report.warnings  # separate: an error is a broken invariant,
+                                # a warning is legal but suspect
+```
+
+Run automatically at the end of a strict-mode ingest, and available from the
+command line as `gffbase validate --strict`.
+
+### 6.9 Upgrading a v1 database
+
+```python
+from gffbase.migrate import coalesce_multipart, migrate_v1_to_v2
+
+migrate_v1_to_v2("old.duckdb")     # structural; changes no query result
+coalesce_multipart(db)             # opt-in; DOES change results
+```
+
+`FeatureDB(..., upgrade="auto")` runs the first of these for you when it opens
+a v1 database — which is only acceptable because it is structural.
 
 ## 7. Advanced / escape hatches
 

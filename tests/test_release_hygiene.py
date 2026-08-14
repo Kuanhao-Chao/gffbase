@@ -334,3 +334,61 @@ def test_scalar_or_returns_the_default_for_no_row_and_for_a_null_row():
     assert scalar_or(con, "SELECT MAX(x) FROM t", "fallback") == "fallback"
     con.execute("INSERT INTO t VALUES (7)")
     assert scalar_or(con, "SELECT MAX(x) FROM t", "fallback") == 7
+
+
+# ---------------------------------------------------------------------------
+# Documentation that states a number must state the right one.
+# ---------------------------------------------------------------------------
+#
+# Every count in the docs was wrong before 0.2.0: "530 passed" against 1680
+# tests, "7-table schema" against 11 tables. Prose goes stale silently; a
+# number can be checked.
+
+
+def test_the_documented_table_count_is_right():
+    import re
+
+    schema = _read("python/gffbase/schema.py")
+    tables = len(re.findall(r"CREATE TABLE(?: IF NOT EXISTS)? (\w+)", schema))
+    views = len(re.findall(r"CREATE (?:OR REPLACE )?VIEW(?: IF NOT EXISTS)? (\w+)", schema))
+    readme = _read("README.md")
+    assert f"{tables}-table schema" in readme, (
+        f"schema.py defines {tables} tables; README says otherwise"
+    )
+    assert f"{views} compatibility" in readme, f"schema.py defines {views} views"
+
+
+def test_every_cli_command_is_documented():
+    """A shipped command with no documentation is invisible."""
+    from gffbase.cli import build_parser
+
+    registered = set([a for a in build_parser()._actions if a.dest == "command"][0].choices)
+    page = _read("docs/cli.md")
+    undocumented = sorted(c for c in registered if f"gffbase {c}" not in page)
+    assert not undocumented, f"CLI commands missing from docs/cli.md: {undocumented}"
+
+
+def test_every_nav_entry_resolves_and_every_page_is_reachable():
+    """`mkdocs.yml` sets `strict: true`, so a page outside the nav fails the
+    build. Catch it here rather than in a deploy that only runs on `main`."""
+    import re
+
+    mkdocs = _read("mkdocs.yml")
+    nav = mkdocs.split("nav:", 1)[1]
+    refs = set(re.findall(r"([\w/.-]+\.md)\s*$", nav, re.M))
+    docs = REPO_ROOT / "docs"
+
+    missing = sorted(r for r in refs if not (docs / r).is_file())
+    assert not missing, f"nav references pages that do not exist: {missing}"
+
+    excluded = set()
+    if "exclude_docs:" in mkdocs:
+        block = mkdocs.split("exclude_docs:", 1)[1].split("\n\n", 1)[0]
+        excluded = {line.strip() for line in block.splitlines() if line.strip().endswith(".md")}
+
+    on_disk = {str(p.relative_to(docs)) for p in docs.rglob("*.md")}
+    orphans = sorted(on_disk - refs - excluded)
+    assert not orphans, (
+        f"pages outside the nav would fail the strict build: {orphans}. "
+        f"Add them to nav, or to exclude_docs if they are deliberately unpublished."
+    )

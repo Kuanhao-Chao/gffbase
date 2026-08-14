@@ -766,6 +766,38 @@ class FeatureDB:
         featuretype: str | list[str] | None = None,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
+        """Features overlapping a genomic interval.
+
+        The interval can be given as a string, a tuple, or the three keyword
+        arguments::
+
+            db.region("chr1:1000-2000")
+            db.region(("chr1", 1000, 2000))
+            db.region(seqid="chr1", start=1000, end=2000)
+
+        Parameters
+        ----------
+        region : str or tuple
+            `"chrom:start-stop"`, or `(chrom, start, stop)`.
+        seqid, start, end : optional
+            The same interval, spelled out. Mutually exclusive with `region`.
+        strand : {"+", "-", "."}, optional
+            Restrict to one orientation.
+        featuretype : str or list of str, optional
+            Restrict to one or several types.
+        completely_within : bool
+            False (default) returns anything that OVERLAPS the interval; True
+            returns only features contained entirely within it.
+
+        Which index answers the query is chosen here, not by the caller: an
+        R-tree when one was built and the interval is fully specified, the
+        multi-column B-tree otherwise. The two are semantically identical --
+        `tests/test_spatial_parity.py` asserts they return the same features --
+        so this is a planner decision, not a behavioural one.
+
+        A feature with no coordinates (a GFF row carrying `.` in columns 4 and
+        5) is not in coordinate space and is never returned.
+        """
         rseqid, rstart, rend = self._normalize_region_args(region, seqid, start, end)
         # Decide path.
         use_rtree = (
@@ -1112,6 +1144,34 @@ class FeatureDB:
         limit=None,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
+        """Descendants of a feature, in hierarchy order.
+
+        Parameters
+        ----------
+        id : str or Feature
+            The anchor. A `Feature` built by hand has `id is None` and is
+            rejected rather than silently matching nothing.
+        level : int, optional
+            Only descendants exactly this many steps down -- 1 is direct
+            children. None (default) walks the whole subtree.
+        featuretype : str or list of str, optional
+        order_by : str or sequence of str, optional
+            A whitelisted sort key; anything else raises `ValueError` naming
+            the accepted set. See `docs/security/2026-sql-injection.md` for
+            why this is not a free-text field.
+        reverse : bool
+            Applies to every key, not just the last.
+        limit : str or tuple, optional
+            Restrict to a genomic interval, as `region()` accepts it.
+        completely_within : bool
+            With `limit`, require containment rather than overlap.
+
+        Reads from the materialized closure table when `level` is within the
+        database's recorded depth, and falls back to a recursive CTE when a
+        deeper walk is asked for. Both are cycle-safe: a `Parent` graph
+        containing a loop is traversed once, not until the depth budget runs
+        out.
+        """
         target_id = _require_feature_id(id)
         yield from self._relation_query(
             target_id,
@@ -1134,6 +1194,15 @@ class FeatureDB:
         completely_within: bool = False,
         limit=None,
     ) -> Iterator[Feature]:
+        """Ancestors of a feature, in hierarchy order.
+
+        The mirror of :meth:`children`, taking the same arguments and making
+        the same routing decision. `level=1` is direct parents.
+
+        GFF3 permits a feature to name several `Parent`s, so the hierarchy is
+        a DAG rather than a tree and one ancestor can be reachable by more
+        than one path. Each is returned once.
+        """
         target_id = _require_feature_id(id)
         yield from self._relation_query(
             target_id,
