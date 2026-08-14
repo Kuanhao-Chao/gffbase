@@ -65,6 +65,12 @@ transactional storage, and a release pipeline gated on validation.
   See `docs/security/2026-sql-injection.md` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
+- **`GFFWriter.close()` closed a stream it did not open.** `GFFWriter` accepts
+  either a path or an open file object, and closed both — so
+  `GFFWriter(sys.stdout).close()` shut stdout down for the whole process and
+  anything written afterwards raised `ValueError: I/O operation on closed
+  file`. A writer owns only the handles it opened; a caller's stream is
+  flushed and left alone. gffutils has the same defect.
 - **The B-tree CI job was red.** `test_every_invariant_actually_ran` required
   INV-8 to have run and `report.skipped` to be empty, but INV-8 compares `bbox`
   against the coordinates it was built from and therefore only exists when an
@@ -278,6 +284,34 @@ transactional storage, and a release pipeline gated on validation.
 
 ### Added
 
+- **A `gffbase` command-line interface**, registered as a console script and
+  runnable as `python -m gffbase`. Ten commands: `create`, `fetch`,
+  `children`, `parents`, `region`, `search`, `rmdups`, `sanitize`, plus
+  gffbase-only `validate` and `migrate`.
+
+  Argument names and output shapes follow `gffutils-cli` so a script written
+  against it keeps working. What does not follow it is how much of it runs. Of
+  the thirteen commands `gffutils-cli` defines, **five work**: `annotate` and
+  `convert` are defined but never registered, so they are unreachable from the
+  shell; `clean`, `common` and `region` raise `NotImplementedError`; `fetch`
+  raises `TypeError` because `helpers.get_gff_db` hands it a path string on
+  its common branch and it indexes that as a database; and `search` raises
+  `AttributeError` because it calls `db.attribute_search(...)`, a method that
+  exists nowhere in gffutils. All ten gffbase commands work.
+
+  Two conventions the tests enforce: **feature output goes to stdout and
+  progress to stderr**, so `gffbase rmdups in.gff > out.gff` produces a valid
+  file — upstream's `rmdups` prints its banner into the middle of the GFF it
+  is writing — and a command that could not do what was asked says so in its
+  **exit status**, not only in a message. `gffbase validate --strict` is the
+  CI form.
+
+  Uses `argparse`, adding no dependency. `gffutils` makes `argh` and
+  `argcomplete` hard runtime requirements of the library itself, so importing
+  it at all pulls in a CLI framework.
+- `FeatureDB.attribute_search(text, featuretype=None)` — case-insensitive
+  `LIKE` over attribute values. gffutils' CLI calls this method; gffutils does
+  not have it.
 - **The gffutils module surface is complete.** All ten missing compatibility
   modules and every one of the 38 planned symbols are implemented — parity goes
   from **30/90 symbols (33%) to 87/90 (97%)**, with zero modules outstanding.
