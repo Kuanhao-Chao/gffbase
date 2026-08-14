@@ -69,7 +69,6 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7",
-    "hypothesis>=6",
     "pytest-cov>=4",
 ]
 bench = [
@@ -80,7 +79,6 @@ bench = [
 dev = [
     "pytest>=7",
     "pytest-cov>=4",
-    "hypothesis>=6",
     "psutil>=5",
     "ruff>=0.4",
     "mypy>=1.8",
@@ -192,12 +190,16 @@ filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",
 ]
 markers = [
-    "native: requires the compiled gffbase._native extension",
-    "rtree: requires the DuckDB spatial extension (R-tree index path)",
     "slow: long-running; excluded from the default PR run",
     "parity: differential comparison against an installed gffutils oracle",
-    "corpus: needs a downloaded multi-GB annotation corpus",
+    "corpus: needs a downloaded multi-GB annotation corpus (tests/test_corpus.py)",
 ]
+# `native` and `rtree` were declared here and carried by no test. Both
+# conditions are handled better where they arise -- the `engine` fixture in
+# tests/conftest.py skips the Rust cells when the extension is absent, and the
+# R-tree tests read GFFBASE_TEST_DISABLE_RTREE directly, because that is a
+# per-run environment axis rather than a property of a test. A marker nothing
+# carries is indistinguishable from one that was deleted, so they are.
 
 [tool.coverage.run]
 branch = true
