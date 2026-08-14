@@ -216,13 +216,17 @@ def test_features_of_type_order_by_reverse(db):
 # ---------------------------------------------------------------------------
 
 
-def test_bed12_falls_back_to_id_when_attribute_missing(db):
-    """Asking for a name attribute that isn't present uses the
-    feature's `id` instead of crashing."""
+def test_bed12_name_is_a_dot_when_the_attribute_is_missing(db):
+    """A missing name attribute yields BED's `.`, not the feature id.
+
+    Substituting the id was friendlier but not what the oracle emits, so
+    every BED12 line of a file whose features lack the requested attribute
+    differed. `.` is BED's documented "no name" value; a caller who wants the
+    id can ask for the attribute that holds it.
+    """
     tx = db["t1"]
-    line = db.bed12(tx, name_field="nonexistent_attribute_key")
-    cols = line.split("\t")
-    assert cols[3] == "t1"  # id column used as name
+    cols = db.bed12(tx, name_field="nonexistent_attribute_key").split("\t")
+    assert cols[3] == "."
 
 
 def test_bed12_falls_back_when_attribute_value_empty(tmp_path):
@@ -241,8 +245,7 @@ def test_bed12_falls_back_when_attribute_value_empty(tmp_path):
     # Force `attributes['Name']` to exist but be empty so the
     # IndexError-from-[0] branch fires.
     tx.attributes["Name"] = []
-    line = db.bed12(tx, name_field="Name")
-    assert line.split("\t")[3] == "tx1"
+    assert db.bed12(tx, name_field="Name").split("\t")[3] == "."
 
 
 # ---------------------------------------------------------------------------
@@ -518,13 +521,15 @@ def test_interfeatures_with_attribute_func(db):
     e1, e2 = db["e1"], db["e2"]
     seen_calls = []
 
-    def ftn(prev, cur, attrs):
-        seen_calls.append((prev.id, cur.id))
-        attrs["custom"] = ["from_callback"]
-        return attrs
+    def ftn(attrs):
+        # Unary, matching the oracle: the callback sees ONE flank's
+        # attributes at a time and returns a replacement.
+        seen_calls.append(dict(attrs))
+        return {**attrs, "custom": ["from_callback"]}
 
     inter = list(db.interfeatures([e1, e2], attribute_func=ftn))
-    assert seen_calls == [("e1", "e2")]
+    assert len(seen_calls) == 2
+    assert [a["ID"] for a in seen_calls] == [["e1"], ["e2"]]
     assert inter[0].attributes["custom"] == ["from_callback"]
 
 

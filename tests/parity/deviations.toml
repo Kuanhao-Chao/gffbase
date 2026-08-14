@@ -159,12 +159,9 @@ note = """The bare-bones ORM that builds (query, args) from limit/strand/
 featuretype/order_by/reverse/completely_within. Its `order_by` whitelist is
 also the model for hardening gffbase's own order-by handling."""
 
-[[deviation]]
-kind = "symbol"
-name = "gffbase.helpers.merge_attributes"
-status = "planned"
-phase = "missing-surface"
-note = "Merge two attribute dicts; used by every derived-feature method."
+# `merge_attributes` landed with the derived-feature work, which is its only
+# caller -- `interfeatures` needs the oracle's sorted-set union to produce the
+# same attributes on a gap.
 
 [[deviation]]
 kind = "symbol"
@@ -231,19 +228,9 @@ note = """Listed in the oracle's public API docs but its body is `pass`. gffbase
 provides the name so imports resolve; see the intentional entry below for the
 behaviour."""
 
-[[deviation]]
-kind = "symbol"
-name = "gffbase.interface.assign_child"
-status = "planned"
-phase = "missing-surface"
-note = "Default `child_func` for `add_relation`; sets Parent on the child."
-
-[[deviation]]
-kind = "symbol"
-name = "gffbase.interface.no_children"
-status = "planned"
-phase = "missing-surface"
-note = "Empty-children sentinel used by `merge()`."
+# `assign_child` and `no_children` were declared here and are now implemented
+# in `gffbase.interface`, together with `merge_all`'s persistence, which is
+# what needed them.
 
 [[deviation]]
 kind = "symbol"

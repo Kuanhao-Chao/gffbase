@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import gffbase
 import pytest
+from gffbase import Feature
 
 # One row with no coordinates, one with them, under a shared parent -- enough to
 # exercise "skip the unplaced feature but still compute over the rest".
@@ -157,8 +158,46 @@ def test_merge_skips_unplaced_features(db):
 
 def test_merge_all_skips_unplaced_features(db):
     """`merge_all` guarded only `start`, and only in its own sort key -- the
-    `end` comparison inside `merge()` still raised."""
-    assert len(db.merge_all()) > 0
+    `end` comparison inside `merge()` still raised.
+
+    The assertion used to be `len(...) > 0`, which stood in for "it did not
+    raise". That stopped being a meaningful check once `merge_all` began
+    returning only features that genuinely merged: nothing in this fixture
+    overlaps, so the correct answer is now `[]` and the old assertion was
+    testing the wrong thing. Assert the actual contract instead -- it runs,
+    and it does not invent a merge out of the two disjoint exons.
+    """
+    before = db.count_features_of_type()
+    assert db.merge_all() == []
+    # And it must not have written anything either.
+    assert db.count_features_of_type() == before
+
+
+def test_merge_all_merges_and_persists_when_features_do_overlap(db):
+    """The positive case, on the same null-carrying fixture: an overlap that
+    spans the unplaced rows still merges, and the result is written back."""
+    db.update(
+        [
+            Feature(
+                seqid="chr1",
+                source="src",
+                featuretype="exon",
+                start=150,
+                end=450,
+                strand="+",
+                id="e_bridge",
+                attributes={"ID": "e_bridge", "Parent": "t1"},
+                dialect={"fmt": "gff3"},
+            )
+        ]
+    )
+    merged = db.merge_all(featuretypes_groups=("exon",))
+    assert len(merged) == 1
+    m = merged[0]
+    assert (m.start, m.end) == (100, 500)
+    # Persisted, and reachable by its generated id.
+    assert m.id in db
+    assert db[m.id].start == 100
 
 
 def test_interfeatures_skips_unplaced_features(db):

@@ -69,18 +69,29 @@ def test_interfeatures_merge_attributes_dedupe(hier_db):
 
 
 def test_interfeatures_attribute_func_called(hier_db):
-    a = Feature(seqid="chr1", start=1, end=10, attributes={"k": "v"}, dialect={"fmt": "gff3"})
-    b = Feature(seqid="chr1", start=20, end=30, attributes={"k": "v"}, dialect={"fmt": "gff3"})
+    """`attribute_func` is UNARY and runs on each flank's attributes.
+
+    It used to take `(prev, cur, attrs)` and run once on the merged result,
+    which meant any callback written against gffutils raised `TypeError`. It
+    now matches the oracle: one argument, one return, applied to each
+    neighbour *before* the merge -- so a callback can rewrite a flank's
+    attributes and see the rewrite carried into the gap.
+    """
+    a = Feature(seqid="chr1", start=1, end=10, attributes={"k": "a"}, dialect={"fmt": "gff3"})
+    b = Feature(seqid="chr1", start=20, end=30, attributes={"k": "b"}, dialect={"fmt": "gff3"})
     seen = []
 
-    def cb(prev, cur, attrs):
-        seen.append(attrs)
-        attrs["custom"] = ["yes"]
-        return attrs
+    def cb(attrs):
+        seen.append(dict(attrs))
+        return {**attrs, "custom": ["yes"]}
 
     out = list(hier_db.interfeatures([a, b], attribute_func=cb))
-    assert seen
+    # Once per flank, not once per gap.
+    assert len(seen) == 2
+    assert seen == [{"k": ["a"]}, {"k": ["b"]}]
     assert out[0].attributes["custom"] == ["yes"]
+    # Both flanks' values survive the merge, deduplicated and sorted.
+    assert out[0].attributes["k"] == ["a", "b"]
 
 
 def test_interfeatures_update_attributes(hier_db):
@@ -177,10 +188,31 @@ def test_create_introns_requires_one_anchor(hier_db):
 
 
 def test_create_splice_sites(hier_db):
+    """Splice sites are 2 bp and typed by their position in the transcript.
+
+    They used to be 1 bp and always typed `splice_site`. A splice site is a
+    dinucleotide (GT donor, AG acceptor), so a 1 bp feature names half of one;
+    and the type carries the biology -- the left site of a minus-strand
+    transcript is its 3' site, not its 5'.
+    """
     sites = list(hier_db.create_splice_sites(grandparent_featuretype="gene"))
-    # Each intron yields 2 splice-site rows (left + right).
-    assert all(f.featuretype == "splice_site" for f in sites)
     assert len(sites) >= 2
+    assert all(len(f) == 2 for f in sites), [len(f) for f in sites]
+    assert all(
+        f.featuretype
+        in {"five_prime_cis_splice_site", "three_prime_cis_splice_site", "splice_site"}
+        for f in sites
+    )
+    # A stranded transcript gets both a donor and an acceptor, never two of
+    # the same kind.
+    stranded = [f for f in sites if f.strand in "+-"]
+    if stranded:
+        assert {f.featuretype for f in stranded} == {
+            "five_prime_cis_splice_site",
+            "three_prime_cis_splice_site",
+        }
+    # All left sites precede all right sites.
+    assert len({f.featuretype for f in sites[: len(sites) // 2]}) <= 1
 
 
 # ---------------------------------------------------------------------------
@@ -204,13 +236,33 @@ def test_bed12_with_feature_object(hier_db):
     assert line.split("\t")[0] == "chr1"
 
 
-def test_bed12_no_cds_uses_thin_thick(hier_db):
-    # Use a transcript without CDSs — t2 has only one exon.
-    line = hier_db.bed12("t2")
-    cols = line.split("\t")
-    # thick_start should equal chrom_start when no CDS
-    assert int(cols[6]) == int(cols[1])
-    assert int(cols[7]) == int(cols[1])
+def test_bed12_no_cds_marks_the_whole_feature_thick(hier_db):
+    """With no CDS children, thickStart/thickEnd span the feature.
+
+    This used to collapse both to `chromStart`, which renders the feature
+    entirely THIN -- the opposite claim, and one a genome browser draws
+    differently. The oracle uses the feature's own (1-based) start and its
+    stop, and that asymmetry with `chromStart` is deliberate upstream.
+    """
+    feat = hier_db["t2"]
+    cols = hier_db.bed12("t2").split("\t")
+    assert int(cols[6]) == feat.start
+    assert int(cols[7]) == feat.end
+    assert int(cols[6]) != int(cols[7]), "a thick span of zero is not 'no CDS'"
+
+
+def test_bed12_has_no_trailing_comma(hier_db):
+    """UCSC tolerates one; the oracle emits none, so every line differed."""
+    cols = hier_db.bed12("t1").split("\t")
+    assert not cols[10].endswith(",")
+    assert not cols[11].endswith(",")
+    assert len(cols[10].split(",")) == int(cols[9])
+    assert len(cols[11].split(",")) == int(cols[9])
+
+
+def test_bed12_refuses_both_thick_and_thin(hier_db):
+    with pytest.raises(ValueError, match="only specify one"):
+        hier_db.bed12("t1", thick_featuretype=["CDS"], thin_featuretype=["UTR"])
 
 
 def test_children_bp_sums_exon_lengths(hier_db):

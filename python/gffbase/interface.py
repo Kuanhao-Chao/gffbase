@@ -40,7 +40,24 @@ import duckdb
 from gffbase._dbutil import scalar, scalar_or
 from gffbase.exceptions import FeatureNotFoundError, SchemaVersionError
 from gffbase.feature import Feature, db_row_projection, feature_from_row
+from gffbase.modes import (
+    MODE_COMPAT,
+    MODE_STRICT,
+    ON_ERROR_RAISE,
+    VALIDATION_GFFUTILS,
+)
 from gffbase.schema import SCHEMA_VERSION
+
+#: `source` stamped on features gffbase derives rather than reads.
+#:
+#: Mode-dependent on purpose. A script ported from gffutils filters on
+#: `source == "gffutils_derived"`, and compat mode exists so that script keeps
+#: working; strict mode reports honest provenance instead. The GTF-synthesis
+#: path in `schema.py` writes the strict spelling.
+DERIVED_SOURCE = {
+    MODE_COMPAT: "gffutils_derived",
+    MODE_STRICT: "gffbase_derived",
+}
 
 _log = logging.getLogger("gffbase.interface")
 
@@ -169,6 +186,40 @@ def _sql_literal(value) -> str:
     return f"'{text}'"
 
 
+#: Sentinel for "this feature merged with nothing".
+#:
+#: Empty tuple rather than `None` or `[]` so that `if merged.children:` is the
+#: discriminator, exactly as upstream. `merge()` used to set `children`
+#: unconditionally, which made that test useless -- every feature looked
+#: merged, so `merge_all` could not tell a real merge from a pass-through.
+no_children: tuple = ()
+
+
+def assign_child(parent, child):
+    """Default `child_func` for `add_relation`: point the child at the parent.
+
+    Returns the child, because `add_relation` writes back what the callback
+    returns rather than relying on mutation.
+    """
+    child.attributes["Parent"] = parent["ID"]
+    return child
+
+
+def _finalize_merge(feature, feature_children):
+    """Stamp a merged feature with its provenance, or mark it a pass-through.
+
+    A genuine merge takes the comma-joined set of its components' sources, so
+    the result says where it came from. A run of one is not a merge and gets
+    `no_children`.
+    """
+    if len(feature_children) > 1:
+        feature.source = ",".join(sorted({child.source for child in feature_children}))
+        feature.children = list(feature_children)
+    else:
+        feature.children = no_children
+    return feature
+
+
 def _require_feature_id(obj) -> str:
     """Coerce a `Feature`-or-id argument to a primary-key string.
 
@@ -248,6 +299,12 @@ class FeatureDB:
         self._apply_schema_version(meta)
         self.dialect = self._parse_dialect(meta.get("dialect"))
         self.fmt = meta.get("fmt", "gff3")
+        # How this database was built. Absent from anything written before the
+        # key existed, and absent from a v1 database; both were compat, which
+        # is what the default says.
+        self.mode = meta.get("mode", MODE_COMPAT)
+        self.validation = meta.get("validation", VALIDATION_GFFUTILS)
+        self.on_error = meta.get("on_error", ON_ERROR_RAISE)
         self._rtree_built = meta.get("rtree_built", "false").lower() == "true"
         self._max_depth = int(meta.get("max_depth", "8"))
         # Defensive: confirm the R-tree index actually exists in this DB.
@@ -1660,39 +1717,112 @@ class FeatureDB:
     def add_relation(
         self, parent, child, level: int = 1, parent_func=None, child_func=None
     ) -> FeatureDB:
-        parent_id = parent.id if isinstance(parent, Feature) else parent
-        child_id = child.id if isinstance(child, Feature) else child
-        self.conn.execute("INSERT INTO edges(parent, child) VALUES (?, ?)", [parent_id, child_id])
-        # Apply optional callbacks (legacy semantics: mutate attributes).
-        if parent_func is not None and isinstance(parent, Feature):
-            parent_func(parent, child)
-        if child_func is not None and isinstance(child, Feature):
-            child_func(parent, child)
-        # Incrementally update closure: any ancestor of `parent` becomes an
-        # ancestor of `child` (and transitively); any descendant of `child`
-        # becomes a descendant of `parent`. Single set-based pass.
-        self.conn.execute(
-            """
-            INSERT INTO closure (ancestor, descendant, depth)
-            SELECT ? AS ancestor, ? AS descendant, 1
-            WHERE NOT EXISTS (
-                SELECT 1 FROM closure
-                WHERE ancestor = ? AND descendant = ? AND depth = 1
-            )
-            """,
-            [parent_id, child_id, parent_id, child_id],
+        """Link one parent to one child.
+
+        `parent_func` / `child_func` receive `(parent, child)`, and whatever
+        they RETURN is written back to the database. That is upstream's
+        contract and the reason `assign_child` returns the child: the callback
+        exists to edit an attribute (`Parent=`) that then has to be persisted.
+        Previously the return value was discarded and nothing was written, so
+        `child_func=assign_child` set an attribute on a throwaway object.
+
+        A string id is resolved to a `Feature` first, so callbacks fire whether
+        the caller passed objects or ids -- they used to be skipped silently
+        for ids.
+        """
+        return self.add_relations(
+            [(parent, child)], level=level, parent_func=parent_func, child_func=child_func
         )
-        # Rebuild closure incrementally. Simplest correct approach: drop the
-        # closure rows that touch parent_id or child_id, then re-derive from
-        # edges via the recursive CTE up to max_depth. For typical
-        # `add_relation` calls (a handful per session) this is dramatically
-        # cheaper than a full table rebuild and avoids the keyword pitfalls
-        # of nested CTEs in DuckDB.
+
+    def add_relations(self, pairs, level: int = 1, parent_func=None, child_func=None) -> FeatureDB:
+        """`add_relation` for many pairs, with ONE closure rebuild.
+
+        Deriving the closure costs a recursive CTE over every edge, so doing it
+        per pair makes a bulk operation quadratic. `merge_all` links every
+        component of every merged feature and is the caller that made this
+        necessary.
+        """
+        pairs = list(pairs)
+        if not pairs:
+            return self
+
+        edges: list[list[str]] = []
+        touched: dict[str, Feature] = {}
+        for parent, child in pairs:
+            parent = self[parent] if isinstance(parent, str) else parent
+            child = self[child] if isinstance(child, str) else child
+            edges.append([_require_feature_id(parent), _require_feature_id(child)])
+            if parent_func is not None:
+                updated = parent_func(parent, child)
+                if updated is not None:
+                    touched[_require_feature_id(updated)] = updated
+            if child_func is not None:
+                updated = child_func(parent, child)
+                if updated is not None:
+                    touched[_require_feature_id(updated)] = updated
+
+        self.conn.executemany("INSERT INTO edges(parent, child) VALUES (?, ?)", edges)
+        for feature in touched.values():
+            self._write_back(feature)
+
         from gffbase.schema import CLOSURE_RECURSIVE_CTE
 
         self.conn.execute("DELETE FROM closure")
         self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
         return self
+
+    def _insert(self, feature: Feature) -> FeatureDB:
+        """Write one NEW feature into the database.
+
+        The oracle's private seam, reproduced because `merge_all` needs it and
+        because a successor is expected to have an equivalent. Delegates to
+        `update`, which owns the Arrow batch machinery.
+        """
+        return self.update([feature])
+
+    def _write_back(self, feature: Feature) -> None:
+        """Persist edits to a feature that is ALREADY in the database.
+
+        `update()` appends, and `features.id` is a primary key, so it cannot
+        stand in for this: re-inserting an existing feature is a constraint
+        violation, not an update. Rewrites the scalar columns, replaces the
+        long-form attribute rows, and refreshes the derived bbox so the R-tree
+        cannot go stale behind the B-tree (INV-8).
+        """
+        fid = _require_feature_id(feature)
+        blob = feature._format_attributes().encode("utf-8")
+        self.conn.execute(
+            'UPDATE features SET seqid = ?, source = ?, featuretype = ?, start = ?, "end" = ?, '
+            "score = ?, strand = ?, frame = ?, attributes_blob = ? WHERE id = ?",
+            [
+                feature.seqid,
+                feature.source,
+                feature.featuretype,
+                feature.start,
+                feature.end,
+                feature.score,
+                feature.strand,
+                feature.frame,
+                blob,
+                fid,
+            ],
+        )
+        self.conn.execute("DELETE FROM attributes WHERE feature_id = ?", [fid])
+        rows = [
+            [fid, key, value, idx]
+            for key, values in feature.attributes.items()
+            for idx, value in enumerate(values)
+        ]
+        if rows:
+            self.conn.executemany(
+                "INSERT INTO attributes(feature_id, key, value, idx) VALUES (?, ?, ?, ?)", rows
+            )
+        if self._rtree_built:
+            self.conn.execute(
+                'UPDATE features SET bbox = CASE WHEN start IS NULL OR "end" IS NULL THEN NULL '
+                'ELSE ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) END WHERE id = ?',
+                [fid],
+            )
 
     @staticmethod
     def _coerce_ids(features) -> list[str]:
@@ -1724,64 +1854,183 @@ class FeatureDB:
         attribute_func=None,
         update_attributes=None,
     ):
+        """The gaps between consecutive features.
+
+        `attribute_func` takes ONE argument -- an attribute mapping -- and
+        returns one, matching the oracle. It is applied to each neighbour's
+        attributes *before* they are merged, not to the merged result. The
+        previous three-argument `(prev, cur, attrs)` form meant any gffutils
+        caller passing a callback got a `TypeError`.
+        """
+        from gffbase.helpers import merge_attributes as _merge_attrs
+
+        if attribute_func is None:
+
+            def attribute_func(a):
+                return a
+
         feats = _with_coordinates(features)
-        if not feats:
-            return
-        for prev, cur in zip(feats[:-1], feats[1:], strict=True):
-            new_start = prev.end + 1
+        last = None
+        for cur in feats:
+            if last is None:
+                last = cur
+                continue
+            if cur.seqid != last.seqid:
+                # A gap between two different sequences is not a gap. Without
+                # this the pair produced a feature spanning nothing, stamped
+                # with the previous sequence's name.
+                last = cur
+                continue
+
+            new_start = last.end + 1
             new_end = cur.start - 1
             if new_end < new_start:
+                last = cur
                 continue
-            attrs: dict[str, list[str]] = {}
+
             if merge_attributes:
-                for k, v in prev.attributes.items():
-                    attrs.setdefault(k, []).extend(v)
-                for k, v in cur.attributes.items():
-                    attrs.setdefault(k, []).extend(v)
-                # Dedupe.
-                attrs = {k: list(dict.fromkeys(v)) for k, v in attrs.items()}
+                attrs = _merge_attrs(
+                    attribute_func(dict(last.attributes)),
+                    attribute_func(dict(cur.attributes)),
+                    numeric_sort=numeric_sort,
+                )
+            else:
+                attrs = {}
             if update_attributes:
                 attrs.update(update_attributes)
-            if attribute_func:
-                attrs = attribute_func(prev, cur, attrs)
-            ftype = new_featuretype or "interfeature"
+
+            # A feature may not carry several IDs, so a merged pair's two IDs
+            # become one hyphenated id rather than a multi-valued attribute.
+            if len(attrs.get("ID", [])) > 1:
+                attrs["ID"] = ["-".join(attrs["ID"])]
+
             yield Feature(
-                seqid=prev.seqid,
-                source=prev.source,
-                featuretype=ftype,
+                seqid=last.seqid,
+                source=self.derived_source,
+                featuretype=(
+                    new_featuretype
+                    if new_featuretype is not None
+                    else f"inter_{last.featuretype}_{cur.featuretype}"
+                ),
                 start=new_start,
                 end=new_end,
-                strand=prev.strand,
+                score=".",
+                # Where the flanks disagree the gap has no orientation. This
+                # used to inherit the left flank's strand unconditionally.
+                strand=cur.strand if last.strand == cur.strand else ".",
                 attributes=attrs,
                 dialect=dialect or self.dialect,
             )
+            last = cur
+
+    @property
+    def derived_source(self) -> str:
+        """`source` for features this database derives rather than reads.
+
+        `gffutils_derived` under compat so ported scripts that filter on it
+        keep working; `gffbase_derived` under strict, which reports honest
+        provenance.
+        """
+        return DERIVED_SOURCE.get(self.mode, DERIVED_SOURCE[MODE_COMPAT])
 
     def merge(self, features, merge_criteria=None, multiline: bool = False):
+        """Collapse runs of features that satisfy every criterion.
+
+        Consumes `features` **in the order given**. That is the oracle's
+        contract and it matters: `merge_all` supplies a specific
+        `merge_order`, and re-sorting here (which this used to do) silently
+        discarded it.
+
+        A feature that merged with nothing is yielded unchanged with
+        `children` set to `no_children`, so a caller can tell a real merge from
+        a pass-through by truthiness. `merge_all` depends on exactly that.
+        """
         from gffbase import merge_criteria as mc
 
         if merge_criteria is None:
             merge_criteria = (mc.seqid, mc.overlap_end_inclusive, mc.strand, mc.feature_type)
-        feats = sorted(_with_coordinates(features), key=lambda f: (f.seqid, f.start, f.end))
-        if not feats:
-            return
-        accum = None
+        elif not isinstance(merge_criteria, (list, tuple)):
+            merge_criteria = [merge_criteria]
+
+        accum: Feature | None = None
         components: list[Feature] = []
-        for f in feats:
+        last_id: str | None = None
+
+        for f in _with_coordinates(features):
             if accum is None:
-                accum = self._clone_for_merge(f)
-                components = [f]
+                # A feature that fails its own criteria can never merge with
+                # anything, so pass it straight through rather than opening a
+                # run with it. Without this pre-pass such a feature was
+                # silently accumulated into the next run.
+                if all(pred(f, f, components) for pred in merge_criteria):
+                    accum, components, last_id = f, [f], None
+                else:
+                    yield _finalize_merge(f, no_children)
                 continue
-            if all(pred(accum, f, components) for pred in merge_criteria):
-                accum.end = max(accum.end, f.end)
-                components.append(f)
-            else:
-                accum.children = list(components)
-                yield accum
-                accum = self._clone_for_merge(f)
-                components = [f]
+
+            if not components:
+                # `accum` came from a previous run's tail and has not been
+                # checked against its own criteria yet.
+                if all(pred(accum, accum, components) for pred in merge_criteria):
+                    components.append(accum)
+                else:
+                    yield _finalize_merge(accum, no_children)
+                    accum, last_id = f, None
+                    continue
+
+            if not all(pred(accum, f, components) for pred in merge_criteria):
+                yield _finalize_merge(accum, components)
+                accum, components, last_id = f, [], None
+                continue
+
+            if len(components) == 1:
+                # About to merge for real, so stop mutating the caller's
+                # feature and take a copy with an identity of its own.
+                accum = self._clone_for_merge(accum)
+                if not last_id:
+                    last_id = self._next_autoincrement_id(accum.featuretype)
+                accum.id = last_id
+                accum.attributes["ID"] = last_id
+            components.append(f)
+
+            # Ambiguity flags: where the components disagree, say so rather
+            # than silently keeping the first one's value.
+            if f.seqid not in accum.seqid.split(","):
+                accum.seqid += "," + f.seqid
+            if f.strand != accum.strand:
+                accum.strand = "."
+            if f.frame != accum.frame:
+                accum.frame = "."
+            if f.featuretype != accum.featuretype:
+                accum.featuretype = "sequence_feature"
+            # Both ends, not just the far one: with a caller-chosen
+            # `merge_order` the run is not necessarily start-sorted, and only
+            # extending `end` quietly truncated the merged feature.
+            if f.start < accum.start:
+                accum.start = f.start
+            if f.end > accum.end:
+                accum.end = f.end
+
         if accum is not None:
-            accum.children = list(components)
-            yield accum
+            yield _finalize_merge(accum, components)
+
+    def _next_autoincrement_id(self, featuretype: str) -> str:
+        """`<featuretype>_<n>`, the oracle's scheme for a synthesized id.
+
+        Counters live in the `autoincrements` table so that ids stay unique
+        across sessions -- an in-memory counter would restart at 1 on reopen
+        and collide with what a previous run wrote.
+        """
+        n = scalar_or(self.conn, "SELECT n FROM autoincrements WHERE base = ?", 0, [featuretype])
+        while True:
+            n += 1
+            candidate = f"{featuretype}_{n}"
+            if not self.__contains__(candidate):
+                break
+        self.conn.execute(
+            "INSERT OR REPLACE INTO autoincrements(base, n) VALUES (?, ?)", [featuretype, n]
+        )
+        return candidate
 
     @staticmethod
     def _clone_for_merge(f: Feature) -> Feature:
@@ -1805,13 +2054,49 @@ class FeatureDB:
         featuretypes_groups=(None,),
         exclude_components: bool = False,
     ) -> list[Feature]:
-        out: list[Feature] = []
+        """Merge everything in the database and **write the results back**.
+
+        Three things were wrong here and all three were silent. The method
+        returned every input feature including ones that merged with nothing,
+        so a caller could not tell what had actually been merged; it persisted
+        nothing, despite documenting that "the resulting records are added to
+        the database"; and it accepted `exclude_components` and ignored it, so
+        asking for the components to be removed did nothing at all.
+        """
+        if not len(featuretypes_groups):
+            # An empty tuple used to mean "merge nothing" and return []. The
+            # oracle reads it as "no featuretype filter".
+            featuretypes_groups = (None,)
+
+        result: list[Feature] = []
         for group in featuretypes_groups:
-            feats = _with_coordinates(self.all_features(featuretype=group))
-            for k in reversed(merge_order):
-                feats.sort(key=lambda f: getattr(f, k))
-            out.extend(self.merge(feats, merge_criteria=merge_criteria))
-        return out
+            merged_in_group = [
+                merged
+                for merged in self.merge(
+                    self.all_features(featuretype=group, order_by=merge_order),
+                    merge_criteria=merge_criteria,
+                )
+                if merged.children
+            ]
+            for merged in merged_in_group:
+                self._insert(merged)
+                result.append(merged)
+
+            if exclude_components:
+                self.delete(
+                    [c for merged in merged_in_group for c in merged.children],
+                    make_backup=False,
+                )
+            else:
+                # One batched call, not one per child: `add_relation` re-derives
+                # the closure each time, so the oracle's per-child loop would
+                # make this O(children x full rebuild).
+                self.add_relations(
+                    [(merged, child) for merged in merged_in_group for child in merged.children],
+                    level=1,
+                    child_func=assign_child,
+                )
+        return result
 
     def create_introns(
         self,
@@ -1822,24 +2107,41 @@ class FeatureDB:
         merge_attributes: bool = True,
         numeric_sort: bool = False,
     ) -> Iterator[Feature]:
-        if grandparent_featuretype and parent_featuretype:
-            raise ValueError("specify exactly one of grandparent_featuretype/parent_featuretype")
-        if not (grandparent_featuretype or parent_featuretype):
-            raise ValueError("must specify grandparent_featuretype or parent_featuretype")
-        anchor_type: str = grandparent_featuretype or parent_featuretype  # type: ignore[assignment]
-        for anchor in self.features_of_type(anchor_type):
-            exons = sorted(
-                _with_coordinates(self.children(anchor, featuretype=exon_featuretype)),
-                key=lambda f: (f.start, f.end),
-            )
-            if len(exons) < 2:
-                continue
+        """Introns, computed **per transcript**.
+
+        `grandparent_featuretype="gene"` descends one level first and computes
+        the gaps within each transcript separately. Treating the gene as the
+        direct anchor -- which this used to do -- pools the exons of every
+        isoform into one sorted list, so the "introns" of a multi-isoform gene
+        were computed across transcript boundaries and were not introns of
+        anything.
+        """
+        for anchor in self._exon_anchors(grandparent_featuretype, parent_featuretype):
+            exons = self.children(anchor, level=1, featuretype=exon_featuretype, order_by="start")
             yield from self.interfeatures(
                 exons,
                 new_featuretype=new_featuretype,
                 merge_attributes=merge_attributes,
                 numeric_sort=numeric_sort,
+                dialect=self.dialect,
             )
+
+    def _exon_anchors(self, grandparent_featuretype, parent_featuretype) -> Iterator[Feature]:
+        """The features whose direct exon children form one transcript.
+
+        Shared by `create_introns` and `create_splice_sites` so the two cannot
+        drift apart on the grouping question.
+        """
+        if bool(grandparent_featuretype) == bool(parent_featuretype):
+            raise ValueError(
+                "exactly one of `grandparent_featuretype` or `parent_featuretype` "
+                "should be provided"
+            )
+        if grandparent_featuretype:
+            for gene in self.features_of_type(grandparent_featuretype):
+                yield from self.children(gene, level=1)
+        else:
+            yield from self.features_of_type(parent_featuretype)
 
     def create_splice_sites(
         self,
@@ -1849,33 +2151,52 @@ class FeatureDB:
         merge_attributes: bool = True,
         numeric_sort: bool = False,
     ) -> Iterator[Feature]:
-        for intron in self.create_introns(
-            exon_featuretype=exon_featuretype,
-            grandparent_featuretype=grandparent_featuretype,
-            parent_featuretype=parent_featuretype,
-            new_featuretype="splice_site",
-            merge_attributes=merge_attributes,
-            numeric_sort=numeric_sort,
-        ):
-            # Yield 1bp left + 1bp right splice sites.
-            yield Feature(
-                seqid=intron.seqid,
-                source=intron.source,
-                featuretype="splice_site",
-                start=intron.start,
-                end=intron.start,
-                strand=intron.strand,
-                dialect=self.dialect,
-            )
-            yield Feature(
-                seqid=intron.seqid,
-                source=intron.source,
-                featuretype="splice_site",
-                start=intron.end,
-                end=intron.end,
-                strand=intron.strand,
-                dialect=self.dialect,
-            )
+        """The two-base splice sites flanking each intron.
+
+        A splice site is a dinucleotide -- GT at the donor, AG at the acceptor
+        -- so these are 2 bp features, not the 1 bp ones this used to emit.
+        They are typed by their position in the transcript rather than in the
+        genome, so the left site of a minus-strand transcript is its 3' site.
+
+        Emission order is every left site, then every right site, matching the
+        oracle; the intron's merged attributes are carried through with the ID
+        prefixed by the featuretype so the two sites of one intron differ.
+        """
+        for side in ("left", "right"):
+            for anchor in self._exon_anchors(grandparent_featuretype, parent_featuretype):
+                exons = self.children(
+                    anchor, level=1, featuretype=exon_featuretype, order_by="start"
+                )
+                if anchor.strand == "+":
+                    featuretype = (
+                        "five_prime_cis_splice_site"
+                        if side == "left"
+                        else "three_prime_cis_splice_site"
+                    )
+                elif anchor.strand == "-":
+                    featuretype = (
+                        "three_prime_cis_splice_site"
+                        if side == "left"
+                        else "five_prime_cis_splice_site"
+                    )
+                else:
+                    # No orientation, so neither end is 5' or 3'.
+                    featuretype = "splice_site"
+
+                for site in self.interfeatures(
+                    exons,
+                    new_featuretype=featuretype,
+                    merge_attributes=merge_attributes,
+                    numeric_sort=numeric_sort,
+                    dialect=self.dialect,
+                ):
+                    if side == "left":
+                        site.end = site.start + 1
+                    else:
+                        site.start = site.end - 1
+                    if site.attributes.get("ID"):
+                        site.attributes["ID"] = [f"{featuretype}_{site.attributes['ID'][0]}"]
+                    yield site
 
     def children_bp(
         self,
@@ -1885,9 +2206,22 @@ class FeatureDB:
         merge_criteria=None,
         **kwargs,
     ) -> int:
-        kids = list(self.children(feature, featuretype=child_featuretype))
+        if kwargs:
+            # Accepting and ignoring these was worse than refusing them:
+            # `ignore_strand` was removed upstream precisely because it gave
+            # the wrong answer, and silently dropping it returns a number that
+            # looks right.
+            if "ignore_strand" in kwargs:
+                raise ValueError(
+                    "'ignore_strand' has been deprecated; please use merge_criteria to "
+                    "control how features should be merged. E.g., leave out the mc.strand "
+                    "criteria to ignore strand."
+                )
+            raise TypeError(f"children_bp() got unexpected keyword arguments {list(kwargs)}")
+
+        kids = self.children(feature, featuretype=child_featuretype, order_by="start")
         if merge:
-            kids = list(self.merge(kids, merge_criteria=merge_criteria))
+            kids = self.merge(kids, merge_criteria=merge_criteria)
         total = 0
         for k in kids:
             if k.start is not None and k.end is not None:
@@ -1903,13 +2237,14 @@ class FeatureDB:
         name_field: str = "ID",
         color=None,
     ) -> str:
+        if thick_featuretype and thin_featuretype:
+            raise ValueError("Can only specify one of `thick_featuretype` or `thin_featuretype`")
         if isinstance(feature, str):
             feature = self[feature]
         blocks = sorted(
             _with_coordinates(self.children(feature, featuretype=list(block_featuretype))),
             key=lambda f: (f.start, f.end),
         )
-        cds = list(self.children(feature, featuretype=list(thick_featuretype)))
         if feature.start is None or feature.end is None:
             raise ValueError(
                 f"cannot build a BED12 record for {feature.id!r}: "
@@ -1917,27 +2252,52 @@ class FeatureDB:
             )
         chrom_start = feature.start - 1
         chrom_end = feature.end
-        # BED is 0-based half-open; GFF is 1-based closed.
-        cds_starts = [c.start for c in cds if c.start is not None]
-        cds_ends = [c.end for c in cds if c.end is not None]
-        if cds_starts and cds_ends:
-            thick_start = min(cds_starts) - 1
-            thick_end = max(cds_ends)
+
+        if thin_featuretype:
+            # The complement of `thick`: the caller names the UNtranslated
+            # parts, and the thick span is what lies between them. Accepted and
+            # silently ignored before, so `thin_featuretype=["UTR"]` returned a
+            # record with the thick span covering the whole feature.
+            thin = sorted(
+                _with_coordinates(self.children(feature, featuretype=list(thin_featuretype))),
+                key=lambda f: (f.start, f.end),
+            )
+            if thin:
+                thick_start, thick_end = thin[0].end, thin[-1].start - 1
+            else:
+                thick_start, thick_end = feature.start, feature.end
         else:
-            thick_start = chrom_start
-            thick_end = chrom_start
+            thick = sorted(
+                _with_coordinates(self.children(feature, featuretype=list(thick_featuretype))),
+                key=lambda f: (f.start, f.end),
+            )
+            if thick:
+                thick_start, thick_end = thick[0].start - 1, thick[-1].end
+            else:
+                # No CDS: the oracle marks the whole feature thick, using its
+                # 1-based start. Collapsing both to `chrom_start` -- which this
+                # did -- renders an entirely thin feature, the opposite claim.
+                thick_start, thick_end = feature.start, feature.end
+
         try:
             name_value = feature.attributes[name_field][0]
         except (KeyError, IndexError):
-            name_value = feature.id or "."
+            name_value = "."
         score = feature.score if feature.score not in (".", "") else "0"
-        strand = feature.strand if feature.strand in ("+", "-") else "+"
-        rgb = color or "0,0,0"
+        # `.` is a legal BED strand and means "unstranded". Rewriting it to `+`
+        # asserts an orientation the source did not have.
+        strand = feature.strand if feature.strand in ("+", "-") else "."
+        rgb = (color or "0,0,0").replace(" ", "").strip()
         # BED12 requires blockCount to equal the number of entries in
         # blockSizes and blockStarts, so a block with missing coordinates has
         # to drop out of all three together, not just the two lists.
         sized = [(b.start, b.end) for b in blocks if b.start is not None and b.end is not None]
+        if not sized:
+            # A feature with no block children is one block: itself.
+            sized = [(feature.start, feature.end)]
         block_count = len(sized)
+        # No trailing comma. UCSC tolerates one, but the oracle emits none and
+        # a differential comparison sees every line as different.
         block_sizes = ",".join(str(end - start + 1) for start, end in sized)
         block_starts = ",".join(str((start - 1) - chrom_start) for start, _end in sized)
         return "\t".join(
@@ -1953,8 +2313,8 @@ class FeatureDB:
                 thick_end,
                 rgb,
                 block_count,
-                block_sizes + ("," if block_count else ""),
-                block_starts + ("," if block_count else ""),
+                block_sizes,
+                block_starts,
             )
         )
 

@@ -43,7 +43,7 @@ from gffbase._options import (
 from gffbase._serialize import encode_value
 from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
 from gffbase.feature import ParsedFeature
-from gffbase.modes import VALIDATION_NCBI
+from gffbase.modes import VALIDATION_NCBI, ResolvedMode
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
     COMPAT_VIEWS_SQL,
@@ -1274,7 +1274,14 @@ def _build_database(
 
     # Meta — record dialect, fmt, and the rtree availability so a re-opened
     # DB can route queries correctly without probing.
-    _write_meta(con, dialect, fmt, rtree_built=rtree_built, max_depth=max_depth)
+    _write_meta(
+        con,
+        dialect,
+        fmt,
+        rtree_built=rtree_built,
+        max_depth=max_depth,
+        resolved_mode=options.resolved_mode,
+    )
 
     return con, IngestStats(
         n_features_raw=n_raw,
@@ -1425,6 +1432,7 @@ def _write_meta(
     *,
     rtree_built: bool = False,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    resolved_mode: ResolvedMode | None = None,
 ):
     import json
 
@@ -1447,4 +1455,19 @@ def _write_meta(
         ("closure_max_depth", str(closure_max_depth)),
         ("n_multipart", str(int(n_multipart))),
     ]
+    if resolved_mode is not None:
+        # How this database was BUILT. Nothing recorded it before, so a file on
+        # disk could not say whether it had been through the compat or the
+        # strict pipeline -- which matters for reproducibility, for reading a
+        # validation report, and for the derived-feature `source` string, which
+        # differs by mode. `meta` is key/value, so this is additive and needs no
+        # schema version bump; a database written before this lands simply has
+        # no `mode` key and reads back as `compat`, which is what it was.
+        rows.extend(
+            [
+                ("mode", resolved_mode.mode),
+                ("validation", resolved_mode.validation),
+                ("on_error", resolved_mode.on_error),
+            ]
+        )
     con.executemany("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", rows)
