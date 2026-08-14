@@ -315,10 +315,8 @@ def _inv11_closure_sound(con):
         con,
         """
         SELECT ancestor, descendant, depth, reason FROM (
-            SELECT ancestor, descendant, depth, 'self-ancestry' AS reason
-            FROM closure WHERE ancestor = descendant
-            UNION ALL
-            SELECT ancestor, descendant, depth, 'non-positive depth' FROM closure WHERE depth < 1
+            SELECT ancestor, descendant, depth, 'non-positive depth' AS reason
+            FROM closure WHERE depth < 1
             UNION ALL
             SELECT c.ancestor, c.descendant, c.depth, 'depth-1 row with no edge'
             FROM closure c WHERE c.depth = 1
@@ -333,6 +331,23 @@ def _inv11_closure_sound(con):
             FROM closure GROUP BY ancestor, descendant, depth HAVING COUNT(*) > 1
         )
         """,
+    )
+
+
+def _inv11b_no_self_ancestry(con):
+    """A feature that is its own ancestor.
+
+    A WARNING, because it is reachable from ordinary input and matches the
+    oracle: a line saying `ID=a;Parent=a` produces exactly this, and gffutils
+    writes the same relation. Deeper cycles no longer reach the closure at all
+    -- the walk refuses to visit a node twice on one path -- so what survives
+    here is the single self-edge the file literally asserts.
+
+    Still reported: `children(x)` naming `x` is a surprise worth knowing about,
+    and it is always a sign of a malformed file.
+    """
+    return _count(
+        con, "SELECT ancestor, descendant, depth FROM closure WHERE ancestor = descendant"
     )
 
 
@@ -390,6 +405,7 @@ _CHECKS = (
     ("INV-9", "seqid_map_complete", ERROR, _inv9_seqid_map_complete, False),
     ("INV-10", "attribute_dedup_consistent", ERROR, _inv10_attribute_dedup_consistent, True),
     ("INV-11", "closure_sound", ERROR, _inv11_closure_sound, False),
+    ("INV-11b", "closure_self_ancestry", WARNING, _inv11b_no_self_ancestry, False),
     ("INV-13", "conflicts_resolve", ERROR, _inv13_conflicts_resolve, True),
     ("INV-14", "file_order_is_first_segment", ERROR, _inv14_file_order_is_first_segment, True),
 )
@@ -405,7 +421,8 @@ _DETAILS = {
     "bbox_matches": "bbox disagrees with the coordinates it was built from",
     "seqid_map_complete": "seqid missing from seqid_map, or its band disagrees",
     "attribute_dedup_consistent": "attribute rows disagree with attrs_same_as_seg0",
-    "closure_sound": "closure is cyclic, mis-depthed, or disagrees with edges",
+    "closure_sound": "closure is mis-depthed or disagrees with edges",
+    "closure_self_ancestry": "a feature is its own ancestor",
     "conflicts_resolve": "recorded id resolution points at a missing feature",
     "file_order_is_first_segment": "file_order is not the first segment's",
     "attributes_reparse": "re-parsing attributes_blob does not reproduce the attributes rows",

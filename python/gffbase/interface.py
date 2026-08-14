@@ -1186,14 +1186,17 @@ class FeatureDB:
             max_walk = level if level is not None else max(64, self._max_depth * 4)
             depth_filter = " AND w.depth = ?" if level is not None else ""
             cte = f"""
-                WITH RECURSIVE walk(anchor, id, depth) AS (
-                    SELECT {edge_anchor_col}, {edge_descendant_col}, 1
+                WITH RECURSIVE walk(anchor, id, depth, seen) AS (
+                    SELECT {edge_anchor_col}, {edge_descendant_col}, 1,
+                           [{edge_anchor_col}, {edge_descendant_col}]
                     FROM edges WHERE {edge_anchor_col} IN ({ph})
                     UNION ALL
-                    SELECT w.anchor, e.{edge_descendant_col}, w.depth + 1
+                    SELECT w.anchor, e.{edge_descendant_col}, w.depth + 1,
+                           list_append(w.seen, e.{edge_descendant_col})
                     FROM walk w
                     JOIN edges e ON e.{edge_anchor_col} = w.id
-                    WHERE w.depth < ?
+                    -- See CLOSURE_RECURSIVE_CTE: no node twice on one path.
+                    WHERE w.depth < ? AND NOT list_contains(w.seen, e.{edge_descendant_col})
                 )
                 SELECT
                     w.anchor       AS anchor,
@@ -1474,13 +1477,17 @@ class FeatureDB:
         max_walk = level if level is not None else max(64, self._max_depth * 4)
 
         cte = f"""
-            WITH RECURSIVE walk(id, depth) AS (
-                SELECT {select_col}, 1 FROM edges WHERE {base_where}
+            WITH RECURSIVE walk(id, depth, seen) AS (
+                SELECT {select_col}, 1, [{select_col}] FROM edges WHERE {base_where}
                 UNION ALL
-                SELECT e.{select_col}, w.depth + 1
+                SELECT e.{select_col}, w.depth + 1, list_append(w.seen, e.{select_col})
                 FROM walk w
                 {recurse_join}
-                WHERE w.depth < ?
+                -- See CLOSURE_RECURSIVE_CTE: no node twice on one path. This
+                -- is the deeper of the two walks -- it runs to depth 64 when
+                -- no level is given -- so a cycle here was the most expensive
+                -- one to hit.
+                WHERE w.depth < ? AND NOT list_contains(w.seen, e.{select_col})
             )
         """
         where = ["1=1"]
