@@ -57,10 +57,11 @@ classifiers = [
 # Runtime dependencies. DuckDB and PyArrow are required: the storage engine
 # is DuckDB and the Rust→Python→DuckDB hand-off goes through PyArrow.
 dependencies = [
-    # Floors are the oldest versions CI actually tests (see the `minimum-deps`
-    # job). Both projects dropped Python 3.9 before these releases, so a single
-    # dependency set covers the whole supported 3.10-3.14 range -- no split
-    # environment markers are needed.
+    # Floors are the oldest versions the `minimum-deps` CI job installs and
+    # runs the suite against, so they are enforced rather than asserted -- the
+    # comment here used to cite that job before it existed. Both projects
+    # dropped Python 3.9 before these releases, so a single dependency set
+    # covers the whole supported 3.10-3.14 range with no environment markers.
     "duckdb>=1.4.1",
     "pyarrow>=18.1",
 ]
@@ -88,13 +89,26 @@ dev = [
 # Optional integrations. Each corresponds to a code path that must either work
 # when the extra is installed or raise a precise installation error when it is
 # not — there are no silent degradations.
+#
+# `pybedtools`, `biopython` and `plot` were named in those installation errors
+# before they existed here, so `pip install gffbase[pybedtools]` printed a
+# warning and installed nothing — an error message that sent the reader
+# somewhere useless. Advertising an extra and shipping it are the same commit
+# now; `tests/test_release_hygiene.py` checks that every extra named in a
+# source file is declared here.
 pandas = ["pandas>=1.5"]
 polars = ["polars>=0.20"]
 fasta = ["pyfaidx>=0.7"]
+pybedtools = ["pybedtools>=0.9"]
+biopython = ["biopython>=1.80"]
+plot = ["pybedtools>=0.9", "matplotlib>=3.5"]
 all = [
     "pandas>=1.5",
     "polars>=0.20",
     "pyfaidx>=0.7",
+    "pybedtools>=0.9",
+    "biopython>=1.80",
+    "matplotlib>=3.5",
 ]
 docs = [
     # MkDocs site (themed with Material; API ref via mkdocstrings).
@@ -141,7 +155,15 @@ include = [
     { path = "CHANGELOG.md", format = "sdist" },
     { path = "rust/Cargo.lock", format = "sdist" },
     { path = "tests/**/*.py", format = "sdist" },
-    { path = "tests/data/*", format = "sdist" },
+    # `tests/data/**/*`, not `tests/data/*`: `*` does not cross a `/`, so the
+    # old pattern reached only the four fixtures at the top level and missed
+    # the entire `upstream/` corpus and the `v1/` migration fixture. The
+    # neighbouring `tests/**/*.py` entry already used `**` correctly.
+    { path = "tests/data/**/*", format = "sdist" },
+    # The parity harness is data, not code, so `tests/**/*.py` never reached
+    # it -- an sdist could not run the compatibility suite at all.
+    { path = "tests/parity/*.json", format = "sdist" },
+    { path = "tests/parity/*.toml", format = "sdist" },
 ]
 
 [tool.pytest.ini_options]

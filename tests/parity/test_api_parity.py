@@ -39,6 +39,12 @@ from pathlib import Path
 import pytest
 import tomllib
 
+#: These compare against the recorded manifest rather than a live gffutils, so
+#: they run without the oracle installed. They still belong to the parity
+#: group: `pytest -m parity` is the command a contributor runs to check
+#: compatibility, and this file was silently absent from it.
+pytestmark = pytest.mark.parity
+
 HERE = Path(__file__).resolve().parent
 MANIFEST_PATH = HERE / "gffutils_manifest.json"
 DEVIATIONS_PATH = HERE / "deviations.toml"

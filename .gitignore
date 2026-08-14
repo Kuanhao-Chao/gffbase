@@ -73,10 +73,26 @@ target/
 *.gtf.gz
 
 # Re-include the small curated test fixtures so they stay versioned.
+#
+# These negations must reach the WHOLE tree, not just its top level. The
+# previous form was `!tests/data/*.gff3` + `!tests/data/*.gtf`, and `*` does
+# not cross a `/` -- so every fixture under `tests/data/upstream/` and
+# `tests/data/v1/` stayed ignored. Twenty-three files the differential suite
+# depends on existed only on the machine that created them: a fresh clone or a
+# CI runner could not run the parity suite at all, and because
+# `differential.fixture()` called `pytest.skip` on a missing file rather than
+# failing, the whole compatibility gate reported green while testing almost
+# nothing.
+#
+# The corpus is 716 KB in total, so vendoring all of it costs nothing and
+# removes an entire class of "works on my machine".
 !tests/
 !tests/data/
-!tests/data/*.gff3
-!tests/data/*.gtf
+!tests/data/**
+
+# ...but not the bytecode cache, which the negation above would otherwise
+# re-include (later rules win in gitignore).
+tests/data/**/__pycache__/
 
 # --- Bench / scratch artifacts -----------------------------------------
 bench/data/

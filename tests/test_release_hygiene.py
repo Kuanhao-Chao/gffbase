@@ -130,6 +130,61 @@ def test_changelog_documents_the_current_version():
     )
 
 
+#: Every other place the version is written down. Three of these drifted to a
+#: stale value precisely because only `pyproject.toml`, `rust/Cargo.toml` and
+#: `__init__.py` were gated -- so the gate was extended to the full set rather
+#: than the set that happened to be easy.
+_VERSION_LITERALS = {
+    "CITATION.cff": r"^version: (.+)$",
+    "README.md": r"^  version = \{([^}]+)\},$",
+    "CONTRIBUTING.md": r"gffbase\.__version__\)\"\s+# (\S+)",
+}
+
+
+@pytest.mark.parametrize(("filename", "pattern"), sorted(_VERSION_LITERALS.items()))
+def test_secondary_version_literals_agree(filename, pattern):
+    """The citation block, CITATION.cff and CONTRIBUTING all state a version.
+
+    None of them was checked before, and all three drifted. A version literal
+    nobody tests is a version literal that will be wrong at the next release --
+    the citation metadata especially, since it is what other people's papers
+    end up quoting.
+    """
+    text = _read(filename)
+    found = re.search(pattern, text, re.MULTILINE)
+    assert found is not None, f"{filename}: no version literal matched {pattern!r}"
+    assert found.group(1).strip() == gffbase.__version__, (
+        f"{filename} says {found.group(1).strip()!r}, "
+        f"gffbase.__version__ is {gffbase.__version__!r}"
+    )
+
+
+def test_every_advertised_extra_actually_exists():
+    """An install hint must name an extra that installs something.
+
+    `pybedtools_integration`, `biopython_integration` and `contrib.plotting`
+    each told the reader to run `pip install gffbase[...]` for an extra that
+    was never declared -- pip prints a warning, installs nothing, and the
+    import fails again. An error message that sends someone somewhere useless
+    is worse than one that just says "not installed".
+    """
+    pyproject = _read("pyproject.toml")
+    block = re.search(r"\[project\.optional-dependencies\](.*?)^\[", pyproject, re.S | re.M)
+    assert block is not None, "no [project.optional-dependencies] table"
+    declared = set(re.findall(r"^([a-z][\w-]*) = \[", block.group(1), re.MULTILINE))
+
+    advertised = set()
+    for path in (REPO_ROOT / "python" / "gffbase").rglob("*.py"):
+        advertised.update(re.findall(r"pip install gffbase\[([\w,-]+)\]", path.read_text()))
+    # A hint may name several at once, e.g. `gffbase[a,b]`.
+    advertised = {name for group in advertised for name in group.split(",")}
+
+    missing = sorted(advertised - declared)
+    assert not missing, (
+        f"source files advertise extras that do not exist: {missing}\ndeclared: {sorted(declared)}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Packaging manifests must not reference files that do not exist. 0.1.0 listed
 # six deleted PHASE*.md files in two manifests and a Cargo.lock that was

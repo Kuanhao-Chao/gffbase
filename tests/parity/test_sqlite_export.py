@@ -40,6 +40,23 @@ from gffbase import create_db, export_sqlite
 
 pytestmark = pytest.mark.parity
 
+
+@pytest.fixture(scope="module", autouse=True)
+def _need_oracle():
+    """Skip the whole module when the oracle is not installed.
+
+    `pytestmark = pytest.mark.parity` labels these tests; it does not deselect
+    them from a plain `pytest` run. CI's `test` job installs `.[test,all]`,
+    and `gffutils` lives in the `bench` extra -- so without this guard every
+    test below raised `ModuleNotFoundError` in all fourteen matrix cells. It
+    passed locally only because a gffutils checkout happens to be importable
+    here, which is exactly the kind of difference a CI run exists to find.
+    """
+    from tests.parity import differential as D
+
+    D.requires_gffutils()
+
+
 UPSTREAM = Path(__file__).parent.parent / "data" / "upstream"
 
 SPLIT_CDS = """##gff-version 3

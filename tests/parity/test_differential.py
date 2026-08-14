@@ -754,3 +754,56 @@ def test_merge_all_exclude_components_removes_the_components(name):
     for f in merged_g:
         for child in f.children:
             assert child.id not in ours, f"{child.id} survived exclude_components"
+
+
+# ---------------------------------------------------------------------------
+# The corpus itself
+# ---------------------------------------------------------------------------
+
+
+def test_every_declared_fixture_is_actually_vendored():
+    """The corpus lists above must name files that exist.
+
+    This is the test that would have caught the fixtures being gitignored.
+    Twenty-three of them were untracked, so a fresh clone ran a fraction of
+    the comparisons -- and `D.fixture()` skipped rather than failed, so the
+    suite still reported success. Every skip looks like a pass from a distance.
+
+    Asserting the corpus is complete, rather than letting each test discover
+    its own absence, is the difference between "the gate is green" and "the
+    gate is green because it checked nothing".
+    """
+    declared = set(SHARED_GFF3) | set(SHARED_GTF) | set(DERIVED_GFF3)
+    declared |= set(STRICT_MODE_REJECTS)
+    missing = sorted(n for n in declared if not (D.UPSTREAM_DATA / n).is_file())
+    assert not missing, (
+        f"{len(missing)} declared fixture(s) are not vendored: {missing}\n"
+        f"Looked in {D.UPSTREAM_DATA}"
+    )
+
+
+def test_the_corpus_is_committed_not_merely_present():
+    """Present on disk is not the same as present in the repository.
+
+    `.gitignore` blanket-ignores `*.gff`, `*.gff3`, `*.gtf` and `*.fa` so that
+    real genomic data never lands in the repo by accident. The re-include for
+    `tests/data/` therefore has to reach the whole subtree; when it only
+    reached depth 1, every fixture here was ignored while still sitting on
+    disk, which is invisible to any test that just opens the file.
+    """
+    import subprocess
+
+    declared = sorted(set(SHARED_GFF3) | set(SHARED_GTF) | set(DERIVED_GFF3))
+    paths = [str((D.UPSTREAM_DATA / n).relative_to(D.REPO_ROOT)) for n in declared]
+    result = subprocess.run(
+        ["git", "check-ignore", *paths],
+        cwd=D.REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    # `git check-ignore` exits 1 and prints nothing when NO path is ignored.
+    ignored = [line for line in result.stdout.splitlines() if line.strip()]
+    assert not ignored, (
+        "these fixtures are gitignored, so they cannot reach a clone or CI:\n  "
+        + "\n  ".join(ignored)
+    )
