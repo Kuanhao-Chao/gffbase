@@ -2342,6 +2342,42 @@ class FeatureDB:
     # Escape hatch + maintenance
     # ------------------------------------------------------------------
 
+    def attribute_search(self, text: str, featuretype=None) -> Iterator[Feature]:
+        """Features with an attribute VALUE matching `text`, case-insensitively.
+
+        `text` is SQL `LIKE` syntax, so `%` and `_` are wildcards; a bare
+        string matches as a substring, which is what a caller searching for an
+        accession expects.
+
+        gffutils' CLI calls `db.attribute_search(...)`, but no such method
+        exists anywhere in gffutils -- only in that call site and in an
+        obsolete test file -- so `gffutils-cli search` raises `AttributeError`
+        on every invocation. This is a working implementation rather than a
+        port of one.
+
+        The search is over the long-form `attributes` table, not over the raw
+        column-9 blob, so it matches DECODED values: searching for `a;b` finds
+        a feature whose source said `a%3Bb`.
+        """
+        pattern = text if any(ch in text for ch in "%_") else f"%{text}%"
+        params: list = [pattern]
+        clause = ""
+        if featuretype:
+            if isinstance(featuretype, str):
+                clause = " AND f.featuretype = ?"
+                params.append(featuretype)
+            else:
+                types = list(featuretype)
+                clause = f" AND f.featuretype IN ({','.join('?' * len(types))})"
+                params.extend(types)
+
+        sql = (
+            f"SELECT {self._select_feature_aliased('f')} FROM features f "
+            "WHERE EXISTS (SELECT 1 FROM attributes a WHERE a.feature_id = f.id "
+            f"AND lower(a.value) LIKE lower(?)){clause} ORDER BY f.file_order"
+        )
+        yield from self._yield_features(sql, params)
+
     def execute(self, query: str):
         """Execute arbitrary SQL. Returns DuckDB's relation cursor.
         SQLite-style queries against ``features_compat`` and ``relations_compat``
