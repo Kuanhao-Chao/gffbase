@@ -101,7 +101,11 @@ class FeatureDB:
         pragmas: dict | None = None,
         sort_attribute_values: bool = False,
         text_factory=str,
+        upgrade: str = "auto",
     ):
+        if upgrade not in ("auto", "never", "error"):
+            raise ValueError(f"upgrade must be 'auto', 'never' or 'error'; got {upgrade!r}")
+        self._upgrade = upgrade
         self.default_encoding = default_encoding
         #: Specification violations tolerated while building this database.
         #: Populated under `mode="compat"`; empty for a reopened database,
@@ -235,6 +239,16 @@ class FeatureDB:
         if raw is None or raw == "1":
             # `None` covers both a genuine v1 database and one built before the
             # version was recorded at all; neither has the v2 tables.
+            if self._upgrade == "error":
+                raise SchemaVersionError(
+                    f"{self.dbfn} uses schema v1 and upgrade='error' was requested. "
+                    "Pass upgrade='auto' to migrate it in place, or 'never' to open "
+                    "it read-compatible."
+                )
+            if self._upgrade == "auto" and self._try_migrate():
+                self._schema_version = int(SCHEMA_VERSION)
+                self._n_multipart = self._read_n_multipart(self._read_meta())
+                return
             self._v1_shim = True
             self._schema_version = 1
             self._n_multipart = 0
@@ -254,6 +268,28 @@ class FeatureDB:
 
         self._schema_version = int(SCHEMA_VERSION)
         self._n_multipart = self._read_n_multipart(meta)
+
+    def _try_migrate(self) -> bool:
+        """Upgrade a v1 database in place. False if the connection cannot.
+
+        The migration is purely additive and changes no query result, which is
+        what makes doing it automatically at open acceptable. A read-only
+        connection -- or any other reason DDL is refused -- is not an error
+        here: the shim reads a v1 database perfectly well, so degrading is
+        strictly better than refusing to open.
+        """
+        from gffbase.migrate import migrate_v1_to_v2
+
+        try:
+            result = migrate_v1_to_v2(self.dbfn, con=self.conn)
+        except duckdb.Error as exc:
+            _log.info(
+                "could not upgrade %s in place (%s); opening in v1 compatibility mode",
+                self.dbfn,
+                exc,
+            )
+            return False
+        return bool(result)
 
     def _read_n_multipart(self, meta: dict) -> int:
         """How many features span more than one input line.

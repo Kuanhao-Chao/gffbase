@@ -180,9 +180,12 @@ def test_a_corrupt_n_multipart_value_falls_back_to_counting(v2_path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_v1_database_opens_in_shim_mode(v2_path):
+def test_a_v1_database_opens_in_shim_mode_when_not_upgrading(v2_path):
+    """`upgrade="never"` is what selects the shim now: the default upgrades the
+    file in place (see test_migrate.py). The shim remains the behaviour for a
+    connection that cannot be written -- and the mode this gate first added."""
     _downgrade_to_v1(v2_path)
-    db = FeatureDB(str(v2_path))
+    db = FeatureDB(str(v2_path), upgrade="never")
     assert db._v1_shim is True
     assert db._schema_version == 1
     # Zero is what makes every query builder emit v1 SQL, so the shim needs no
@@ -190,12 +193,21 @@ def test_a_v1_database_opens_in_shim_mode(v2_path):
     assert db._n_multipart == 0
 
 
+def test_a_v1_database_is_upgraded_in_place_by_default(v2_path):
+    """The migration is purely additive and changes no query result, which is
+    what makes doing it without being asked acceptable."""
+    _downgrade_to_v1(v2_path)
+    db = FeatureDB(str(v2_path))
+    assert db._v1_shim is False
+    assert db._schema_version == 2
+
+
 def test_a_v1_database_still_answers_every_v1_query(v2_path):
     """The point of an additive schema: v1 data is not degraded data. If the
     shim could not answer these, the gate would be a regression rather than a
     safeguard."""
     _downgrade_to_v1(v2_path)
-    db = FeatureDB(str(v2_path))
+    db = FeatureDB(str(v2_path), upgrade="never")
 
     assert len(list(db.all_features())) == 4
     assert db["g1"].id == "g1"
@@ -211,7 +223,7 @@ def test_a_database_with_no_version_recorded_is_treated_as_v1(v2_path):
     treating a missing key as current would read columns that are not there."""
     _downgrade_to_v1(v2_path)
     _set_version(v2_path, None)
-    db = FeatureDB(str(v2_path))
+    db = FeatureDB(str(v2_path), upgrade="never")
     assert db._v1_shim is True
     assert len(list(db.all_features())) == 4
 
@@ -219,7 +231,7 @@ def test_a_database_with_no_version_recorded_is_treated_as_v1(v2_path):
 def test_opening_a_v1_database_says_so(v2_path, caplog):
     _downgrade_to_v1(v2_path)
     with caplog.at_level(logging.INFO, logger="gffbase.interface"):
-        FeatureDB(str(v2_path))
+        FeatureDB(str(v2_path), upgrade="never")
     assert any("schema v1" in r.getMessage() for r in caplog.records)
     assert any("migrate_v1_to_v2" in r.getMessage() for r in caplog.records)
 
