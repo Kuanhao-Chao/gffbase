@@ -202,20 +202,13 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["gffbase"]
-omit = [
-    # Pure-Python correctness oracle — its job is to mirror the Rust parser
-    # exactly, and the Rust path is the production path. Most of its lines
-    # are exercised indirectly via differential tests, but full branch
-    # coverage there is redundant work.
-    #
-    # NOTE: this omit is scheduled for removal in 0.2.0. The fallback parser
-    # is the oracle the Rust engine is diffed against and is the *only*
-    # parser on a wheel-less install, so it needs real coverage, not an
-    # exemption. The `_bins.py` entry that used to sit here was dead — its
-    # comment described sqlite_export.py, and `_bins.py` is a 43-line module
-    # that the suite already covers.
-    "*/_pyfallback/*",
-]
+# No omissions. `*/_pyfallback/*` was exempted here with a note saying the
+# exemption would be removed in 0.2.0 — this is that removal. The fallback
+# parser is the oracle the Rust engine is diffed against AND the only parser
+# on a wheel-less install, so exempting it hid the coverage of the code most
+# likely to be running when something goes wrong. An omit list is where
+# uncovered code goes to stop being counted.
+omit = []
 
 [tool.coverage.report]
 exclude_lines = [
