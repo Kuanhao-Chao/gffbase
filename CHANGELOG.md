@@ -351,6 +351,15 @@ nobody can install would only mislead. Everything below is the delta from
 
 ### Fixed
 
+- **The release workflow could publish from a red tree.** `ci.yml` runs on
+  pushes to `main` and `release/*` and **not on tags**, and the publish job
+  depended only on the wheel builds — so a tag pushed from a failing tree went
+  straight to PyPI with nothing having run the suite. Both release workflows
+  now gate every builder on a `verify` job that builds the tagged commit,
+  asserts the native extension is present, runs the tests, and refuses if the
+  tag does not match `gffbase.__version__`.
+- Both release workflows claimed `abi3-py39` covering "CPython 3.9-3.13"; the
+  wheels are `abi3-py310` covering 3.10–3.14.
 - **`gffbase migrate --coalesce` crashed on every invocation.** The command
   passed a path to `coalesce_multipart`, which takes an open connection —
   `AttributeError: 'str' object has no attribute 'execute'`. It also needed
