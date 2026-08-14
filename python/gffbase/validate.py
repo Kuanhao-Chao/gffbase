@@ -324,6 +324,13 @@ def _inv11_closure_sound(con):
             FROM closure c WHERE c.depth = 1
               AND NOT EXISTS (SELECT 1 FROM edges e
                               WHERE e.parent = c.ancestor AND e.child = c.descendant)
+            UNION ALL
+            -- A duplicate row means `children(x, level=n)` returns the same
+            -- feature once per path to it. GFF3 permits a DAG, so this is
+            -- reachable from ordinary data, and gffutils cannot hit it because
+            -- its relations table is keyed on exactly this triple.
+            SELECT ancestor, descendant, depth, 'duplicate closure row'
+            FROM closure GROUP BY ancestor, descendant, depth HAVING COUNT(*) > 1
         )
         """,
     )

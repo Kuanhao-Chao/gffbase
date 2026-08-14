@@ -423,5 +423,13 @@ WITH RECURSIVE walk(ancestor, descendant, depth) AS (
     JOIN edges e ON e.parent = w.descendant
     WHERE w.depth < ?
 )
-SELECT ancestor, descendant, depth FROM walk;
+SELECT DISTINCT ancestor, descendant, depth FROM walk;
 """
+# DISTINCT on the final projection, not on the recursive step, which must stay
+# UNION ALL to terminate. GFF3 permits a DAG -- a feature may name several
+# `Parent`s -- so the same descendant can be reachable by two paths of equal
+# length, and `UNION ALL` emitted one closure row per path. `children(g, level=2)`
+# then returned five features where only three were distinct.
+#
+# gffutils never had this: its `relations` table declares
+# PRIMARY KEY (parent, child, level), so it deduplicates by construction.
