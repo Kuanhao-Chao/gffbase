@@ -37,6 +37,7 @@ from gffbase._dbutil import scalar
 from gffbase._options import IdSpecResolver, IngestOptions, _FeatureAdapter
 from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
 from gffbase.feature import ParsedFeature
+from gffbase.modes import VALIDATION_NCBI
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
     COMPAT_VIEWS_SQL,
@@ -208,7 +209,25 @@ class _ArrowBatchBuilder:
         self.f_occ.append(occ)
         self.f_id_origin.append(id_origin)
         self.f_seqid_y.append(y)
-        for k, v, idx in feat.attributes_pairs:
+        pairs = feat.attributes_pairs
+        multivalued: set | None = None
+        for k, v, idx in pairs:
+            if not v:
+                # gffutils' rule, which the `Feature` object already applies:
+                # a WHOLLY empty value (`ID=`) means the key has no values,
+                # while a multi-valued attribute keeps its empty parts
+                # (`Parent=x,` -> `["x", ""]`). Storing the lone empty made the
+                # `attributes` table disagree with `Feature.attributes` -- a
+                # SQL query found a row for `pseudo` where the object reported
+                # `[]` -- and would have created an edge to the empty id for a
+                # bare `Parent=`. Found by INV-12 on `ncbi_gff3.txt`.
+                #
+                # Built at most once per feature, and only for features that
+                # actually carry an empty value, so the hot path is untouched.
+                if multivalued is None:
+                    multivalued = {key for key, _value, i in pairs if i > 0}
+                if k not in multivalued:
+                    continue
             self.a_fid.append(feat_id)
             self.a_key.append(k)
             self.a_val.append(v)
@@ -961,6 +980,10 @@ def from_file(
     # the counters that get persisted below.
     n_multipart = resolve_multipart(con, options, autoinc, has_spatial)
 
+    # Before GTF synthesis: the post-synthesis patch below reads this table to
+    # stamp a synthesized row's seqid_y and bbox.
+    _persist_seqid_map(con, seqid_to_y)
+
     # `autoincrements` records the counters so a later `update()` does not
     # reissue an id this build already handed out.
     if autoinc:
@@ -1023,12 +1046,23 @@ def from_file(
     # inline during the Arrow batch INSERTs (no UPDATE pass).
     rtree_built = False
     if has_spatial:
-        rtree_built = _finalize_rtree(con, seqid_to_y)
+        rtree_built = _finalize_rtree(con)
 
     # SQLite-compat views (must run after closure has been populated).
     # `segments_all` first -- `features_compat` is defined on top of it.
     con.execute(SEGMENTS_ALL_VIEW)
     con.execute(COMPAT_VIEWS_SQL)
+
+    # Strict mode validates what it just built. The failure these catch is not
+    # a crash but a database that answers plausibly and wrongly -- a fused
+    # feature whose envelope is narrower than its segments simply stops being
+    # returned by `region()`, with nothing raised anywhere. Compat mode does
+    # not run this: it exists to load whatever gffutils loads, and several of
+    # these invariants describe structure a tolerated file will not have.
+    if options.resolved_mode.validation == VALIDATION_NCBI:
+        from gffbase.validate import validate_db
+
+        validate_db(con, level="fast", raise_on_error=True)
 
     # Stats.
     n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
@@ -1146,24 +1180,35 @@ def _try_load_spatial(con: duckdb.DuckDBPyConnection) -> bool:
         return False
 
 
-def _finalize_rtree(con: duckdb.DuckDBPyConnection, seqid_to_y: dict) -> bool:
-    """Persist the seqid_to_y dict into the `seqid_map` side table and
-    create the R-tree index over the (already-populated) `bbox` column.
+def _persist_seqid_map(con: duckdb.DuckDBPyConnection, seqid_to_y: dict) -> None:
+    """Write the builder's seqid -> y-band map into the `seqid_map` table.
+
+    Called BEFORE GTF synthesis, not as part of the R-tree build. It used to
+    happen inside `_finalize_rtree`, which runs after synthesis -- so the
+    `UPDATE ... FROM seqid_map` that patches a synthesized row's `seqid_y` and
+    `bbox` joined against a table that was still empty, and every synthesized
+    gene and transcript kept a NULL bbox.
+
+    The consequence was silent and severe: those rows were invisible to every
+    R-tree `region()` query while the B-tree path still returned them, so the
+    two paths disagreed on any GTF database. Found by INV-8.
+    """
+    if not seqid_to_y:
+        return
+    # Stable ordering (encounter order in the file) — preserves the
+    # invariant that the first seqid sees seqid_y == 0.
+    con.execute("DELETE FROM seqid_map")
+    con.executemany("INSERT INTO seqid_map(seqid, seqid_y) VALUES (?, ?)", list(seqid_to_y.items()))
+
+
+def _finalize_rtree(con: duckdb.DuckDBPyConnection) -> bool:
+    """Create the R-tree index over the (already-populated) `bbox` column.
 
     Phase 19: this is the entire R-tree build — no UPDATE passes. The
     `bbox` column was filled in inline by ``_ArrowBatchBuilder.flush_into``
     using the per-row seqid_y stamped by the builder.
     """
     try:
-        if seqid_to_y:
-            seqid_rows = list(seqid_to_y.items())
-            # Stable ordering (encounter order in the file) — preserves the
-            # invariant that the first seqid sees seqid_y == 0.
-            con.execute("DELETE FROM seqid_map")
-            con.executemany(
-                "INSERT INTO seqid_map(seqid, seqid_y) VALUES (?, ?)",
-                seqid_rows,
-            )
         con.execute("CREATE INDEX IF NOT EXISTS features_rtree ON features USING RTREE (bbox)")
         return True
     except duckdb.Error:

@@ -347,6 +347,18 @@ class FeatureDB:
     # Dunders
     # ------------------------------------------------------------------
 
+    def validate(self, level: str = "fast", **kwargs):
+        """Check this database's structural invariants.
+
+        See :func:`gffbase.validate.validate_db`. Run automatically at the end
+        of a strict-mode ingest; worth running by hand after `update()`,
+        `delete()` or `coalesce_multipart()`, which are the operations that can
+        leave the two halves of a discontinuous feature disagreeing.
+        """
+        from gffbase.validate import validate_db
+
+        return validate_db(self, level=level, **kwargs)
+
     def _build_feature(self, row, segments=None) -> Feature:
         """The one place a database row becomes a `Feature`.
 
