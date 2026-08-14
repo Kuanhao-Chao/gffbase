@@ -177,3 +177,18 @@ inside `bins.py` is collected as part of its suite. Shipping one in a library
 module means any downstream project whose pytest configuration reaches into
 site-packages collects it too. gffbase's equivalent assertions live in
 `tests/test_compat_surface.py`, where they belong."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.pybedtools_integration.to_bedtool"
+status = "intentional"
+reason = """Returns a materialized `BedTool` (via `saveas()`) rather than one
+wrapping the generator. A generator-backed BedTool is a one-shot stream that
+reports its emptiness inconsistently -- `len(list(bt))` is 0 while `len(bt)`
+is the true count, verified against pybedtools 0.12.0 with no gffbase code
+involved. The oracle returns that object, so `list(to_bedtool(...))` there is
+silently empty, which a caller reads as an empty database rather than as a
+bug. `saveas()` costs a temp file rather than memory, so this still works on a
+database larger than RAM. Pinned by
+`test_to_bedtool_result_can_be_iterated_more_than_once` and
+`test_raw_pybedtools_still_has_the_trap_this_works_around`."""

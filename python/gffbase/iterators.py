@@ -219,8 +219,16 @@ class _FeatureIterator(_BaseIterator):
         self._pos += 1
         return feature
 
-    def dialect(self) -> dict:  # type: ignore[override]
+    # Properties, matching `_DataIterator`. These were written as methods and
+    # the resulting mypy override error was silenced with a `type: ignore`,
+    # which hid a real inconsistency: `it.directives` returned a bound method
+    # on one iterator and a list on another, so the same caller code worked
+    # against one and raised `TypeError: 'list' object is not callable`
+    # against the other.
+    @property
+    def dialect(self) -> dict:
         return self._dialect
 
-    def directives(self) -> list:  # type: ignore[override]
+    @property
+    def directives(self) -> list:
         return []

@@ -457,3 +457,13 @@ def test_gffwriter_does_close_a_file_it_opened(tmp_path):
     writer.close()
     assert writer._fh.closed
     assert "ID=g1" in target.read_text()
+
+
+def test_migrate_coalesce_refuses_a_current_database(db_path, capsys):
+    """`--coalesce` is the separate, opt-in second step: the migration proper
+    is structural and changes no query result, while coalescing re-fuses v1's
+    split multipart rows and therefore DOES change results. On an already-v2
+    database there is nothing to fuse."""
+    code, _out, err = run(capsys, "migrate", db_path, "--coalesce")
+    assert code == 0
+    assert "coalesced" in err

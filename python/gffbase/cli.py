@@ -253,7 +253,19 @@ def cmd_migrate(args) -> int:
     if args.coalesce:
         # Separate and opt-in: this one CHANGES query results, where the
         # migration proper is structural and does not.
-        fused = coalesce_multipart(args.db)
+        #
+        # `coalesce_multipart` wants an open connection (or a FeatureDB),
+        # unlike `migrate_v1_to_v2`, which also accepts a path. Passing the
+        # path made every `--coalesce` invocation die with
+        # `AttributeError: 'str' object has no attribute 'execute'`.
+        # Opened through `FeatureDB` rather than `duckdb.connect`, because a
+        # raw connection cannot modify a table carrying an R-tree index until
+        # the spatial extension is loaded -- `Cannot bind index 'features',
+        # unknown index type 'RTREE'`. `FeatureDB.__init__` does that load.
+        from gffbase.interface import FeatureDB
+
+        db = FeatureDB(args.db)
+        fused = coalesce_multipart(db)
         print(f"coalesced {fused} multipart feature(s)", file=sys.stderr)
     return 0
 
