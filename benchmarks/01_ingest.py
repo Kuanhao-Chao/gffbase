@@ -14,17 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""Head-to-head ingest: gffbase vs legacy gffutils on GENCODE v45.
+"""Head-to-head ingest: gffbase vs legacy gffutils on GENCODE v49 GFF3.
 
 Each engine runs in a fresh subprocess so peak RSS measurements are clean.
-Pass `--reuse-cached` to quote the Phase 6 captured legacy numbers (saves
-~60 min wall time) instead of rerunning.
+
+There is no `--reuse-cached` any more. It copied a database from the retired
+`bench/` tree and reported hardcoded literals (`wall_seconds: 225.78`,
+`n_features: 2_182_889`) captured from a log, labelled `"cached": true`, and
+those values reached the published tables as though they had been measured on
+the release they appeared in. If it did not run, it does not get published.
 """
 
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
@@ -33,14 +36,11 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
-    GENCODE_GTF,
+    GENCODE_GFF3,
     GFFBASE_DB,
     LEGACY_DB,
     OUT,
-    PHASE6_GFFBASE_DB,
-    PHASE6_LEGACY_DB,
     du,
-    load_phase6_legacy_ingest_numbers,
     pretty_bytes,
     pretty_seconds,
     run_subprocess,
@@ -56,7 +56,7 @@ import json, time, sys
 sys.path.insert(0, {str(ROOT / "python")!r})
 from gffbase import create_db
 t0 = time.perf_counter()
-db = create_db({str(GENCODE_GTF)!r}, {str(GFFBASE_DB)!r}, force=True)
+db = create_db({str(GENCODE_GFF3)!r}, {str(GFFBASE_DB)!r}, force=True)
 elapsed = time.perf_counter() - t0
 print(json.dumps({{
     "wall_seconds": elapsed,
@@ -75,7 +75,7 @@ def ingest_legacy(timeout: int = 7200) -> dict:
 import json, time, gffutils
 t0 = time.perf_counter()
 db = gffutils.create_db(
-    {str(GENCODE_GTF)!r}, {str(LEGACY_DB)!r}, force=True,
+    {str(GENCODE_GFF3)!r}, {str(LEGACY_DB)!r}, force=True,
     keep_order=False, sort_attribute_values=False,
     merge_strategy="create_unique", verbose=False,
     disable_infer_genes=False, disable_infer_transcripts=False,
@@ -88,34 +88,12 @@ print(json.dumps({{"wall_seconds": elapsed, "n_features": db.count_features_of_t
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--reuse-cached",
-        action="store_true",
-        help="Reuse Phase 6 cached legacy ingest numbers + DBs.",
-    )
     ap.add_argument("--legacy-timeout", type=int, default=7200)
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
     print("[ingest] gffbase ingest (subprocess)…", flush=True)
-    if args.reuse_cached and PHASE6_GFFBASE_DB.exists():
-        # Copy / hardlink Phase 6's gffbase DB; that saves us another 4-min ingest.
-        if not GFFBASE_DB.exists():
-            shutil.copy2(PHASE6_GFFBASE_DB, GFFBASE_DB)
-        gffbase_info = {
-            "label": "gffbase create_db (Phase 6 cache)",
-            "wall_seconds": 225.78,  # captured from Phase 7 log
-            "peak_rss_bytes": int(1.45 * 1024**3),
-            "peak_rss_mb": 1.45 * 1024,
-            "n_features": 2_182_889,
-            "rtree_built": True,
-            "fmt": "gtf",
-            "exit_code": 0,
-            "cached": True,
-            "source": str(PHASE6_GFFBASE_DB),
-        }
-    else:
-        gffbase_info = ingest_gffbase()
+    gffbase_info = ingest_gffbase()
     gffbase_info["disk_bytes"] = du(GFFBASE_DB)
     print(
         f"  wall={pretty_seconds(gffbase_info['wall_seconds'])}, "
@@ -125,17 +103,7 @@ def main():
     )
 
     print("[ingest] legacy gffutils ingest (subprocess)…", flush=True)
-    if args.reuse_cached:
-        cached = load_phase6_legacy_ingest_numbers()
-        if cached is not None:
-            legacy_info = cached
-            # Copy/hardlink the legacy DB so query benchmarks can use it.
-            if not LEGACY_DB.exists() and PHASE6_LEGACY_DB.exists():
-                shutil.copy2(PHASE6_LEGACY_DB, LEGACY_DB)
-        else:
-            legacy_info = ingest_legacy(args.legacy_timeout)
-    else:
-        legacy_info = ingest_legacy(args.legacy_timeout)
+    legacy_info = ingest_legacy(args.legacy_timeout)
     legacy_info["disk_bytes"] = du(LEGACY_DB)
     if legacy_info.get("wall_seconds"):
         print(
@@ -150,8 +118,8 @@ def main():
 
     payload = {
         "input": {
-            "path": str(GENCODE_GTF),
-            "compressed_bytes": GENCODE_GTF.stat().st_size if GENCODE_GTF.exists() else 0,
+            "path": str(GENCODE_GFF3),
+            "compressed_bytes": GENCODE_GFF3.stat().st_size if GENCODE_GFF3.exists() else 0,
         },
         "gffbase": gffbase_info,
         "legacy": legacy_info,

@@ -1,0 +1,49 @@
+{
+  "schema_version": "1",
+  "legacy_timeout_sec": 1800,
+  "corpora": [
+    {
+      "name": "GENCODE v49 (GFF3)",
+      "key": "gencode-gff3",
+      "input": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/data/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+      "input_bytes": 89385177,
+      "feature_lines": 6066054,
+      "gffbase": {
+        "label": "gffbase ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
+        "peak_rss_bytes": 2253553664,
+        "peak_rss_mb": 2149.15625,
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_seconds": 366.97531504099607,
+        "n_features": 6066054,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "disk_bytes": 7543468032
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
+        "peak_rss_bytes": 175194112,
+        "peak_rss_mb": 167.078125,
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_seconds": 682.683538125013,
+        "n_features": 6066054,
+        "extrapolated": false,
+        "disk_bytes": 6495186944
+      },
+      "ingest_speedup": 1.8602982547988223,
+      "spatial": {
+        "n_queries": 5000,
+        "wall_seconds": 3.8699421669880394,
+        "qps": 1292.008971775276,
+        "total_features_returned": 10709
+      },
+      "batched": {
+        "n_anchors": 5000,
+        "n_descendants": 1932935,
+        "wall_seconds": 0.4223885830142535,
+        "qps": 11837.441164529002
+      }
+    }
+  ]
+}
