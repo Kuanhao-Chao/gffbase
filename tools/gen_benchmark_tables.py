@@ -216,9 +216,62 @@ def render_provenance(data: dict) -> str:
     )
 
 
+def render_tradeoffs(data: dict) -> str:
+    """The cost side of the ledger, from the same measurements as the speed side.
+
+    This table used to be hand-written, and had drifted: it claimed the
+    database was "~1.5x larger" while the numbers in this very file put MANE at
+    1.29x. The harness records `peak_rss_bytes` and `disk_bytes` for BOTH
+    engines, so there is no reason for a human to be retyping either.
+
+    Rows the harness cannot measure -- "is a point query comparable?" -- stay
+    qualitative, and stay out of here.
+    """
+    corpora = data.get("corpora") or {}
+    rows = [r for r in corpora.values() if r and "error" not in r]
+
+    def ratio(section: str) -> str | None:
+        pairs = [
+            (r["gffbase"].get(section), r["legacy"].get(section))
+            for r in rows
+            if (r.get("gffbase") or {}).get(section) and (r.get("legacy") or {}).get(section)
+        ]
+        if not pairs:
+            return None
+        vals = sorted(g / legacy for g, legacy in pairs)
+        lo, hi = vals[0], vals[-1]
+        return f"{lo:.2f}×" if len(vals) == 1 or hi - lo < 0.05 else f"{lo:.2f}–{hi:.2f}×"
+
+    def span(section: str, engine: str) -> str:
+        vals = sorted(r[engine][section] for r in rows if (r.get(engine) or {}).get(section))
+        if not vals:
+            return "—"
+        lo, hi = human_bytes(vals[0]), human_bytes(vals[-1])
+        return lo if lo == hi else f"{lo} – {hi}"
+
+    rss_ratio = ratio("peak_rss_bytes")
+    disk_ratio = ratio("disk_bytes")
+    n = len(rows)
+    corpus_word = "corpus" if n == 1 else "corpora"
+
+    return "\n".join(
+        [
+            "| | gffbase | legacy `gffutils` | ratio |",
+            "| --- | ---: | ---: | ---: |",
+            f"| **Peak ingest RSS** | {span('peak_rss_bytes', 'gffbase')} "
+            f"| {span('peak_rss_bytes', 'legacy')} | {rss_ratio or '—'} |",
+            f"| **On-disk database** | {span('disk_bytes', 'gffbase')} "
+            f"| {span('disk_bytes', 'legacy')} | {disk_ratio or '—'} |",
+            "",
+            f"*Measured across {n} {corpus_word}; ratios are gffbase ÷ legacy.*",
+        ]
+    )
+
+
 RENDERERS = {
     "corpus-table": render_corpus_table,
     "benchmark-provenance": render_provenance,
+    "tradeoffs-table": render_tradeoffs,
 }
 
 #: Which generated blocks each file may contain. A file is only rewritten if
