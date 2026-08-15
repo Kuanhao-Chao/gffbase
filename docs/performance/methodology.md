@@ -111,9 +111,45 @@ share the same code paths:
 python benchmarks/06_mega.py --repeats 5 --only mane --only chess
 ```
 
+`--repeats` applies to the two cheap in-process measurements — the spatial
+sweep and the batched extraction — and **not** to the ingest walls, where a
+single legacy GENCODE run already costs over an hour. When it is greater than
+1, the first pass is discarded as a warm-up: a smoke test measured a 6.7×
+max/min ratio that was entirely cold page cache, and a spread that is really a
+cold-start artifact is worse than no spread, because it gets published as
+measurement uncertainty. After the warm-up the same measurement spreads under
+5%.
+
 Treat that spread as the measurement uncertainty for every cell. Where a
 result file reports `n = 1` it carries a `value` key and deliberately **no**
 `median`, so a renderer cannot present a single sample as a central tendency.
+
+### Equal work, or no ratio
+
+A speedup is only recorded when both engines report the **same feature
+count**. Each count was always measured; nothing compared them, so a corpus
+where they diverged — a differing duplicate-ID policy, a parent-synthesis
+difference on GTF — would have published a headline number comparing two
+different jobs. A mismatch now prints a warning and suppresses the speedup
+rather than quietly averaging over it.
+
+---
+
+## Publishing a run
+
+A sweep writes to `benchmarks/out/` (gitignored). The committed file the
+published tables are generated from is `benchmarks/results/06_mega.json`, and
+copying between them used to be an undocumented manual step — so a fresh run
+could sit on disk while the docs kept rendering the previous measurement.
+
+```bash
+python benchmarks/06_mega.py --legacy-timeout 5400 --publish
+python tools/gen_benchmark_tables.py --write
+```
+
+`--publish` copies the finished run into place; the generator then rewrites
+every table from it. `tests/test_release_hygiene.py` fails if a table stops
+matching the numbers behind it.
 
 ---
 
