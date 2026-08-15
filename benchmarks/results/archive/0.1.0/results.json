@@ -1,0 +1,200 @@
+{
+  "01_ingest": {
+    "input": {
+      "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/data/gencode.v45.basic.annotation.gtf.gz",
+      "compressed_bytes": 29623361
+    },
+    "gffbase": {
+      "label": "gffbase create_db (Phase 6 cache)",
+      "wall_seconds": 225.78,
+      "peak_rss_bytes": 1556925644,
+      "peak_rss_mb": 1484.8,
+      "n_features": 2182889,
+      "rtree_built": true,
+      "fmt": "gtf",
+      "exit_code": 0,
+      "cached": true,
+      "source": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/out/gencode.duckdb",
+      "disk_bytes": 2932355072
+    },
+    "legacy": {
+      "label": "legacy gffutils create_db (Phase 6 cache)",
+      "wall_seconds": 3582.040768540988,
+      "n_features": 2001750,
+      "peak_rss_bytes": 152846336,
+      "peak_rss_mb": 145.765625,
+      "exit_code": 0,
+      "cached": true,
+      "source": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/out/legacy_full.log",
+      "disk_bytes": 1923682304
+    },
+    "comparison": {
+      "wall_speedup": 15.865181896275082,
+      "rss_ratio_legacy_over_gffbase": 0.09817189188772846,
+      "throughput_gffbase_features_per_sec": 9668.212419169102,
+      "throughput_legacy_features_per_sec": 558.8294855771111
+    }
+  },
+  "02_spatial": {
+    "n_queries": 5000,
+    "gffbase_rtree": {
+      "label": "gffbase rtree",
+      "n_queries": 5000,
+      "wall_seconds": 5.867377083020983,
+      "qps": 852.1695349134797,
+      "mean_ms": 1.172649677656591,
+      "p50_ms": 0.724603989510797,
+      "p95_ms": 2.67462499323301,
+      "max_ms": 611.904624995077,
+      "total_features_returned": 6501
+    },
+    "gffbase_btree": {
+      "label": "gffbase btree",
+      "n_queries": 5000,
+      "wall_seconds": 8.106866832997184,
+      "qps": 616.7610869896889,
+      "mean_ms": 1.6203617771156134,
+      "p50_ms": 1.2653339945245534,
+      "p95_ms": 3.052457992453128,
+      "max_ms": 103.64683301304467,
+      "total_features_returned": 6501
+    },
+    "legacy": {
+      "label": "legacy gffutils",
+      "n_queries": 5000,
+      "wall_seconds": 30.57708420799463,
+      "qps": 163.52115087195622,
+      "mean_ms": 6.114320958248573,
+      "p50_ms": 6.005500006722286,
+      "p95_ms": 11.999125010333955,
+      "max_ms": 64.59795800037682,
+      "total_features_returned": 6501
+    },
+    "comparison": {
+      "rtree_speedup_vs_legacy": 5.211371925707417,
+      "btree_speedup_vs_legacy": 3.771751138619604,
+      "rtree_speedup_vs_btree": 1.3816849877361448,
+      "feature_counts_gffbase_rtree_vs_btree_match": true,
+      "feature_counts_gffbase_vs_legacy_match": true
+    }
+  },
+  "03_relational": {
+    "n_genes": 500,
+    "gffbase_auto": {
+      "wall_seconds": 7.2953062080196105,
+      "qps": 68.5372191026551,
+      "descendants": 14995
+    },
+    "gffbase_forced_dynamic": {
+      "wall_seconds": 6.202879249991383,
+      "qps": 80.60772745184336,
+      "descendants": 14995
+    },
+    "legacy": {
+      "wall_seconds": 0.7003111660014838,
+      "qps": 713.9683390382221,
+      "descendants": 14578
+    },
+    "comparison": {
+      "auto_speedup_vs_legacy": 0.09599475964855912,
+      "dynamic_speedup_vs_legacy": 0.11290098320106048,
+      "gffbase_legacy_descendants_match": false
+    }
+  },
+  "04_disk": {
+    "gffbase": {
+      "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/gencode.duckdb",
+      "total_bytes": 2932355072,
+      "tables": {
+        "attributes": {
+          "row_count": 34128026
+        },
+        "autoincrements": {
+          "row_count": 0
+        },
+        "closure": {
+          "row_count": 3877126
+        },
+        "directives": {
+          "row_count": 5
+        },
+        "duplicates": {
+          "row_count": 0
+        },
+        "edges": {
+          "row_count": 2056515
+        },
+        "features": {
+          "row_count": 2182889
+        },
+        "meta": {
+          "row_count": 6
+        },
+        "seqid_map": {
+          "row_count": 25
+        }
+      }
+    },
+    "legacy": {
+      "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/gencode_legacy.sqlite",
+      "total_bytes": 1923682304,
+      "tables": {
+        "autoincrements": {
+          "bytes": 4874240
+        },
+        "directives": {
+          "bytes": 4096
+        },
+        "duplicates": {
+          "bytes": 19054592
+        },
+        "features": {
+          "bytes": 1160966144
+        },
+        "featuretype": {
+          "bytes": 26828800
+        },
+        "meta": {
+          "bytes": 4096
+        },
+        "relations": {
+          "bytes": 163041280
+        },
+        "relationschild": {
+          "bytes": 83140608
+        },
+        "relationsparent": {
+          "bytes": 107880448
+        },
+        "seqidstartend": {
+          "bytes": 46919680
+        },
+        "seqidstartendstrand": {
+          "bytes": 50909184
+        },
+        "sqlite_autoindex_autoincrements_1": {
+          "bytes": 5165056
+        },
+        "sqlite_autoindex_duplicates_1": {
+          "bytes": 12759040
+        },
+        "sqlite_autoindex_features_1": {
+          "bytes": 44879872
+        },
+        "sqlite_autoindex_relations_1": {
+          "bytes": 197242880
+        },
+        "sqlite_schema": {
+          "bytes": 4096
+        },
+        "sqlite_stat1": {
+          "bytes": 4096
+        }
+      }
+    },
+    "comparison": {
+      "gffbase_over_legacy": 1.5243447766310585,
+      "delta_bytes": 1008672768
+    }
+  }
+}

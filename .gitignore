@@ -95,11 +95,24 @@ target/
 tests/data/**/__pycache__/
 
 # --- Bench / scratch artifacts -----------------------------------------
-bench/data/
-bench/out/
+# `benchmarks/data/` holds multi-GB downloads and `benchmarks/out/` holds the
+# multi-GB databases a run builds; neither belongs in git.
 benchmarks/data/
 benchmarks/out/
 *.log
+
+# ...but `benchmarks/results/` IS committed, deliberately.
+#
+# The published performance tables have to be checkable against something. A
+# number whose only evidence is a gitignored file on the machine that produced
+# it cannot be verified by a reader, cannot be diffed across releases, and
+# cannot be regenerated into documentation by a script -- which is how the
+# 0.1.0 tables came to mix two GENCODE releases without anyone noticing. These
+# are small JSON digests plus the archived 0.1.0 record, not raw databases.
+!benchmarks/results/
+!benchmarks/results/**
+# The negations above would otherwise re-include bytecode.
+benchmarks/results/**/__pycache__/
 
 # --- Planning docs (local working notes; not pushed) -------------------
 plans/

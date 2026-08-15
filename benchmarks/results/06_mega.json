@@ -1,0 +1,84 @@
+{
+  "schema_version": "2",
+  "environment": {
+    "timestamp_utc": "2026-08-15T04:29:17Z",
+    "git_commit": "da97258a7df431d81f2bc2462db36c0bb9617944",
+    "git_dirty": true,
+    "hostname": "Kuan-Haos-MacBook-Pro-1063.local",
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_model": "Apple M1 Pro",
+    "cpu_cores_physical": 10,
+    "cpu_cores_logical": 10,
+    "total_ram_bytes": 17179869184,
+    "free_disk_bytes": 22608797696,
+    "python_version": "3.13.5",
+    "rustc_version": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "packages": {
+      "gffbase": "0.2.0",
+      "duckdb": "1.5.2",
+      "pyarrow": "19.0.0",
+      "pandas": "2.2.3",
+      "polars": "1.43.2",
+      "gffutils": "0.13",
+      "psutil": "7.0.0"
+    },
+    "env": {}
+  },
+  "corpora": {
+    "mane": {
+      "name": "MANE v1.5 (Ensembl IDs)",
+      "key": "mane",
+      "input": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+      "input_bytes": 10349746,
+      "feature_lines": 524834,
+      "gffbase": {
+        "label": "gffbase ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
+        "peak_rss_bytes": 1174863872,
+        "peak_rss_mb": 1120.4375,
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_seconds": 21.878407416981645,
+        "n_features": 524834,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "disk_bytes": 637284352
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
+        "peak_rss_bytes": 179388416,
+        "peak_rss_mb": 171.078125,
+        "exit_code": 0,
+        "timed_out": false,
+        "wall_seconds": 29.436008249991573,
+        "n_features": 524834,
+        "disk_bytes": 495874048
+      },
+      "ingest_speedup": 1.3454365159661414,
+      "ingest_speedup_lower_bound": null,
+      "spatial": {
+        "n_queries": 5000,
+        "wall_seconds": 3.0218064590008,
+        "qps": 1654.6393913173765,
+        "total_features_returned": 3883
+      },
+      "batched": {
+        "n_anchors": 5000,
+        "n_descendants": 156327,
+        "wall_seconds": 0.09083466598531231,
+        "qps": 55045.06397159521
+      },
+      "db_paths": {
+        "gffbase": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/mane.duckdb",
+        "legacy": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/mane_legacy.sqlite"
+      },
+      "params": {
+        "legacy_timeout_sec": 5400,
+        "gffbase_timeout_sec": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "region_seed": 20260501
+      }
+    }
+  }
+}

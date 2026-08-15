@@ -1,0 +1,6 @@
+
+=== GENCODE v45 (gencode.v45.basic.annotation.gtf.gz) ===
+  feature lines: 2,001,750
+  [gffbase] ingest…
+    wall=1 min 37.0 s, RSS=1.62 GB, disk=2.24 GB
+  [legacy ] ingest (timeout 4500s)…

@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""Phase 17 — comprehensive human-genome annotation benchmark.
+"""Comprehensive human-genome annotation benchmark.
 
-Runs the same metrics across GENCODE, RefSeq, MANE, and CHESS:
+Runs the same metrics across GENCODE (GTF and GFF3), RefSeq, MANE and CHESS:
 
   * Ingestion wall (gffbase + legacy gffutils)
   * Peak RSS during ingest
@@ -24,16 +24,25 @@ Runs the same metrics across GENCODE, RefSeq, MANE, and CHESS:
   * Spatial query qps (R-tree path)
   * Vectorized batched extraction wall (children_batched, format='arrow')
 
-Safety valve (per directive): if legacy gffutils ingest takes longer
-than the ``--legacy-timeout`` (default 900s = 15 min), kill it and
-report a linear extrapolation grounded in the lines processed so far.
+Results MERGE into `06_mega.json` by corpus key, so `--only mane` updates
+MANE and leaves every other corpus alone. The previous version wrote the whole
+file from whatever `--only` selected, so each targeted re-run silently deleted
+the others -- which is why the published five-row table was eventually backed
+by a results file containing one row.
+
+Safety valve: if legacy gffutils ingest exceeds ``--legacy-timeout`` it is
+killed and reported as a LOWER BOUND (`wall_seconds` null,
+`wall_seconds_lower_bound` set). No wall time is ever synthesized.
+
+Disk: a corpus pair reaches ~13 GiB, and all five together do not fit on a
+normal laptop. Each pair is purged as soon as its numbers are recorded unless
+`--keep-db` names it. Set `GFFBASE_BENCH_OUT` to run against another volume.
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
-import json
 import random
 import sys
 import time
@@ -46,37 +55,45 @@ sys.path.insert(0, str(ROOT / "python"))
 from benchmarks.common import (
     OUT,
     du,
+    merge_results,
     pretty_bytes,
     pretty_seconds,
+    purge_db,
+    require_free_disk,
     run_subprocess,
 )
 
 DATA = ROOT / "benchmarks" / "data"
+
+#: Fixed so region sampling is reproducible. Recorded in the results file --
+#: it was deterministic before, but undocumented, so a reader could not tell
+#: whether two runs sampled the same regions.
+REGION_SEED = 20260501
+
+#: Rough peak transient (GiB) for a corpus pair: gffbase DuckDB + legacy
+#: SQLite + working space. Used for the pre-flight so a sweep fails before
+#: spending an hour rather than after.
+# Measured peaks from a real sweep, plus ~1 GiB of working room. Set from
+# observation rather than guessed: the first estimates were high enough to
+# refuse corpora that in fact fit.
+DISK_NEED_GIB = {
+    "gencode-gtf": 12.5,  # 6.6 GiB DuckDB + ~5 GiB legacy SQLite
+    "gencode-gff3": 14.0,  # 7.0 GiB DuckDB + 6.1 GiB legacy SQLite
+    "refseq": 10.5,  # 4.9 + 3.8
+    "chess": 3.5,  # 1.5 + 1.1
+    "mane": 2.0,  # 0.6 + 0.5
+}
 
 
 # ---------------------------------------------------------------------------
 # Corpus registry
 # ---------------------------------------------------------------------------
 
+# Ordered CHEAPEST FIRST. Two reasons: a harness mistake surfaces after two
+# minutes on MANE rather than ninety on GENCODE GTF, and the largest pair runs
+# last so `--keep-db gencode-gff3` can hand it straight to stages 01-05
+# without a second 6-minute ingest.
 CORPORA: list[dict] = [
-    {
-        "name": "GENCODE v49 (GTF)",
-        "key": "gencode-gtf",
-        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
-        "fmt": "gtf",
-    },
-    {
-        "name": "GENCODE v49 (GFF3)",
-        "key": "gencode-gff3",
-        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
-        "fmt": "gff3",
-    },
-    {
-        "name": "RefSeq GRCh38.p14",
-        "key": "refseq",
-        "input": DATA / "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
-        "fmt": "gff3",
-    },
     {
         "name": "MANE v1.5 (Ensembl IDs)",
         "key": "mane",
@@ -87,6 +104,24 @@ CORPORA: list[dict] = [
         "name": "CHESS 3.1.3",
         "key": "chess",
         "input": DATA / "chess3.1.3.GRCh38.gff.gz",
+        "fmt": "gff3",
+    },
+    {
+        "name": "RefSeq GRCh38.p14",
+        "key": "refseq",
+        "input": DATA / "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+        "fmt": "gff3",
+    },
+    {
+        "name": "GENCODE v49 (GTF)",
+        "key": "gencode-gtf",
+        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+        "fmt": "gtf",
+    },
+    {
+        "name": "GENCODE v49 (GFF3)",
+        "key": "gencode-gff3",
+        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
         "fmt": "gff3",
     },
 ]
@@ -170,9 +205,23 @@ print(json.dumps({{
 
 
 def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_lines: int) -> dict:
-    """Run legacy gffutils ingest. If the process exceeds `timeout`, kill
-    it and extrapolate the wall time linearly from the lines processed
-    so far. Returns a dict ready to merge into the result payload."""
+    """Run legacy gffutils ingest, capped at `timeout` seconds.
+
+    On timeout the run yields a LOWER BOUND, not an estimate: `wall_seconds`
+    is left null and `wall_seconds_lower_bound` is the cap. Downstream, that
+    turns the speedup into `speedup_lower_bound` and the rendered table into
+    `> N×`.
+
+    This replaces a hardcoded `wall_seconds = timeout * 2.0`. That factor had
+    no measurement behind it -- its own comment conceded there was no way to
+    observe gffutils' progress -- yet it was the sole source of the published
+    "≥ 2 hr 30 min" legacy wall and the "≥ 32×" headline speedup. A number
+    invented by multiplying a timeout is not a benchmark result, and quoting
+    it next to measured ones invites a reviewer to distrust all of them.
+
+    A floor is weaker-sounding and unfalsifiable: legacy provably did not
+    finish in `timeout` seconds, because we watched it not finish.
+    """
     script = legacy_ingest_script(input_path, dbfn)
     result = run_subprocess(
         script,
@@ -180,29 +229,18 @@ def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_
         timeout=timeout,
     )
     if result.get("timed_out"):
-        # Conservative extrapolation: assume the rate observed (lines /
-        # walltime) extends linearly. We don't have a way to peek at
-        # gffutils' progress without --verbose, so the extrapolation is
-        # based on full file size + 1.5× factor for the relations pass
-        # (which dominates near the end of legacy gffutils ingest).
-        observed = float(timeout)
-        # Best estimate: 2× the timeout (relations pass + closure tend
-        # to dominate). Mark `extrapolated=True` so the report says so.
-        est = observed * 2.0
-        result["wall_seconds"] = est
-        result["extrapolated"] = True
-        result["extrapolation_note"] = (
-            f"killed at {timeout} s; legacy gffutils' relations pass "
-            f"typically doubles the wall by completion. Estimate is a "
-            f"conservative 2× of the timeout."
+        result["wall_seconds"] = None
+        result["wall_seconds_lower_bound"] = float(timeout)
+        result["cap_seconds"] = timeout
+        result["note"] = (
+            f"killed at the {timeout} s safety valve without finishing; "
+            f"the true wall is greater than this, by an unmeasured amount"
         )
-    else:
-        result["extrapolated"] = False
     return result
 
 
 def sample_regions_from_db(
-    db_path: Path, n: int = 5000, seed: int = 20260501
+    db_path: Path, n: int = 5000, seed: int = REGION_SEED
 ) -> list[tuple[str, int, int]]:
     import duckdb
 
@@ -294,6 +332,8 @@ def run_one(corpus: dict, args) -> dict:
         print("  SKIP —", msg, flush=True)
         return {"name": name, "key": key, "error": msg}
 
+    require_free_disk(DISK_NEED_GIB.get(key, 8.0), what=f"corpus {key}")
+
     n_lines = count_feature_lines(inp)
     print(f"  feature lines: {n_lines:,}", flush=True)
 
@@ -326,10 +366,10 @@ def run_one(corpus: dict, args) -> dict:
         legacy_db.unlink()
     l_info = run_legacy_with_timeout(inp, legacy_db, args.legacy_timeout, n_lines)
     l_info["disk_bytes"] = du(legacy_db)
-    if l_info.get("extrapolated"):
+    if l_info.get("timed_out"):
         print(
-            f"    KILLED after {args.legacy_timeout}s — "
-            f"extrapolated wall: {pretty_seconds(l_info['wall_seconds'])}",
+            f"    KILLED at the {args.legacy_timeout}s cap without finishing "
+            f"— wall is > {pretty_seconds(float(args.legacy_timeout))}",
             flush=True,
         )
     elif l_info.get("wall_seconds"):
@@ -342,11 +382,16 @@ def run_one(corpus: dict, args) -> dict:
     else:
         print(f"    failed: exit={l_info.get('exit_code')}", flush=True)
 
-    speedup = (
-        l_info.get("wall_seconds", 0) / g_info["wall_seconds"]
-        if g_info.get("wall_seconds") and l_info.get("wall_seconds")
-        else None
-    )
+    # A completed legacy run gives a speedup; a capped one gives a floor.
+    # Keeping them in DIFFERENT keys is what stops a renderer printing a
+    # bound as though it were a measurement.
+    speedup = speedup_lower_bound = None
+    g_wall = g_info.get("wall_seconds")
+    if g_wall:
+        if l_info.get("wall_seconds"):
+            speedup = l_info["wall_seconds"] / g_wall
+        elif l_info.get("wall_seconds_lower_bound"):
+            speedup_lower_bound = l_info["wall_seconds_lower_bound"] / g_wall
 
     # ---- spatial routing ----
     print(f"  [gffbase] spatial — {args.n_spatial} regions…", flush=True)
@@ -386,8 +431,17 @@ def run_one(corpus: dict, args) -> dict:
         "gffbase": g_info,
         "legacy": l_info,
         "ingest_speedup": speedup,
+        "ingest_speedup_lower_bound": speedup_lower_bound,
         "spatial": spatial,
         "batched": batched,
+        "db_paths": {"gffbase": str(gffbase_db), "legacy": str(legacy_db)},
+        "params": {
+            "legacy_timeout_sec": args.legacy_timeout,
+            "gffbase_timeout_sec": args.gffbase_timeout,
+            "n_spatial": args.n_spatial,
+            "n_batched": args.n_batched,
+            "region_seed": REGION_SEED,
+        },
     }
 
 
@@ -396,11 +450,12 @@ def main() -> None:
     ap.add_argument(
         "--legacy-timeout",
         type=int,
-        default=900,
-        help="seconds before legacy ingest is killed (default 900 = 15 min)",
+        default=5400,
+        help="seconds before legacy ingest is killed (default 5400 = 90 min). "
+        "A killed run is reported as a lower bound, never extrapolated.",
     )
     ap.add_argument(
-        "--gffbase-timeout", type=int, default=1800, help="seconds before gffbase ingest is killed"
+        "--gffbase-timeout", type=int, default=3600, help="seconds before gffbase ingest is killed"
     )
     ap.add_argument("--n-spatial", type=int, default=5000)
     ap.add_argument("--n-batched", type=int, default=5000)
@@ -408,62 +463,100 @@ def main() -> None:
         "--only",
         action="append",
         default=None,
-        help="restrict to specific corpus keys (repeatable)",
+        help="restrict to specific corpus keys (repeatable). Results MERGE, so "
+        "this updates the named corpora and leaves the others untouched.",
     )
-    ap.add_argument("--out", default=str(OUT / "06_mega.json"))
+    ap.add_argument(
+        "--keep-db",
+        action="append",
+        default=None,
+        help="corpus keys whose databases survive the run (repeatable). "
+        "Everything else is purged as soon as its numbers are recorded -- "
+        "all five pairs together are ~38 GiB.",
+    )
+    ap.add_argument(
+        "--no-purge",
+        action="store_true",
+        help="keep every database. Needs ~38 GiB free; the sweep will not fit "
+        "on a normal laptop disk.",
+    )
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
     selected = set(args.only) if args.only else {c["key"] for c in CORPORA}
+    unknown = selected - {c["key"] for c in CORPORA}
+    if unknown:
+        raise SystemExit(f"unknown corpus key(s): {sorted(unknown)}")
+    keep = set(args.keep_db or ())
 
-    payload: dict = {
-        "schema_version": "1",
-        "legacy_timeout_sec": args.legacy_timeout,
-        "corpora": [],
-    }
+    results: dict[str, dict] = {}
     for corpus in CORPORA:
-        if corpus["key"] not in selected:
+        key = corpus["key"]
+        if key not in selected:
             continue
         try:
-            payload["corpora"].append(run_one(corpus, args))
+            row = run_one(corpus, args)
+        except SystemExit:
+            raise
         except Exception as exc:  # pragma: no cover - top-level guard
             print(f"  ERROR on {corpus['name']}: {exc}", flush=True)
-            payload["corpora"].append(
-                {
-                    "name": corpus["name"],
-                    "key": corpus["key"],
-                    "error": str(exc),
-                }
-            )
+            row = {"name": corpus["name"], "key": key, "error": str(exc)}
+        results[key] = row
 
-    out_path = Path(args.out)
-    out_path.write_text(json.dumps(payload, indent=2, default=str))
+        # Write after EVERY corpus, not once at the end. A five-hour sweep
+        # that dies on the last corpus used to lose all of it.
+        merge_results("06_mega", "corpora", {key: row})
+
+        if not args.no_purge and key not in keep:
+            paths = row.get("db_paths") or {}
+            freed = purge_db(*(Path(v) for v in paths.values()))
+            if freed:
+                print(f"  purged {key} databases ({pretty_bytes(freed)})", flush=True)
+
+    out_path = merge_results("06_mega", "corpora", results)
     print(f"\nResults → {out_path}", flush=True)
 
     # Compact summary table.
-    print("\n" + "=" * 84, flush=True)
+    print("\n" + "=" * 92, flush=True)
     print(
-        f"{'corpus':<28}  {'gffbase ingest':>16}  {'legacy ingest':>16}  {'speedup':>10}",
+        f"{'corpus':<28}  {'gffbase ingest':>16}  {'legacy ingest':>18}  {'speedup':>12}",
         flush=True,
     )
-    print("-" * 84, flush=True)
-    for c in payload["corpora"]:
-        if "error" in c:
-            print(f"{c['name']:<28}  {'ERROR: ' + c['error']:>16}", flush=True)
+    print("-" * 92, flush=True)
+    for key in (c["key"] for c in CORPORA):
+        row = results.get(key)
+        if row is None:
             continue
-        gw = c["gffbase"].get("wall_seconds")
-        lw = c["legacy"].get("wall_seconds")
-        sp = c.get("ingest_speedup")
-        ext = "*" if c["legacy"].get("extrapolated") else " "
+        if "error" in row:
+            print(f"{row['name']:<28}  {'ERROR: ' + row['error']:>16}", flush=True)
+            continue
+        g_wall = row["gffbase"].get("wall_seconds")
+        legacy = row["legacy"]
+        if legacy.get("wall_seconds"):
+            legacy_cell = pretty_seconds(legacy["wall_seconds"])
+        elif legacy.get("wall_seconds_lower_bound"):
+            legacy_cell = "> " + pretty_seconds(legacy["wall_seconds_lower_bound"])
+        else:
+            legacy_cell = "fail"
+        if row.get("ingest_speedup"):
+            speed_cell = f"{row['ingest_speedup']:.2f}x"
+        elif row.get("ingest_speedup_lower_bound"):
+            speed_cell = f"> {row['ingest_speedup_lower_bound']:.2f}x"
+        else:
+            speed_cell = "n/a"
         print(
-            f"{c['name']:<28}  "
-            f"{(pretty_seconds(gw) if gw else 'fail'):>16}  "
-            f"{(pretty_seconds(lw) + ext if lw else 'fail'):>16}  "
-            f"{(f'{sp:.2f}×' if sp else 'n/a'):>10}",
+            f"{row['name']:<28}  "
+            f"{(pretty_seconds(g_wall) if g_wall else 'fail'):>16}  "
+            f"{legacy_cell:>18}  "
+            f"{speed_cell:>12}",
             flush=True,
         )
-    print("=" * 84, flush=True)
-    print("* = legacy was killed at timeout; wall extrapolated 2× per directive.", flush=True)
+    print("=" * 92, flush=True)
+    print(
+        "'>' = legacy was killed at the safety valve without finishing, so the "
+        "wall and the speedup are floors. No value is extrapolated.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

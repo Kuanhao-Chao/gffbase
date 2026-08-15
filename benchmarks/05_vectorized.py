@@ -46,25 +46,38 @@ from benchmarks.common import (
 )
 
 
-def backfill_timeout_wall(info: dict, timeout: float) -> dict:
-    """Give a killed run a `wall_seconds` equal to the cap it hit.
+def mark_timeout(info: dict, timeout: float) -> dict:
+    """Record a killed run as a LOWER BOUND, in its own key.
 
-    `common.run_subprocess` omits `wall_seconds` entirely when it kills a
-    child, so every downstream `info["wall_seconds"]` raised `KeyError` on
-    exactly the case this stage exists to produce: the row-by-row loop is
-    *supposed* to be too slow to finish at 50 000 genes. The published
-    "≥ 642 s (killed after 10 min)" figure therefore cannot have come out of
-    this script -- it was hand-computed as 64.2 s × 10 and pasted in.
+    `common.run_subprocess` omits `wall_seconds` when it kills a child, and
+    this is the stage where that happens by design: the row-by-row loop is
+    *supposed* to be too slow to finish at 50 000 anchors.
 
-    Filling in the cap makes the derived speedup a true lower bound: the run
-    took at least this long. `timed_out` stays set so the caller can print
-    the "≥" and the JSON consumer can tell a measurement from a floor.
-    `06_mega.py` already does this; only this stage was missing it.
+    An earlier version of this file filled `wall_seconds` in with the cap.
+    That is better than the figure it replaced -- the published "≥ 642 s" was
+    hand-computed as 64.2 s × 10 and pasted in, and cannot have come out of
+    this script at all -- but it still puts a bound and a measurement in the
+    same key, so nothing downstream can tell them apart. `06_mega.py` keeps
+    them separate; so does this now.
     """
     if info.get("wall_seconds") is None:
-        info["wall_seconds"] = float(timeout)
-        info["extrapolated"] = True
+        info["wall_seconds"] = None
+        info["wall_seconds_lower_bound"] = float(timeout)
+        info["cap_seconds"] = timeout
     return info
+
+
+def _wall_or_bound(info: dict) -> float | None:
+    """The best figure available, for deriving a speedup or a floor."""
+    return info.get("wall_seconds") or info.get("wall_seconds_lower_bound")
+
+
+def _fmt_wall(info: dict) -> str:
+    if info.get("wall_seconds"):
+        return pretty_seconds(info["wall_seconds"])
+    if info.get("wall_seconds_lower_bound"):
+        return "> " + pretty_seconds(info["wall_seconds_lower_bound"])
+    return "failed"
 
 
 def sample_common_ids(n: int, seed: int = 20260501):
@@ -180,14 +193,14 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     )
 
     print("[vectorized] gffbase row-by-row loop…", flush=True)
-    g_loop = backfill_timeout_wall(
+    g_loop = mark_timeout(
         run_subprocess(
             gffbase_loop_script(ids_path), label=f"gffbase.loop(n={n})", timeout=timeout_per_run
         ),
         timeout_per_run,
     )
     print(
-        f"  wall={pretty_seconds(g_loop['wall_seconds'])}"
+        f"  wall={_fmt_wall(g_loop)}"
         f"{' (killed; lower bound)' if g_loop.get('timed_out') else ''}, "
         f"RSS={pretty_bytes(g_loop['peak_rss_bytes'])}, "
         f"descendants={g_loop.get('n_descendants')}",
@@ -195,14 +208,14 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     )
 
     print("[vectorized] legacy gffutils loop…", flush=True)
-    legacy = backfill_timeout_wall(
+    legacy = mark_timeout(
         run_subprocess(
             legacy_loop_script(ids_path), label=f"legacy.loop(n={n})", timeout=timeout_per_run
         ),
         timeout_per_run,
     )
     print(
-        f"  wall={pretty_seconds(legacy['wall_seconds'])}"
+        f"  wall={_fmt_wall(legacy)}"
         f"{' (killed; lower bound)' if legacy.get('timed_out') else ''}, "
         f"RSS={pretty_bytes(legacy['peak_rss_bytes'])}, "
         f"descendants={legacy.get('n_descendants')}",
@@ -210,10 +223,14 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     )
 
     speedup_vs_loop = (
-        g_loop["wall_seconds"] / batched["wall_seconds"] if batched["wall_seconds"] else None
+        (_wall_or_bound(g_loop) or 0) / batched["wall_seconds"]
+        if batched.get("wall_seconds")
+        else None
     )
     speedup_vs_legacy = (
-        legacy["wall_seconds"] / batched["wall_seconds"] if batched["wall_seconds"] else None
+        (_wall_or_bound(legacy) or 0) / batched["wall_seconds"]
+        if batched.get("wall_seconds")
+        else None
     )
 
     return {
@@ -228,7 +245,7 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
                 len(gene_ids) / batched["wall_seconds"] if batched["wall_seconds"] else None
             ),
             "legacy_loop_qps": (
-                len(gene_ids) / legacy["wall_seconds"] if legacy["wall_seconds"] else None
+                len(gene_ids) / legacy["wall_seconds"] if legacy.get("wall_seconds") else None
             ),
             "rss_ratio_legacy_over_batched": legacy["peak_rss_bytes"]
             / max(batched["peak_rss_bytes"], 1),
@@ -263,21 +280,27 @@ def main():
     )
     print("-" * 78, flush=True)
     for n_str, r in payload["scales"].items():
-        b = r["gffbase_batched"]["wall_seconds"]
-        gl = r["gffbase_loop"]["wall_seconds"]
-        ll = r["legacy_loop"]["wall_seconds"]
+        b = r["gffbase_batched"].get("wall_seconds")
         sp1 = r["comparison"]["batched_speedup_vs_gffbase_loop"]
         sp2 = r["comparison"]["batched_speedup_vs_legacy_loop"]
+        # A speedup derived from a capped run is a floor, and prints as one.
+        m1 = ">" if r["gffbase_loop"].get("wall_seconds") is None else " "
+        m2 = ">" if r["legacy_loop"].get("wall_seconds") is None else " "
         print(
             f"{n_str:>8}  "
-            f"{pretty_seconds(b):>10}  "
-            f"{pretty_seconds(gl):>14}  "
-            f"{pretty_seconds(ll):>14}  "
-            f"{(f'{sp1:.2f}×' if sp1 else 'n/a'):>18}  "
-            f"{(f'{sp2:.2f}×' if sp2 else 'n/a'):>20}",
+            f"{(pretty_seconds(b) if b else 'failed'):>10}  "
+            f"{_fmt_wall(r['gffbase_loop']):>14}  "
+            f"{_fmt_wall(r['legacy_loop']):>14}  "
+            f"{(f'{m1}{sp1:.2f}×' if sp1 else 'n/a'):>18}  "
+            f"{(f'{m2}{sp2:.2f}×' if sp2 else 'n/a'):>20}",
             flush=True,
         )
     print("=" * 78, flush=True)
+    print(
+        "'>' = the row-by-row arm was killed at --timeout-per-run without "
+        "finishing, so its wall and the speedup derived from it are floors.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

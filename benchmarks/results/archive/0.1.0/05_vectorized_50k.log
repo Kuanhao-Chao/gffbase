@@ -1,0 +1,17 @@
+
+[vectorized] sampling 50000 common gene IDs…
+  sampled 50000 genes
+[vectorized] gffbase children_batched (format='arrow')…
+  wall=1.16 s, RSS=515.78 MB, descendants=1625332
+[vectorized] gffbase row-by-row loop…
+Traceback (most recent call last):
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 214, in <module>
+    main()
+    ~~~~^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 186, in main
+    payload["scales"][str(n)] = run_one_scale(n, timeout_per_run=args.timeout_per_run)
+                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 139, in run_one_scale
+    print(f"  wall={pretty_seconds(g_loop['wall_seconds'])}, "
+                                   ~~~~~~^^^^^^^^^^^^^^^^
+KeyError: 'wall_seconds'

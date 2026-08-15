@@ -1,0 +1,18 @@
+{
+  "auto": {
+    "wall_seconds": 70.57350470899837,
+    "qps": 7.084811815166213,
+    "total_descendants": 66993
+  },
+  "cache": {
+    "wall_seconds": 18.35137783299433,
+    "qps": 27.245910609558667,
+    "total_descendants": 66993
+  },
+  "dynamic": {
+    "wall_seconds": 66.81665341701591,
+    "qps": 7.483164367413036,
+    "total_descendants": 66993
+  },
+  "auto_speedup_vs_cache": 0.2600321169915551
+}
