@@ -610,3 +610,32 @@ def test_every_nav_entry_resolves_and_every_page_is_reachable():
         f"pages outside the nav would fail the strict build: {orphans}. "
         f"Add them to nav, or to exclude_docs if they are deliberately unpublished."
     )
+
+
+def test_readme_deep_links_resolve_to_pages_that_exist():
+    """README links are absolute URLs, so `mkdocs build --strict` cannot see them.
+
+    `mkdocs` validates relative links inside `docs/`, but the README is
+    rendered by GitHub and PyPI and therefore links to the published site by
+    full URL. Nothing checked those, so a page rename would leave the two
+    most-read documents in the project pointing at 404s.
+    """
+    import re
+
+    readme = _read("README.md")
+    docs = REPO_ROOT / "docs"
+    broken = []
+
+    for url in sorted(set(re.findall(r"https://khchao\.com/gffbase/([\w/-]*)", readme))):
+        slug = url.strip("/")
+        if not slug:  # the site root
+            continue
+        # mkdocs serves `docs/a/b.md` at `/a/b/`, and `docs/a/index.md` at `/a/`.
+        candidates = [docs / f"{slug}.md", docs / slug / "index.md"]
+        if not any(c.is_file() for c in candidates):
+            broken.append(f"/{slug}/")
+
+    assert not broken, (
+        f"README links to published pages that do not exist: {broken}. "
+        "A renamed page leaves GitHub and PyPI pointing at a 404."
+    )
