@@ -43,9 +43,11 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import json
 import random
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -358,6 +360,62 @@ def bench_batched(db_path: Path, n_genes: int = 5000, repeats: int = 1) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def derive_speedup(g_info: dict, l_info: dict) -> tuple[float | None, float | None, bool]:
+    """(speedup, lower_bound, counts_conflict) from two measured ingests.
+
+    Purely derived from values measured elsewhere, and defined once so the
+    rule cannot drift between where it is computed and where it is repaired.
+
+    Only a feature-count CONFLICT disqualifies the comparison. An earlier
+    version required the counts to be *equal*, which suppressed the floor on a
+    capped run -- the one case where the legacy count cannot exist, because the
+    process was killed before it could report one. GENCODE-GTF lost a
+    legitimate "> 22x" that way.
+
+    A completed legacy run gives a speedup; a capped one gives a floor. They
+    live in DIFFERENT keys so a renderer cannot print a bound as a measurement.
+    """
+    g_n, l_n = g_info.get("n_features"), l_info.get("n_features")
+    conflict = g_n is not None and l_n is not None and g_n != l_n
+
+    g_wall = g_info.get("wall_seconds")
+    if not g_wall or conflict:
+        return None, None, conflict
+    if l_info.get("wall_seconds"):
+        return l_info["wall_seconds"] / g_wall, None, conflict
+    if l_info.get("wall_seconds_lower_bound"):
+        return None, l_info["wall_seconds_lower_bound"] / g_wall, conflict
+    return None, None, conflict
+
+
+def _git_commit() -> str | None:
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=20
+        )
+        return out.stdout.strip() or None
+    except Exception:  # pragma: no cover - provenance is best-effort
+        return None
+
+
+def _git_dirty() -> bool | None:
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        return bool(out.stdout.strip())
+    except Exception:  # pragma: no cover - provenance is best-effort
+        return None
+
+
 def rel(path: Path) -> str:
     """Path relative to the repo, when it is inside it.
 
@@ -437,25 +495,14 @@ def run_one(corpus: dict, args) -> dict:
     # then never compared, so a corpus where the two disagreed -- a different
     # duplicate-ID policy, a parent-synthesis difference on GTF -- would have
     # published a headline number comparing two different workloads.
-    g_n, l_n = g_info.get("n_features"), l_info.get("n_features")
-    counts_agree = g_n is not None and l_n is not None and g_n == l_n
-    if g_n is not None and l_n is not None and not counts_agree:
+    speedup, speedup_lower_bound, counts_conflict = derive_speedup(g_info, l_info)
+    if counts_conflict:
         print(
-            f"    !! feature-count mismatch: gffbase={g_n:,} legacy={l_n:,}. "
-            "Refusing to report a speedup between different workloads.",
+            f"    !! feature-count mismatch: gffbase={g_info['n_features']:,} "
+            f"legacy={l_info['n_features']:,}. Refusing to report a speedup "
+            "between different workloads.",
             flush=True,
         )
-
-    # A completed legacy run gives a speedup; a capped one gives a floor.
-    # Keeping them in DIFFERENT keys is what stops a renderer printing a
-    # bound as though it were a measurement.
-    speedup = speedup_lower_bound = None
-    g_wall = g_info.get("wall_seconds")
-    if g_wall and counts_agree:
-        if l_info.get("wall_seconds"):
-            speedup = l_info["wall_seconds"] / g_wall
-        elif l_info.get("wall_seconds_lower_bound"):
-            speedup_lower_bound = l_info["wall_seconds_lower_bound"] / g_wall
 
     # ---- spatial routing ----
     print(f"  [gffbase] spatial — {args.n_spatial} regions…", flush=True)
@@ -489,6 +536,17 @@ def run_one(corpus: dict, args) -> dict:
     return {
         "name": name,
         "key": key,
+        # Per-row provenance. Results MERGE by key -- which is the fix for a
+        # real bug, where `--only mane` used to wipe the other four corpora --
+        # but it means one file can hold rows measured at different times from
+        # different commits, under a single `environment` block describing only
+        # the most recent write. Without this, a corpus that errored would keep
+        # its stale row and publish it under a fresh, honest-looking stamp.
+        "measured": {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "git_commit": _git_commit(),
+            "git_dirty": _git_dirty(),
+        },
         "input": rel(inp),
         "input_bytes": inp.stat().st_size if inp.exists() else 0,
         "feature_lines": n_lines,
@@ -521,6 +579,16 @@ def main() -> None:
     )
     ap.add_argument(
         "--gffbase-timeout", type=int, default=3600, help="seconds before gffbase ingest is killed"
+    )
+    ap.add_argument(
+        "--rederive",
+        action="store_true",
+        help=(
+            "recompute the DERIVED fields (speedup, lower bound) in an existing "
+            "results file from the measurements already in it, then exit. For "
+            "when the derivation rule is corrected and re-measuring would cost "
+            "hours. Touches no measured value."
+        ),
     )
     ap.add_argument(
         "--publish",
@@ -569,6 +637,21 @@ def main() -> None:
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
+    if args.rederive:
+        path = OUT / "06_mega.json"
+        data = json.loads(path.read_text())
+        for key, row in (data.get("corpora") or {}).items():
+            if "error" in row or not row.get("gffbase"):
+                continue
+            before = (row.get("ingest_speedup"), row.get("ingest_speedup_lower_bound"))
+            sp, lb, _ = derive_speedup(row["gffbase"], row.get("legacy") or {})
+            row["ingest_speedup"], row["ingest_speedup_lower_bound"] = sp, lb
+            if before != (sp, lb):
+                print(f"  {key}: {before} -> {(sp, lb)}", flush=True)
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        print(f"rederived {path.relative_to(ROOT)} (no measured value changed)", flush=True)
+        return
+
     selected = set(args.only) if args.only else {c["key"] for c in CORPORA}
     unknown = selected - {c["key"] for c in CORPORA}
     if unknown:
@@ -582,8 +665,15 @@ def main() -> None:
             continue
         try:
             row = run_one(corpus, args)
-        except SystemExit:
-            raise
+        except SystemExit as exc:
+            # `require_free_disk` raises SystemExit, which is a BaseException
+            # and so sailed past the guard below -- aborting the process and
+            # skipping `--publish` entirely. A five-hour sweep that measured
+            # four corpora then hit the disk guard on the fifth published
+            # NONE of them. Record it and carry on; the remaining corpora get
+            # their own check, and what did complete still gets written.
+            print(f"  SKIP {corpus['name']}: {exc}", flush=True)
+            row = {"name": corpus["name"], "key": key, "error": str(exc)}
         except Exception as exc:  # pragma: no cover - top-level guard
             print(f"  ERROR on {corpus['name']}: {exc}", flush=True)
             row = {"name": corpus["name"], "key": key, "error": str(exc)}
@@ -605,6 +695,29 @@ def main() -> None:
 
     if args.publish:
         import shutil
+
+        # Refuse to publish a file that mixes runs. `merge_results` preserves
+        # rows this invocation did not touch, so a corpus that errored keeps
+        # whatever was measured for it last time -- possibly on a different
+        # commit, possibly on a dirty tree -- and the single `environment`
+        # block would present the whole file as one clean run.
+        merged = json.loads(Path(out_path).read_text())
+        stale = []
+        for key, row in (merged.get("corpora") or {}).items():
+            stamp = row.get("measured") or {}
+            if key not in results or "error" in row:
+                stale.append(f"{key} (not measured in this run)")
+            elif stamp.get("git_dirty"):
+                stale.append(f"{key} (measured on a dirty tree)")
+        if stale:
+            print(
+                "\nNOT publishing: the merged file would mix runs.\n  "
+                + "\n  ".join(stale)
+                + "\n\nRe-run the missing corpora, then publish. The measured rows are "
+                f"safe in {Path(out_path).relative_to(ROOT)}.",
+                flush=True,
+            )
+            return
 
         published = RESULTS / "06_mega.json"
         published.parent.mkdir(parents=True, exist_ok=True)

@@ -33,7 +33,9 @@ truncated corpus that looks complete.
 
 GENCODE ships the **same biological release in both GTF and GFF3**, which is
 why both are here: it is the cleanest available measurement of what the
-surface format costs, with everything else held constant. See
+surface format costs, with everything else held constant. The GFF3 half is not
+in the current published sweep — see the note on
+[Performance](performance.md). Method:
 [Methodology](performance/methodology.md).
 
 ---
