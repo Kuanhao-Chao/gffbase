@@ -37,7 +37,9 @@ from gffbase import Feature
 # exercise "skip the unplaced feature but still compute over the rest".
 MIXED = (
     "##gff-version 3\n"
-    "chr1\tsrc\tmRNA\t1\t1000\t.\t+\t.\tID=t1\n"
+    # Spans exactly its placed exons (100..500), as a real transcript does.
+    # BED12 requires it: the last block has to reach chromEnd.
+    "chr1\tsrc\tmRNA\t100\t500\t.\t+\t.\tID=t1\n"
     "chr1\tsrc\texon\t.\t.\t.\t+\t.\tID=e_null;Parent=t1\n"
     "chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
     "chr1\tsrc\texon\t400\t500\t.\t+\t.\tID=e2;Parent=t1\n"

@@ -33,8 +33,11 @@ def db(tmp_path):
     src = tmp_path / "small.gff3"
     src.write_text(
         "##gff-version 3\n"
-        "chr1\trs\tgene\t1\t1000\t.\t+\t.\tID=g1;Name=ALPHA\n"
-        "chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\trs\tgene\t100\t700\t.\t+\t.\tID=g1;Name=ALPHA\n"
+        # The transcript spans exactly its exons (100..700), which is what
+        # every real annotation does and what BED12 requires -- blockStarts
+        # are offsets from chromStart and the last block must reach chromEnd.
+        "chr1\trs\tmRNA\t100\t700\t.\t+\t.\tID=t1;Parent=g1\n"
         "chr1\trs\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
         "chr1\trs\texon\t300\t500\t.\t+\t.\tID=e2;Parent=t1\n"
         "chr1\trs\texon\t600\t700\t.\t-\t.\tID=e3;Parent=t1\n"

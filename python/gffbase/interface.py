@@ -889,6 +889,12 @@ class FeatureDB:
         )
         yield from self._yield_features(sql, params)
 
+    #: gffutils' name for `all_features`. It is a plain alias there too
+    #: (`method = all_features`), and ported code does call it.
+    def method(self, *args, **kwargs) -> Iterator[Feature]:
+        """Alias for `all_features`, kept because gffutils defines one."""
+        return self.all_features(*args, **kwargs)
+
     def features_of_type(
         self,
         featuretype: str | list[str],
@@ -2863,6 +2869,26 @@ class FeatureDB:
         if not sized:
             # A feature with no block children is one block: itself.
             sized = [(feature.start, feature.end)]
+        # The blocks must span the feature. BED12's blockStarts are offsets
+        # from chromStart and the last block has to reach chromEnd, so a
+        # feature whose children do not span it produces a structurally
+        # invalid line -- one that names a range it does not cover.
+        #
+        # gffutils refuses this ("Start of first exon (%s) does not match start
+        # of feature (%s)"), and it is right to: the usual cause is asking for
+        # a `block_featuretype` the feature does not have all of, and silently
+        # emitting a wrong line sends it downstream into a genome browser.
+        first_start, last_end = sized[0][0], sized[-1][1]
+        if first_start != feature.start:
+            raise ValueError(
+                f"Start of first exon ({first_start}) does not match start of "
+                f"feature ({feature.start})"
+            )
+        if last_end != feature.end:
+            raise ValueError(
+                f"End of last exon ({last_end}) does not match end of feature ({feature.end})"
+            )
+
         block_count = len(sized)
         # No trailing comma. UCSC tolerates one, but the oracle emits none and
         # a differential comparison sees every line as different.

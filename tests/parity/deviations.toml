@@ -145,7 +145,12 @@ a `Parent` edge to its unstripped-attribute-key defect: with no CDS children
 visible it marks the whole feature thick, where gffbase finds the CDS and
 computes a real thick span. Measured on `FBgn0031208.gff`. This is the
 attribute-key deviation showing through, not a bed12 difference. Pinned by
-`test_bed12_matches_the_oracle`."""
+`test_bed12_matches_the_oracle`.
+
+The span validation is NOT a deviation: gffbase now raises the oracle's exact
+message when the blocks do not reach the feature's bounds, because BED12
+cannot represent that and the oracle is right to refuse. Pinned by
+`test_bed12_refuses_blocks_that_do_not_span_the_feature`."""
 
 # ===========================================================================
 # EXCLUDED -- upstream implementation details with no downstream contract.

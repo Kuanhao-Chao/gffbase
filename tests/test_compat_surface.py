@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -422,8 +423,21 @@ def test_inspect_honours_limit(db):
     assert got["feature_count"] == 3
 
 
-def test_to_bed12_ends_with_a_newline(db):
+def test_to_bed12_ends_with_a_newline(tmp_path):
+    """`hierarchy.gff3` declares transcripts wider than their exons, which
+    BED12 cannot represent -- the blocks would not reach chromEnd. Uses a
+    coherent transcript instead, as every real annotation has."""
     from gffbase.convert import to_bed12
+
+    src = tmp_path / "b.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrc\tgene\t100\t600\t.\t+\t.\tID=g1\n"
+        "chr1\tsrc\tmRNA\t100\t600\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
+        "chr1\tsrc\texon\t500\t600\t.\t+\t.\tID=e2;Parent=t1\n"
+    )
+    db = create_db(str(src), str(tmp_path / "b.duckdb"), force=True)
 
     line = to_bed12("t1", db)
     assert line.endswith("\n")
@@ -515,9 +529,15 @@ def test_to_seqfeature_refuses_a_non_feature():
 #: silently discarding the 41 tests defined above it -- the same silent-skip
 #: failure mode that let 23 fixtures go missing unnoticed. Skip per test
 #: instead, so losing the extra costs exactly the tests that need it.
+#:
+#: The BINARY is checked as well as the package. `pybedtools` imports happily
+#: without `bedtools` on PATH and then raises `NotImplementedError: "sortBed"
+#: does not appear to be installed` from the method -- so a package-only guard
+#: passes collection and fails at run time, which is what turned every CI cell
+#: red: the runners install the extra and have no bedtools.
 requires_pybedtools = pytest.mark.skipif(
-    importlib.util.find_spec("pybedtools") is None,
-    reason="needs the [pybedtools] extra",
+    importlib.util.find_spec("pybedtools") is None or shutil.which("bedtools") is None,
+    reason="needs the [pybedtools] extra AND the bedtools binary on PATH",
 )
 
 TSS_SRC = (
@@ -647,7 +667,7 @@ def test_tsses_skips_transcripts_with_no_coordinates():
 
     src = (
         "chr1\ts\tgene\t100\t900\t.\t+\t.\tID=g1\n"
-        "chr1\ts\ttranscript\t100\t900\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\ts\ttranscript\t100\t200\t.\t+\t.\tID=t1;Parent=g1\n"
         "chr1\ts\ttranscript\t.\t.\t.\t+\t.\tID=t_null;Parent=g1\n"
     )
     db = create_db(src, ":memory:", from_string=True)
@@ -912,3 +932,66 @@ def test_is_url_survives_a_malformed_address():
 
 def test_directive_repr():
     assert repr(Directive("##gff-version 3")) == "Directive('gff-version 3')"
+
+
+# ---------------------------------------------------------------------------
+# Drop-in fidelity: the shapes a ported gffutils script actually relies on
+# ---------------------------------------------------------------------------
+
+
+def test_compatibility_submodules_are_bound_on_the_package():
+    """`import gffbase as gffutils` has to give the oracle's attribute access.
+
+    gffutils binds these submodules on its package, so `gffutils.constants.
+    always_return_list = True` -- a documented idiom -- works after a plain
+    `import gffutils`. gffbase bound none of them, so the one-line migration
+    the README advertises raised `AttributeError` on the first line of any
+    script that used one.
+    """
+    import gffbase as aliased
+
+    for name in ("attributes", "bins", "constants", "create", "version"):
+        assert hasattr(aliased, name), f"gffbase.{name} is not bound on the package"
+
+
+def test_the_constants_toggle_is_settable_through_the_alias():
+    """The specific idiom, end to end."""
+    import gffbase as aliased
+
+    original = aliased.constants.always_return_list
+    try:
+        aliased.constants.always_return_list = not original
+        assert aliased.constants.always_return_list is not original
+    finally:
+        aliased.constants.always_return_list = original
+
+
+def test_featuredb_method_is_an_alias_for_all_features(db):
+    """gffutils defines `method = all_features`, and ported code calls it."""
+    assert [f.id for f in db.method()] == [f.id for f in db.all_features()]
+    assert [f.id for f in db.method(featuretype="exon")] == [
+        f.id for f in db.all_features(featuretype="exon")
+    ]
+
+
+def test_bed12_refuses_blocks_that_do_not_span_the_feature(tmp_path):
+    """BED12 cannot represent a feature its blocks do not cover.
+
+    blockStarts are offsets from chromStart and the last block has to reach
+    chromEnd, so emitting a line for a transcript whose exons stop short
+    produces a record that names a range it does not cover -- and sends it
+    into a genome browser. gffutils refuses with this exact message; gffbase
+    used to emit the line.
+    """
+    src = tmp_path / "short.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrc\tgene\t100\t1000\t.\t+\t.\tID=g1\n"
+        "chr1\tsrc\tmRNA\t100\t1000\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
+        "chr1\tsrc\texon\t500\t600\t.\t+\t.\tID=e2;Parent=t1\n"
+    )
+    db = create_db(str(src), str(tmp_path / "short.duckdb"), force=True)
+
+    with pytest.raises(ValueError, match=r"End of last exon \(600\).*feature \(1000\)"):
+        db.bed12("t1")
