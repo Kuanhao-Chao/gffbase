@@ -16,24 +16,26 @@
 # ---------------------------------------------------------------------------
 """gffbase — modernized successor to gffutils.
 
-Phase 5: full drop-in public API surface (FeatureDB, Feature, create_db,
-DataIterator, GFFWriter, exceptions) on top of the Phase 4 DuckDB ingestion
-engine.
+The full drop-in public API surface -- FeatureDB, Feature, create_db,
+DataIterator, GFFWriter and the exception hierarchy -- on top of a DuckDB
+ingestion engine fed by a Rust parser.
 """
 
 from gffbase.exceptions import (
     AttributeStringError,
+    ClosedDatabaseError,
     DuplicateIDError,
     EmptyInputError,
     FeatureNotFoundError,
     MultipartConstraintError,
+    ReadOnlyError,
     SchemaVersionError,
 )
 from gffbase.exceptions import (
     GFFFormatError as _PyGFFFormatError,
 )
 
-# Phase 16: prefer the Rust-defined exception class when the extension
+# Prefer the Rust-defined exception class when the extension
 # is loaded — that's the type Rust will actually raise. Fall back to
 # the pure-Python definition otherwise. Both inherit from `ValueError`
 # so legacy `pytest.raises(ValueError)` callers keep working.
@@ -70,6 +72,8 @@ __all__ = [
     "GFFFormatError",
     "SchemaVersionError",
     "MultipartConstraintError",
+    "ReadOnlyError",
+    "ClosedDatabaseError",
     "ValidationError",
     "validate_db",
     "migrate_v1_to_v2",

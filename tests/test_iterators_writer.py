@@ -18,8 +18,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
 from gffbase import DataIterator, Feature, GFFWriter, create_db
 
 DATA = Path(__file__).parent / "data"
@@ -140,3 +142,93 @@ def test_gffwriter_close_idempotent(tmp_path):
     w.write_rec("x")
     w.close()
     w.close()  # second call must not raise
+
+
+# ---------------------------------------------------------------------------
+# `DataIterator` dispatches on its input
+# ---------------------------------------------------------------------------
+#
+# The factory used to hand every input straight to `_DataIterator`, which
+# calls `parse_gff(path)`. So a URL was opened as a filename and an in-memory
+# feature list raised -- while `_UrlIterator` and `_FeatureIterator` sat
+# unreachable underneath, their docstrings describing a dispatch that did not
+# exist. gffutils' `DataIterator` accepts all of these.
+
+
+def test_data_iterator_accepts_a_pathlib_path():
+    feats = list(DataIterator(DATA / "simple.gff3"))
+    assert feats and all(isinstance(f, Feature) for f in feats)
+
+
+def test_data_iterator_accepts_an_in_memory_feature_list():
+    """A list of features passes through untouched, so a generator can be
+    piped into `create_db` / `FeatureDB.update` without a temporary file."""
+    original = list(DataIterator(str(DATA / "simple.gff3")))
+    assert original
+
+    from gffbase.iterators import _FeatureIterator
+
+    it = DataIterator(original)
+    assert isinstance(it, _FeatureIterator)
+    assert [f.featuretype for f in it] == [f.featuretype for f in original]
+    # And the documented accessors are properties on this class too.
+    assert not callable(it.dialect)
+    assert not callable(it.directives)
+
+
+def test_data_iterator_accepts_a_generator():
+    original = list(DataIterator(str(DATA / "simple.gff3")))
+    out = list(DataIterator(f for f in original))
+    assert len(out) == len(original)
+
+
+def test_transform_is_applied_to_in_memory_features():
+    """`__iter__` returned the list's own iterator, bypassing `__next__` --
+    so `transform`, which every other iterator here honours, was dropped."""
+    original = list(DataIterator(str(DATA / "simple.gff3")))
+    kinds = {f.featuretype for f in original}
+    drop = sorted(kinds)[0]
+
+    kept = list(
+        DataIterator(original, transform=lambda f: False if f.featuretype == drop else None)
+    )
+    assert kept, "transform dropped everything; pick a different featuretype"
+    assert all(f.featuretype != drop for f in kept)
+    assert len(kept) < len(original)
+
+
+def test_data_iterator_rejects_something_that_is_neither():
+    with pytest.raises(TypeError, match="DataIterator accepts"):
+        DataIterator(42)
+
+
+def test_url_iterator_fetches_and_cleans_up_its_temporary_file(tmp_path):
+    """The download used `NamedTemporaryFile(delete=False)` and never
+    unlinked it, so every URL ingest leaked a full copy of the annotation."""
+    import threading
+    from functools import partial
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    src = tmp_path / "served.gff3"
+    src.write_text((DATA / "simple.gff3").read_text())
+
+    handler = partial(SimpleHTTPRequestHandler, directory=str(tmp_path))
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        from gffbase.iterators import _UrlIterator
+
+        it = DataIterator(f"http://127.0.0.1:{server.server_port}/served.gff3")
+        assert isinstance(it, _UrlIterator)
+        feats = list(it)
+        assert feats == list(DataIterator(str(src)))
+
+        downloaded = it._tempfile
+        assert downloaded and os.path.exists(downloaded)
+        it.close()
+        assert not os.path.exists(downloaded)
+        it.close()  # idempotent
+    finally:
+        server.shutdown()
+        server.server_close()

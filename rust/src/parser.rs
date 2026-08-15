@@ -217,10 +217,7 @@ impl RecordIter {
             }
             // We materialize the line into an owned Vec to drop the borrow on
             // self.buf before we touch other &self fields below.
-            let line_owned: Vec<u8> = match self.read_line() {
-                Some(slice) => slice.to_vec(),
-                None => return None,
-            };
+            let line_owned: Vec<u8> = self.read_line()?.to_vec();
             let cur_line_no = self.line_no;
             if line_owned.is_empty() {
                 continue;
@@ -356,7 +353,6 @@ impl Iterator for RecordIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let line_no_for_err = self.line_no.saturating_add(1);
             let raw = match self.next_raw_record() {
                 Some(Ok(r)) => r,
                 Some(Err(e)) => {
@@ -409,9 +405,6 @@ impl Iterator for RecordIter {
                 }
                 self.warnings.push(e);
             }
-            // Suppress unused-warning under release builds (line_no_for_err is a
-            // defensive snapshot — not used on the happy path).
-            let _ = line_no_for_err;
             return Some(Ok(Record {
                 seqid,
                 source,
