@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""Phase 4 ingestion engine.
+"""GFF3/GTF ingestion engine.
 
 Streams the Rust parser's output through PyArrow record batches into DuckDB,
 then runs a fixed sequence of set-based SQL passes for normalization, GTF
@@ -105,7 +105,7 @@ class _ArrowBatchBuilder:
     produces PyArrow tables on flush. We deliberately keep the schema explicit
     so DuckDB sees the right column types (no INFER passes).
 
-    Phase 19: the builder also stamps each row's ``seqid_y`` value during
+    The builder also stamps each row's ``seqid_y`` value during
     ``append()`` using a shared ``seqid_to_y`` dict (lazy band assignment in
     encounter order). This eliminates two full-table ``UPDATE`` passes that
     used to dominate ingest wall time on real GFF3 corpora.
@@ -1019,7 +1019,7 @@ def _build_database(
     _apply_pragmas(con)
     con.execute(DDL)
 
-    # Phase 19: load the spatial extension UPFRONT (was: lazy after bulk
+    # Load the spatial extension UPFRONT (it used to be lazy, after bulk
     # load). This lets us widen the `features` schema to include `bbox`
     # and stamp the R-tree envelope inline during the Arrow batch INSERT,
     # eliminating two full-table UPDATE passes that used to dominate
@@ -1244,7 +1244,7 @@ def _build_database(
     # Indexes — only after all data is materialized.
     con.execute(POST_LOAD_INDEXES)
 
-    # Optional R-tree. Phase 19: when spatial is loaded, this is now a
+    # Optional R-tree. When spatial is loaded, this is a
     # single CREATE INDEX over the bbox column we already populated
     # inline during the Arrow batch INSERTs (no UPDATE pass).
     rtree_built = False
@@ -1421,7 +1421,7 @@ def _persist_seqid_map(con: duckdb.DuckDBPyConnection, seqid_to_y: dict) -> None
 def _finalize_rtree(con: duckdb.DuckDBPyConnection) -> bool:
     """Create the R-tree index over the (already-populated) `bbox` column.
 
-    Phase 19: this is the entire R-tree build — no UPDATE passes. The
+    This is the entire R-tree build — no UPDATE passes. The
     `bbox` column was filled in inline by ``_ArrowBatchBuilder.flush_into``
     using the per-row seqid_y stamped by the builder.
     """
@@ -1443,7 +1443,7 @@ def _write_meta(
 ):
     import json
 
-    # Closure max depth: used by FeatureDB's relational dispatcher (Phase 7) to
+    # Closure max depth: used by FeatureDB's relational dispatcher to
     # pick the cache vs. dynamic CTE without a per-call query.
     row = con.execute("SELECT MAX(depth) FROM closure").fetchone()
     closure_max_depth = int(row[0]) if row and row[0] is not None else 0

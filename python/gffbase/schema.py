@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""DDL for the gffbase DuckDB schema (Phase 2 §4.1) and post-load index/synthesis SQL.
+"""DDL for the gffbase DuckDB schema, plus post-load index/synthesis SQL.
 
 Centralized so the ingestion engine and tests share one source of truth.
 """
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS features (
     -- computed this; v1 discarded it.
     id_origin       VARCHAR NOT NULL DEFAULT 'attribute',
     -- y-band populated post-load: each distinct seqid gets a unique band so
-    -- the R-tree split heuristics segregate chromosomes (Phase 7 fix).
+    -- the R-tree split heuristics segregate chromosomes.
     seqid_y         BIGINT
 );
 
@@ -216,7 +216,7 @@ UNION ALL
 
 
 # Post-load index DDL. Built only after bulk insert + closure materialization,
-# per the Phase 2 plan. Note: B-tree on `(seqid, start, end)` is the universal
+# Note: B-tree on `(seqid, start, end)` is the universal
 # fallback; the R-tree (if the spatial extension loads) is added separately in
 # `ingest.py::_build_rtree`.
 POST_LOAD_INDEXES = """
@@ -230,12 +230,12 @@ CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor, depth);
 CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant, depth);
 CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id, seg_idx);
 """
-# Phase 19: dropped redundant `features_seqid` — every (seqid)
+# Dropped the redundant `features_seqid` — every (seqid)
 # predicate is satisfied by the leading prefix of `features_seqstart`.
 
 
 # ---------------------------------------------------------------------------
-# Set-based normalization SQL (Phase 2 §3).
+# Set-based normalization SQL.
 # ---------------------------------------------------------------------------
 
 # 1. Edges from GFF3 `Parent=` attributes.
@@ -418,7 +418,7 @@ GROUP BY a.value;
 
 
 # ---------------------------------------------------------------------------
-# SQLite-compat views (Phase 2 §6). Make `FeatureDB.execute()` accept queries
+# SQLite-compat views. Make `FeatureDB.execute()` accept queries
 # written against the legacy gffutils schema names. The `attributes` column
 # is the raw col-9 bytes (NOT JSON) — documented break.
 # ---------------------------------------------------------------------------
@@ -444,7 +444,7 @@ CREATE OR REPLACE VIEW relations_compat AS
 
 
 # ---------------------------------------------------------------------------
-# Recursive CTE closure (Phase 2 §3.1) — replaces the N+1 grandchild loop.
+# Recursive CTE closure — replaces the N+1 grandchild loop.
 # Single SQL statement; vectorized executor.
 # ---------------------------------------------------------------------------
 CLOSURE_RECURSIVE_CTE = """

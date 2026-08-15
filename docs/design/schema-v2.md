@@ -322,6 +322,7 @@ Subclassing lets us **not override** `__str__`, `__len__`, `astuple`,
 `__getitem__`, `__eq__`, `__hash__`. The compat surface is preserved by
 *inaction*, which is the only reliable way to preserve it.
 
+<!-- docs-test: skip reason="illustrative: contains an elided fragment" -->
 ```python
 class Feature:                      # unchanged
     is_multipart: ClassVar[bool] = False

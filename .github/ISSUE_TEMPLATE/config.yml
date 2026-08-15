@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/Kuanhao-Chao/gffbase/blob/main/MIGRATION.md
     about: The Migration Guide covers the common drop-in compatibility questions and the one OLAP/OLTP gotcha.
   - name: Performance / benchmark questions
-    url: https://github.com/Kuanhao-Chao/gffbase/blob/main/PERFORMANCE_COMPARISON.md
+    url: https://khchao.com/gffbase/performance/
     about: The Performance Comparison document has the full multi-corpus head-to-head numbers and per-corpus root-cause analysis.

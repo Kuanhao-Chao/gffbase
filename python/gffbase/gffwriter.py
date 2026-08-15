@@ -23,7 +23,11 @@ import os
 import shutil
 import tempfile
 from collections.abc import Iterable
-from typing import IO
+from typing import IO, TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle at runtime
+    from gffbase.feature import Feature
+    from gffbase.interface import FeatureDB
 
 
 class GFFWriter:
@@ -64,7 +68,13 @@ class GFFWriter:
         if self.with_header:
             self._fh.write("##gff-version 3\n")
 
-    def write_rec(self, rec) -> None:
+    def write_rec(self, rec: Feature | str) -> None:
+        """Write one record, followed by a newline.
+
+        Args:
+            rec: A `Feature`, or a pre-formatted GFF line as a string. A
+                trailing newline on a string is not doubled.
+        """
         if isinstance(rec, str):
             line = rec.rstrip("\n")
         else:
@@ -72,22 +82,45 @@ class GFFWriter:
         self._fh.write(line + "\n")
 
     def write_recs(self, recs: Iterable) -> None:
+        """Write many records, in the order given.
+
+        Args:
+            recs: An iterable of `Feature` objects or GFF line strings.
+        """
         for r in recs:
             self.write_rec(r)
 
-    def write_gene_recs(self, db, gene_id) -> None:
+    def write_gene_recs(self, db: FeatureDB, gene_id: str | Feature) -> None:
+        """Write a gene and its ENTIRE subtree, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            gene_id: The gene, as an id or a `Feature`.
+        """
         gene = db[gene_id] if isinstance(gene_id, str) else gene_id
         self.write_rec(gene)
         for child in db.children(gene, level=None, order_by="start"):
             self.write_rec(child)
 
-    def write_mRNA_children(self, db, mrna_id) -> None:
+    def write_mRNA_children(self, db: FeatureDB, mrna_id: str | Feature) -> None:
+        """Write a transcript and its DIRECT children, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            mrna_id: The transcript, as an id or a `Feature`.
+        """
         mrna = db[mrna_id] if isinstance(mrna_id, str) else mrna_id
         self.write_rec(mrna)
         for child in db.children(mrna, level=1, order_by="start"):
             self.write_rec(child)
 
-    def write_exon_children(self, db, exon_id) -> None:
+    def write_exon_children(self, db: FeatureDB, exon_id: str | Feature) -> None:
+        """Write an exon and its direct children, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            exon_id: The exon, as an id or a `Feature`.
+        """
         exon = db[exon_id] if isinstance(exon_id, str) else exon_id
         self.write_rec(exon)
         for child in db.children(exon, level=1, order_by="start"):
