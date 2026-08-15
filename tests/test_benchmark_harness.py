@@ -85,6 +85,17 @@ def test_every_command_in_the_methodology_page_parses():
 # ---------------------------------------------------------------------------
 
 
+def _derive_speedup():
+    """Import the harness's derivation without executing its `main`."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_mega", MEGA)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_mega"] = module
+    spec.loader.exec_module(module)
+    return module.derive_speedup
+
+
 def test_a_speedup_requires_both_engines_to_have_done_equal_work():
     """A ratio between two different workloads is not a speedup.
 
@@ -93,11 +104,38 @@ def test_a_speedup_requires_both_engines_to_have_done_equal_work():
     difference on GTF -- would have published a headline number comparing two
     different jobs.
     """
-    src = _source()
-    assert "counts_agree" in src, "the feature-count cross-check is gone"
-    assert "if g_wall and counts_agree:" in src, (
-        "the speedup is no longer gated on the two engines agreeing on n_features"
+    derive = _derive_speedup()
+    speedup, bound, conflict = derive(
+        {"wall_seconds": 100.0, "n_features": 1000},
+        {"wall_seconds": 200.0, "n_features": 999},
     )
+    assert conflict is True
+    assert speedup is None and bound is None, "a conflicting count still produced a ratio"
+
+    speedup, bound, conflict = derive(
+        {"wall_seconds": 100.0, "n_features": 1000},
+        {"wall_seconds": 200.0, "n_features": 1000},
+    )
+    assert conflict is False
+    assert speedup == pytest.approx(2.0) and bound is None
+
+
+def test_a_capped_legacy_run_still_yields_a_floor():
+    """The one case where the legacy feature count CANNOT exist.
+
+    A killed process never reports one, so requiring the two counts to be
+    equal suppressed the floor on exactly the runs the floor exists for --
+    GENCODE-GTF lost a legitimate "> 22x" that way. Only a genuine conflict
+    between two present counts disqualifies the comparison.
+    """
+    derive = _derive_speedup()
+    speedup, bound, conflict = derive(
+        {"wall_seconds": 245.1, "n_features": 6_068_892},
+        {"wall_seconds": None, "wall_seconds_lower_bound": 5400.0, "n_features": None},
+    )
+    assert conflict is False
+    assert speedup is None, "a capped run must not produce a measured speedup"
+    assert bound == pytest.approx(5400.0 / 245.1)
 
 
 def test_both_engines_are_given_the_same_duplicate_id_policy():
