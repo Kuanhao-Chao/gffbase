@@ -42,6 +42,7 @@ def set_pragmas(self, pragmas):
 
 ## Proof of concept
 
+<!-- docs-test: skip reason="illustrative: reproduces an upstream defect against the reader's file" -->
 ```python
 import gffutils
 

@@ -73,6 +73,7 @@ And:
 unrecognized was interpolated verbatim — an intentional escape hatch described
 in the code as being "for power users":
 
+<!-- docs-test: skip reason="illustrative: contains an elided fragment" -->
 ```python
 else:
     # Unknown / multi-field — accept as a literal for power users.
@@ -89,6 +90,7 @@ that reason alone.
 
 ### Proof of concept
 
+<!-- docs-test: skip reason="illustrative: names a file the reader supplies" -->
 ```python
 import gffbase
 
@@ -115,6 +117,7 @@ files, or `ATTACH` to reach another database.
 **both** the key and the value, and wrapped the whole loop body in a bare
 handler:
 
+<!-- docs-test: skip reason="excerpt of library internals, not caller code" -->
 ```python
 for k, v in pragmas.items():
     try:
@@ -125,6 +128,7 @@ for k, v in pragmas.items():
 
 ### Proof of concept
 
+<!-- docs-test: skip reason="illustrative: names a file the reader supplies" -->
 ```python
 db = gffbase.create_db("annotations.gff3", ":memory:")
 db.set_pragmas({"threads": "1; DROP TABLE attributes"})
@@ -147,6 +151,7 @@ which DuckDB has — but it could not distinguish "this is a SQLite pragma" from
 
 gffutils' `set_pragmas` is:
 
+<!-- docs-test: skip reason="excerpt of library internals, not caller code" -->
 ```python
 c.executescript(";\n".join(["PRAGMA %s=%s" % i for i in self.pragmas.items()]))
 ```
@@ -215,6 +220,7 @@ than raising), so pass a single validated name.
 For `set_pragmas`, do not pass caller-supplied keys or values at all. If you
 must, check the name against DuckDB's catalog and keep values non-string:
 
+<!-- docs-test: skip reason="excerpt of library internals, not caller code" -->
 ```python
 KNOWN = {r[0] for r in db.conn.execute("SELECT name FROM duckdb_settings()").fetchall()}
 
