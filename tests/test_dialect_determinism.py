@@ -30,6 +30,7 @@ implementations, and deterministically under the current ones.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -74,12 +75,21 @@ def _run_in_fresh_interpreter(code: str) -> str:
     PYTHONHASHSEED is randomized per process, and Rust's RandomState is seeded
     per process too, so cross-run agreement can only be observed this way.
     """
+    # Inherit the environment and override only PYTHONPATH. Replacing it
+    # wholesale with a POSIX `PATH` broke Windows outright: without
+    # `SystemRoot` the interpreter cannot reach the OS crypto API and dies
+    # before running a line -- `Fatal Python error:
+    # _Py_HashRandomization_Init: failed to get random numbers`. The point of
+    # this helper is a fresh HASH SEED, which a new process gives regardless
+    # of what else it inherits.
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(REPO_ROOT / "python")
     result = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(code)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
-        env={"PYTHONPATH": str(REPO_ROOT / "python"), "PATH": "/usr/bin:/bin"},
+        env=env,
         timeout=120,
         check=False,
     )
