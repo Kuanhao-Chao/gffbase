@@ -601,7 +601,10 @@ def test_every_nav_entry_resolves_and_every_page_is_reachable():
         block = mkdocs.split("exclude_docs:", 1)[1].split("\n\n", 1)[0]
         excluded = {line.strip() for line in block.splitlines() if line.strip().endswith(".md")}
 
-    on_disk = {str(p.relative_to(docs)) for p in docs.rglob("*.md")}
+    # `as_posix()`, not `str()`: on Windows the latter yields `api\compat.md`,
+    # which never matches the `api/compat.md` in the nav, so every nested page
+    # was reported as an orphan and the test failed on Windows alone.
+    on_disk = {p.relative_to(docs).as_posix() for p in docs.rglob("*.md")}
     orphans = sorted(on_disk - refs - excluded)
     assert not orphans, (
         f"pages outside the nav would fail the strict build: {orphans}. "

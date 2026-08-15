@@ -68,13 +68,25 @@ def example_filename(fn: str) -> str:
     """
     here = Path(__file__).resolve().parent
     candidates = [
-        here.parent.parent / "tests" / "data" / fn,
         here / "data" / fn,
+        here.parent.parent / "tests" / "data" / fn,
+        # The 32 fixtures copied verbatim from the gffutils corpus live here,
+        # and they are exactly the names upstream's own examples use --
+        # `FBgn0031208.gff` among them. Leaving this off the search path made
+        # the canonical example fail even in a source checkout.
+        here.parent.parent / "tests" / "data" / "upstream" / fn,
     ]
     for c in candidates:
         if c.is_file():
             return str(c)
-    raise FileNotFoundError(f"example file not found: {fn}")
+    raise FileNotFoundError(
+        f"example file not found: {fn}\n"
+        "Example fixtures ship with the source distribution and the git "
+        "checkout, under tests/data/. They are NOT in the binary wheel, so "
+        "this helper cannot find them in a `pip install gffbase` environment. "
+        "Install from source (`pip install --no-binary gffbase gffbase`) or "
+        "point at your own file."
+    )
 
 
 #: Directory this package lives in. Upstream locates bundled example data
@@ -299,6 +311,16 @@ def make_query(
     only for the iterable form and interpolates a bare string verbatim, which
     is the same class of hole that `FeatureDB.order_by` had. See
     `docs/security/2026-sql-injection.md`.
+
+    !!! danger "`other` and `extra` are raw SQL"
+        `featuretype`, `limit` and `strand` become bound parameters, and
+        `order_by` is checked against a whitelist -- but **`other` and `extra`
+        are interpolated verbatim**, because they exist to carry a caller's own
+        SQL fragment (upstream builds its relation joins through `other`).
+        Passing untrusted input to either is equivalent to passing it to
+        `execute()`. No gffbase code path routes caller data into them; the
+        asymmetry is documented here because the surrounding validation makes
+        it easy to assume otherwise.
     """
     from gffbase import bins as _bins
     from gffbase.constants import _gffkeys_extra

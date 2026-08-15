@@ -170,6 +170,18 @@ def create_db(
         # keyword is a caller error, not something to absorb silently.
         raise TypeError(f"unhandled kwarg in {sorted(kwargs)}")
 
+    # Same guard as `FeatureDB.__init__`, and for the same reason: DuckDB takes
+    # the path as a C string and stops at a NUL, so the database would be
+    # created somewhere other than the path the caller named. Checking here as
+    # well because `create_db` reaches the filesystem (the `force=True` unlink)
+    # before it ever constructs a `FeatureDB`.
+    if isinstance(dbfn, (str, os.PathLike)) and "\x00" in os.fspath(dbfn):
+        raise ValueError(
+            f"database path contains an embedded NUL byte: {os.fspath(dbfn)!r}. "
+            "Paths are passed to DuckDB as C strings, which would silently "
+            "truncate at the NUL and create a different file."
+        )
+
     options = IngestOptions(
         id_spec=id_spec,
         force=force,

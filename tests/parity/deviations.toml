@@ -138,6 +138,36 @@ for."""
 
 [[deviation]]
 kind = "symbol"
+name = "gffbase.helpers.example_filename"
+status = "intentional"
+reason = """Resolves example fixtures from `tests/data/` (including the
+`upstream/` subdirectory of files copied from the gffutils corpus), which ship
+in the git checkout and the SOURCE DISTRIBUTION but not in the binary wheel.
+The oracle packages its 38 example files inside the installed package, so
+upstream's copy works from a wheel and this one raises.
+
+Deliberate: the fixtures are a 216 KB test corpus, and shipping them in every
+wheel to support a docs convenience is the wrong trade. The `FileNotFoundError`
+says so explicitly and names the install that does work, rather than leaving
+the reader with a bare missing-file error. Pinned by
+`test_example_filename_finds_the_upstream_corpus`."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.FeatureDB.__contains__"
+status = "intentional"
+reason = """`"missing_id" in db` returns False; the oracle RAISES
+`FeatureNotFoundError`. Not a choice upstream made -- `gffutils.FeatureDB`
+defines neither `__contains__` nor `__iter__`, so Python falls back to
+iterating via `__getitem__`, which raises on the first missing key. The `in`
+operator therefore fails on precisely the question it exists to answer, and
+`if x in db:` cannot be written against it without a try/except.
+
+Python's data model is explicit that `__contains__` returns a bool. Pinned by
+`test_featuredb_contains_returns_false_for_a_missing_id`."""
+
+[[deviation]]
+kind = "symbol"
 name = "gffbase.interface.FeatureDB.bed12"
 status = "intentional"
 reason = """`thickStart`/`thickEnd` can differ on a file where the oracle loses
