@@ -126,11 +126,14 @@ jobs:
           # an unrelated PR.
           pip install 'maturin==1.14.1'
 
-      - name: Build extension (maturin develop --release)
-        shell: bash
-        run: maturin develop --release --manifest-path rust/Cargo.toml
-
-      - name: Install runtime + test deps
+      # `pip install -e .`, NOT `maturin develop`. maturin refuses to run
+      # `develop` without an active virtualenv ("Couldn't find a virtualenv or
+      # conda environment"), and `actions/setup-python` does not create one --
+      # so every matrix cell failed at this step before reaching a single test.
+      # maturin is the PEP 517 backend declared in pyproject.toml, so a plain
+      # editable install builds the same extension, in release profile, and
+      # needs no venv.
+      - name: Build extension + install runtime and test deps
         shell: bash
         run: pip install -e ".[test,all]"
 
@@ -221,8 +224,7 @@ jobs:
         with: { python-version: "3.12" }
       - name: Install gffbase + the oracle
         run: |
-          python -m pip install --upgrade pip maturin
-          maturin develop --release --manifest-path rust/Cargo.toml
+          python -m pip install --upgrade pip
           pip install -e ".[test,all]"
           # Pinned to the commit the manifest was generated from. gffutils is
           # not released at this commit, so it is installed from git rather
@@ -302,8 +304,7 @@ jobs:
       - name: Build extension
         run: |
           python -m pip install --upgrade pip
-          pip install 'maturin==1.14.1'
-          maturin develop --release --manifest-path rust/Cargo.toml
+          pip install -e .
       - name: Install at the declared floors
         run: |
           pip install -e ".[test]"
