@@ -35,7 +35,7 @@ import json
 import logging
 import os
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Union
+from typing import Any, Union
 
 import duckdb
 
@@ -1218,6 +1218,75 @@ class FeatureDB:
     # ------------------------------------------------------------------
     # Vectorized batched spatial API.
     # ------------------------------------------------------------------
+
+    def to_table(
+        self,
+        featuretype: str | list[str] | None = None,
+        *,
+        format: str = "arrow",
+        limit: RegionLike | None = None,
+        strand: str | None = None,
+        order_by: str | None = None,
+        reverse: bool = False,
+        completely_within: bool = False,
+    ) -> Any:
+        """Return the whole database (or a slice of it) as one table.
+
+        The columnar counterpart to `all_features()`: same filters, but the
+        result is a `pyarrow.Table` / `pandas.DataFrame` / `polars.DataFrame`
+        instead of a stream of `Feature` objects, and no `Feature` is
+        constructed at any layer.
+
+        For "give me every exon as a dataframe", the row-by-row API pays a
+        Python object per row -- millions of them on a whole-genome corpus --
+        and that allocation dominates everything else. This is one query and
+        one hand-off.
+
+        Args:
+            featuretype: One featuretype, or a list of them. `None` is
+                everything.
+            format: `"arrow"` (default, zero-copy), `"df"` for pandas, or
+                `"polars"`.
+            limit: Restrict to a genomic region, as `"seqid:start-end"` or a
+                `(seqid, start, end)` tuple.
+            strand: Restrict to `"+"`, `"-"` or `"."`.
+            order_by: Column to sort by -- the same whitelist `all_features`
+                accepts.
+            reverse: Sort descending.
+            completely_within: With `limit`, require full containment.
+
+        Returns:
+            A table in the shape named by `format`, with one row per feature and the columns of the `features` table (id, seqid, source, featuretype, start, end, score, strand, frame, file_order).
+
+        Raises:
+            ValueError: `order_by` names something outside the whitelist, or
+                `format` is not one of the three.
+            ImportError: `format="df"`/`"polars"` without that package.
+
+        Example:
+            ```python
+            exons = db.to_table("exon", format="arrow")
+            df = db.to_table(["exon", "CDS"], format="df", limit="chr1:1-10000")
+            ```
+
+        Note:
+            Attributes are not included: they are a long-form table, so
+            flattening them would either invent a column per key or collapse
+            multi-valued keys. Query the `attributes` table with `execute()`
+            when you need them.
+        """
+        self._require_open("to_table")
+        sql, params = self._build_scan_sql(
+            base_where=[],
+            base_params=[],
+            limit=limit,
+            strand=strand,
+            featuretype=featuretype,
+            order_by=order_by,
+            reverse=reverse,
+            completely_within=completely_within,
+        )
+        return self._materialize_batched(sql, params, format=format)
 
     def region_batched(
         self,
