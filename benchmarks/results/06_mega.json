@@ -29,7 +29,7 @@
     "mane": {
       "name": "MANE v1.5 (Ensembl IDs)",
       "key": "mane",
-      "input": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+      "input": "benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
       "input_bytes": 10349746,
       "feature_lines": 524834,
       "gffbase": {
@@ -69,8 +69,8 @@
         "qps": 55045.06397159521
       },
       "db_paths": {
-        "gffbase": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/mane.duckdb",
-        "legacy": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/mane_legacy.sqlite"
+        "gffbase": "benchmarks/out/mane.duckdb",
+        "legacy": "benchmarks/out/mane_legacy.sqlite"
       },
       "params": {
         "legacy_timeout_sec": 5400,
