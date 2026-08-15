@@ -2800,10 +2800,6 @@
               }
             ]
           }
-        },
-        "Track": {
-          "kind": "constant",
-          "type": "NoneType"
         }
       }
     },

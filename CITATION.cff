@@ -13,6 +13,9 @@ repository-code: https://github.com/Kuanhao-Chao/gffbase
 url: https://khchao.com/gffbase/
 license: Apache-2.0
 version: 0.2.0
+# Required by the CFF 1.2.0 schema for a released version, and used by
+# GitHub's "Cite this repository" button and by Zenodo.
+date-released: "2026-08-15"
 keywords:
   - bioinformatics
   - genomics

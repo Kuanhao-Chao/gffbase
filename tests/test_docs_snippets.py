@@ -248,6 +248,15 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
         # Skipped rather than passed, so a developer with the full environment
         # still runs it -- and so `-rs` shows exactly what went unchecked.
         pytest.skip(f"{snippet.id} needs the optional package {exc.name!r}")
+    except ImportError as exc:
+        # gffbase converts a missing optional package into its own actionable
+        # ImportError ("format='df' requires the optional pandas package"),
+        # which is NOT a ModuleNotFoundError and so fell through to a failure.
+        # The `minimum-deps` CI job installs no extras at all, so this is the
+        # ordinary state there, not a defect.
+        if "requires the optional" not in str(exc):
+            raise
+        pytest.skip(f"{snippet.id} needs an optional package: {exc}")
     except NotImplementedError as exc:
         # `pybedtools` imports fine and then raises this from a method when the
         # `bedtools` BINARY is absent, which is the state of every CI runner.

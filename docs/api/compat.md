@@ -5,7 +5,7 @@ import shims: each symbol has a behavioural test, and every deliberate
 difference is declared in `tests/parity/deviations.toml` with the test that
 pins it.
 
-Current parity: **87 of 90 symbols (97%)**, zero modules outstanding.
+Current parity: **86 of 89 symbols (97%)**, zero modules outstanding.
 
 | Module | What it is |
 |---|---|
