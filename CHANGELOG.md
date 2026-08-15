@@ -18,6 +18,45 @@ nobody can install would only mislead. Everything below is the delta from
 
 ### Security
 
+- **Invalid UTF-8 silently destroyed data, three different ways.** Found by
+  running 18 hostile inputs through both parser engines and diffing the
+  outcomes. Nothing crashed; everything corrupted quietly, which is worse:
+
+  * The **attribute column** was decoded with `unwrap_or("")`, so one bad byte
+    replaced the whole column with an empty string. A gene whose `Name`
+    carried a stray Latin-1 byte was stored with **no attributes at all** --
+    ID included, making the feature unreachable -- while the ingest reported
+    success.
+  * **`seqid` and `featuretype`** went through `from_utf8_lossy`, silently
+    yielding a U+FFFD chromosome name that matches nothing in any later query.
+  * **Directives** kept whatever bytes they had.
+
+  UTF-8 is now validated once for the whole line, before any field is read, and
+  a failure is a `GFFFormatError` naming the line. Costs 2.9% of parser
+  throughput, measured on MANE. Valid multi-byte UTF-8 (`café`, `Ωmega`) is
+  unaffected -- it was always legal and still parses.
+
+- **A NUL byte in the database path truncated it, and wrote the file anyway.**
+  DuckDB is C++ and takes the path as a C string, so it stops at the first
+  NUL: `FeatureDB("a\0b.duckdb")` created a file called **`a`** -- a different
+  path than the caller named. The stray-file cleanup then called `os.unlink`
+  with the original path, which raises `ValueError` rather than `OSError`, so
+  it escaped the `except`, left the truncated file on disk, and replaced the
+  real diagnosis with a confusing one. Anything deriving a database path from
+  untrusted input could write to a location it never named. Both `FeatureDB`
+  and `create_db` now reject an embedded NUL before touching the filesystem.
+
+- **`helpers.make_query`'s raw-SQL slots are now documented as such.**
+  `featuretype`, `limit` and `strand` are bound parameters and `order_by` is
+  whitelisted, but `other` and `extra` are interpolated verbatim -- they exist
+  to carry the caller's own SQL, which is how upstream builds its relation
+  joins. No gffbase code path routes caller data into either. The asymmetry is
+  written down because the validation surrounding them makes it easy to assume
+  otherwise. Audited alongside: `execute()`, path handling (traversal, null
+  bytes, absolute paths) and every parameterised query surface -- no injection
+  found through any of them.
+
+
 - **SQL injection through `order_by` (affects 0.1.0, the only published release).** The parameter
   was interpolated into the query, with anything outside a small set of known
   column names passed through verbatim as a deliberate escape hatch "for power
@@ -634,6 +673,35 @@ everything from scratch.
 - `native`, `rtree`, and `slow` pytest markers.
 
 ### Fixed
+
+- **CRLF files parsed differently on each engine.** The Rust parser trimmed
+  the trailing `\r` only *after* directive handling had run, so every
+  directive from a Windows-line-ended GFF3 was stored as
+  `sequence-region chr1 1 1000\r`, while the Python fallback -- which reads
+  with universal newlines -- stored it clean. A blank `\r\n` line was also not
+  empty by the time it was checked, so it fell through to the tab split and
+  raised `expected at least 9 tab-separated fields, found 1`. Both engines now
+  trim before anything inspects the line.
+
+- **A coordinate past `i64` was accepted by the Python fallback** (Python ints
+  are unbounded) and deferred the failure to INSERT time, far from the line
+  that caused it, and only on one engine. It is now rejected at the line, as
+  the Rust engine already did.
+
+- **`helpers.example_filename` could not find the canonical example.**
+  `FBgn0031208.gff` -- the fixture every gffutils tutorial opens -- is vendored
+  under `tests/data/upstream/`, but that directory was not on the search path,
+  so the call failed in a source checkout with the file sitting on disk. The
+  `FileNotFoundError` now also states that the fixtures ship in the sdist and
+  the checkout but not the binary wheel, and names the install that works,
+  rather than leaving the reader hunting for a typo.
+
+- **`"missing" in db` raised instead of returning `False`.** `gffutils.FeatureDB`
+  defines neither `__contains__` nor `__iter__`, so Python falls back to
+  iterating via `__getitem__`, which raises on the first missing key -- the
+  `in` operator failing on precisely the question it exists to answer.
+  Declared as an intentional deviation.
+
 
 - **`region()` crashed on every database containing a discontinuous feature.**
   DuckDB's R-tree scan optimizer builds a projection map for the index scan,

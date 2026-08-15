@@ -414,3 +414,165 @@ def test_both_engines_agree_past_the_peek(tmp_path):
     rs = parse_gff(path, engine="rust", checklines=5)
     assert [str(f) for f in py] == [str(f) for f in rs]
     assert py.directives() == rs.directives()
+
+
+# ---------------------------------------------------------------------------
+# CRLF
+# ---------------------------------------------------------------------------
+
+CRLF_WITH_EVERYTHING = (
+    b"##gff-version 3\r\n"
+    b"##sequence-region chr1 1 1000\r\n"
+    b"\r\n"  # a blank line that is not empty once the \r survives
+    b"# a plain comment\r\n"
+    b"chr1\tsrc\tgene\t1\t1000\t.\t+\t.\tID=g1;Name=foo\r\n"
+    b"##FASTA\r\n"
+    b">chr1\r\n"
+    b"ACGT\r\n"
+)
+
+
+def _engines():
+    from gffbase.parser import native_available
+
+    return ["python"] + (["rust"] if native_available() else [])
+
+
+def test_crlf_directives_carry_no_carriage_return(tmp_path):
+    r"""A GFF3 with Windows line endings is an ordinary file, not a broken one.
+
+    The Rust engine trimmed the trailing ``\r`` only *after* directive
+    handling had already run, so every directive from a CRLF file was stored
+    as ``sequence-region chr1 1 1000\r``. The Python fallback reads with
+    universal newlines and stored it clean, so the two engines -- which are
+    meant to be indistinguishable -- disagreed on any CRLF input.
+    """
+    path = tmp_path / "crlf.gff3"
+    path.write_bytes(CRLF_WITH_EVERYTHING)
+
+    for engine in _engines():
+        it = parse_gff(str(path), engine=engine)
+        list(it)
+        assert it.directives() == ["gff-version 3", "sequence-region chr1 1 1000"], engine
+
+
+def test_a_blank_crlf_line_is_still_blank(tmp_path):
+    r"""``\r\n`` on its own is an empty line, not a one-field record.
+
+    Trimming after the emptiness check left ``\r`` behind, which is truthy, so
+    the line fell through to the tab split and raised
+    ``expected at least 9 tab-separated fields, found 1``.
+    """
+    path = tmp_path / "crlf.gff3"
+    path.write_bytes(CRLF_WITH_EVERYTHING)
+
+    for engine in _engines():
+        assert len(list(parse_gff(str(path), engine=engine))) == 1, engine
+
+
+def test_crlf_and_lf_parse_identically(tmp_path):
+    """The line ending must not be observable in the result."""
+    lf_path = tmp_path / "lf.gff3"
+    crlf_path = tmp_path / "crlf.gff3"
+    lf_path.write_bytes(CRLF_WITH_EVERYTHING.replace(b"\r\n", b"\n"))
+    crlf_path.write_bytes(CRLF_WITH_EVERYTHING)
+
+    def snapshot(path, engine):
+        it = parse_gff(str(path), engine=engine)
+        rows = [(f.seqid, f.source, f.featuretype, f.start, f.end, f.attributes_dict()) for f in it]
+        return rows, it.directives()
+
+    for engine in _engines():
+        assert snapshot(lf_path, engine) == snapshot(crlf_path, engine), engine
+
+
+# ---------------------------------------------------------------------------
+# Hostile input: the two engines must fail the same way, or not at all
+# ---------------------------------------------------------------------------
+
+HOSTILE = {
+    "truncated line": b"##gff-version 3\nchr1\tsrc\tgene\t1\n",
+    "no trailing newline": b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=g",
+    "coordinate past i64": (
+        b"chr1\tsrc\tgene\t99999999999999999999\t99999999999999999999\t.\t+\t.\tID=g\n"
+    ),
+    "negative coordinates": b"chr1\tsrc\tgene\t-5\t-1\t.\t+\t.\tID=g\n",
+    "start after end": b"chr1\tsrc\tgene\t900\t100\t.\t+\t.\tID=g\n",
+    "invalid utf-8 in attributes": b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=\xff\xfe\n",
+    "invalid utf-8 in seqid": b"ch\xe9r1\tsrc\tgene\t1\t9\t.\t+\t.\tID=g\n",
+    "invalid utf-8 in featuretype": b"chr1\tsrc\tg\xe9ne\t1\t9\t.\t+\t.\tID=g\n",
+    "invalid utf-8 in a directive": (
+        b"##sequence-region ch\xe9r1 1 9\nchr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=g\n"
+    ),
+    "embedded NUL": b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=a\x00b\n",
+    "valid multi-byte utf-8": "chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=café;Name=Ωmega\n".encode(),
+    "empty attribute column": b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\t\n",
+    "one very large field": b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=" + b"a" * 1_000_000 + b"\n",
+    "ten thousand tabs": b"chr1" + b"\t" * 10000 + b"\n",
+    "nothing but newlines": b"\n" * 1000,
+    "crlf throughout": b"##gff-version 3\r\n\r\nchr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=g\r\n",
+    "bare fasta first": b">chr1\nACGT\n",
+    "coordinate at i64 max": (
+        b"chr1\tsrc\tgene\t9223372036854775807\t9223372036854775807\t.\t+\t.\tID=g\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(HOSTILE))
+def test_both_engines_handle_hostile_input_identically(tmp_path, name):
+    """Neither engine may panic, hang, or quietly disagree with the other.
+
+    Three real divergences were found this way, each a silent-corruption bug
+    rather than a crash:
+
+    * invalid UTF-8 in the attribute column made the Rust engine substitute an
+      empty string, dropping EVERY attribute on the line -- ID included;
+    * invalid UTF-8 in `seqid` or `featuretype` went through
+      `from_utf8_lossy`, silently yielding a U+FFFD chromosome name that
+      matches nothing;
+    * a coordinate past `i64` was accepted by the Python fallback (Python ints
+      are unbounded) and deferred to an INSERT-time failure far from the line
+      that caused it.
+    """
+    from gffbase.parser import native_available
+
+    path = tmp_path / "hostile.gff3"
+    path.write_bytes(HOSTILE[name])
+
+    def outcome(engine):
+        try:
+            return ("ok", len(list(parse_gff(str(path), engine=engine))))
+        except GFFFormatError:
+            return ("GFFFormatError", None)
+
+    expected = outcome("python")
+    if native_available():
+        assert outcome("rust") == expected, name
+
+
+def test_invalid_utf8_does_not_silently_drop_attributes(tmp_path):
+    """The specific corruption, called out on its own because it is the worst.
+
+    A line whose attributes failed to decode was stored with NO attributes and
+    no warning -- so the feature lost its ID and became unreachable, while the
+    ingest reported success.
+    """
+    from gffbase.parser import native_available
+
+    path = tmp_path / "bad.gff3"
+    path.write_bytes(b"chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=caf\xe9;Name=x\n")
+
+    for engine in _engines():
+        with pytest.raises(GFFFormatError):
+            list(parse_gff(str(path), engine=engine))
+        _ = engine, native_available
+
+
+def test_valid_multibyte_utf8_is_kept(tmp_path):
+    """Rejecting invalid bytes must not reject legitimate ones."""
+    path = tmp_path / "utf8.gff3"
+    path.write_bytes("chr1\tsrc\tgene\t1\t9\t.\t+\t.\tID=café;Name=Ωmega\n".encode())
+
+    for engine in _engines():
+        feature = list(parse_gff(str(path), engine=engine))[0]
+        assert feature.attributes_dict() == {"ID": ["café"], "Name": ["Ωmega"]}, engine

@@ -995,3 +995,16 @@ def test_bed12_refuses_blocks_that_do_not_span_the_feature(tmp_path):
 
     with pytest.raises(ValueError, match=r"End of last exon \(600\).*feature \(1000\)"):
         db.bed12("t1")
+
+
+def test_featuredb_contains_returns_false_for_a_missing_id(db):
+    """`in` answers a question; it does not raise it back at you.
+
+    `gffutils.FeatureDB` defines neither `__contains__` nor `__iter__`, so
+    Python falls back to iterating through `__getitem__` -- which raises
+    `FeatureNotFoundError` on the first missing key. `"x" in db` therefore
+    fails on exactly the case the operator exists for. Declared in
+    `tests/parity/deviations.toml`.
+    """
+    assert "g1" in db
+    assert "no_such_feature" not in db
