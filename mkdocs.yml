@@ -17,6 +17,11 @@ docs_dir: docs
 
 theme:
   name: material
+  # The wordmark, in the house style of the author's other tools. Material
+  # swaps `logo` for `logo_dark` automatically in dark mode via CSS, so the
+  # white twin is referenced from `extra.css` rather than here.
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
   features:
     - navigation.instant
     - navigation.tabs
@@ -73,6 +78,9 @@ plugins:
             merge_init_into_class: true
             heading_level: 2
             filters: ["!^_"]   # hide name-mangled internals from rendered docs
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

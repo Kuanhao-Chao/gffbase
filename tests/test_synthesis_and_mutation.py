@@ -220,8 +220,35 @@ def test_create_splice_sites(hier_db):
 # ---------------------------------------------------------------------------
 
 
-def test_bed12_basic(hier_db):
-    line = hier_db.bed12("t1")
+#: BED12 requires the blocks to span the feature: blockStarts are offsets from
+#: chromStart and the last block must reach chromEnd. `hierarchy.gff3` declares
+#: its transcripts 100..1000 while their exons stop at 600, which no real
+#: annotation does -- 5000/5000 MANE transcripts span their exons exactly -- so
+#: bed12 gets its own coherent fixture rather than reshaping a file fifteen
+#: other test modules depend on.
+BED12_SRC = (
+    "##gff-version 3\n"
+    "chr1\tsrc\tgene\t100\t600\t.\t+\t.\tID=g1;Name=geneA\n"
+    "chr1\tsrc\tmRNA\t100\t600\t.\t+\t.\tID=t1;Parent=g1\n"
+    "chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
+    "chr1\tsrc\texon\t500\t600\t.\t+\t.\tID=e2;Parent=t1\n"
+    "chr1\tsrc\tCDS\t120\t200\t.\t+\t0\tID=c1;Parent=t1\n"
+    "chr1\tsrc\tCDS\t500\t580\t.\t+\t2\tID=c2;Parent=t1\n"
+    # No CDS children, for the whole-feature-thick case.
+    "chr1\tsrc\tmRNA\t100\t300\t.\t+\t.\tID=t2;Parent=g1\n"
+    "chr1\tsrc\texon\t100\t300\t.\t+\t.\tID=e3;Parent=t2\n"
+)
+
+
+@pytest.fixture
+def bed12_db(tmp_path):
+    src = tmp_path / "bed12.gff3"
+    src.write_text(BED12_SRC)
+    return create_db(str(src), str(tmp_path / "bed12.duckdb"), force=True)
+
+
+def test_bed12_basic(bed12_db):
+    line = bed12_db.bed12("t1")
     cols = line.split("\t")
     assert len(cols) == 12
     assert cols[0] == "chr1"
@@ -230,13 +257,13 @@ def test_bed12_basic(hier_db):
     assert cols[9] == "2"
 
 
-def test_bed12_with_feature_object(hier_db):
-    feat = hier_db["t1"]
-    line = hier_db.bed12(feat)
+def test_bed12_with_feature_object(bed12_db):
+    feat = bed12_db["t1"]
+    line = bed12_db.bed12(feat)
     assert line.split("\t")[0] == "chr1"
 
 
-def test_bed12_no_cds_marks_the_whole_feature_thick(hier_db):
+def test_bed12_no_cds_marks_the_whole_feature_thick(bed12_db):
     """With no CDS children, thickStart/thickEnd span the feature.
 
     This used to collapse both to `chromStart`, which renders the feature
@@ -244,25 +271,25 @@ def test_bed12_no_cds_marks_the_whole_feature_thick(hier_db):
     differently. The oracle uses the feature's own (1-based) start and its
     stop, and that asymmetry with `chromStart` is deliberate upstream.
     """
-    feat = hier_db["t2"]
-    cols = hier_db.bed12("t2").split("\t")
+    feat = bed12_db["t2"]
+    cols = bed12_db.bed12("t2").split("\t")
     assert int(cols[6]) == feat.start
     assert int(cols[7]) == feat.end
     assert int(cols[6]) != int(cols[7]), "a thick span of zero is not 'no CDS'"
 
 
-def test_bed12_has_no_trailing_comma(hier_db):
+def test_bed12_has_no_trailing_comma(bed12_db):
     """UCSC tolerates one; the oracle emits none, so every line differed."""
-    cols = hier_db.bed12("t1").split("\t")
+    cols = bed12_db.bed12("t1").split("\t")
     assert not cols[10].endswith(",")
     assert not cols[11].endswith(",")
     assert len(cols[10].split(",")) == int(cols[9])
     assert len(cols[11].split(",")) == int(cols[9])
 
 
-def test_bed12_refuses_both_thick_and_thin(hier_db):
+def test_bed12_refuses_both_thick_and_thin(bed12_db):
     with pytest.raises(ValueError, match="only specify one"):
-        hier_db.bed12("t1", thick_featuretype=["CDS"], thin_featuretype=["UTR"])
+        bed12_db.bed12("t1", thick_featuretype=["CDS"], thin_featuretype=["UTR"])
 
 
 def test_children_bp_sums_exon_lengths(hier_db):

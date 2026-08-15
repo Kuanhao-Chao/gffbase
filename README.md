@@ -1,4 +1,8 @@
-# GFFBase
+<p align="center">
+  <img src="docs/assets/logo.svg#gh-light-mode-only" alt="gffbase" width="62%">
+  <img src="docs/assets/logo-white.svg#gh-dark-mode-only" alt="gffbase" width="62%">
+</p>
+
 
 [![PyPI version](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/gffbase.svg)](https://pypi.org/project/gffbase/)
