@@ -639,3 +639,45 @@ def test_readme_deep_links_resolve_to_pages_that_exist():
         f"README links to published pages that do not exist: {broken}. "
         "A renamed page leaves GitHub and PyPI pointing at a 404."
     )
+
+
+def test_the_release_date_agrees_between_the_changelog_and_the_citation():
+    """Two files state the release date, so they can disagree -- and did.
+
+    `CITATION.cff` feeds GitHub's "Cite this repository" button and Zenodo;
+    the changelog is what a human reads. A reader who notices the mismatch has
+    no way to tell which one is wrong.
+    """
+    import re
+
+    changelog = _read("CHANGELOG.md")
+    citation = _read("CITATION.cff")
+
+    version = re.search(r'^version = "([^"]+)"', _read("pyproject.toml"), re.M)
+    assert version, "pyproject.toml has no version"
+    version = version.group(1)
+
+    heading = re.search(
+        rf"^## \[{re.escape(version)}\] — (\d{{4}}-\d{{2}}-\d{{2}})", changelog, re.M
+    )
+    assert heading, f"CHANGELOG.md has no dated section for {version}"
+
+    released = re.search(r'^date-released:\s*"?(\d{4}-\d{2}-\d{2})"?', citation, re.M)
+    assert released, "CITATION.cff has no date-released, which the CFF 1.2.0 schema requires"
+
+    assert heading.group(1) == released.group(1), (
+        f"CHANGELOG.md dates {version} at {heading.group(1)} but CITATION.cff "
+        f"says {released.group(1)}"
+    )
+
+
+def test_the_citation_version_tracks_the_package_version():
+    """A stale `version:` in CITATION.cff makes every generated citation wrong."""
+    import re
+
+    version = re.search(r'^version = "([^"]+)"', _read("pyproject.toml"), re.M).group(1)
+    cited = re.search(r"^version:\s*(\S+)", _read("CITATION.cff"), re.M)
+    assert cited, "CITATION.cff has no version"
+    assert cited.group(1).strip('"') == version, (
+        f"CITATION.cff cites {cited.group(1)} but the package is {version}"
+    )
