@@ -11,7 +11,7 @@ maturin and consumed by the Python public API (under
 touch both.
 
 By participating in this project, you agree to abide by our
-[Code of Conduct](CODE_OF_CONDUCT.md).
+[Code of Conduct](https://github.com/Kuanhao-Chao/gffbase/blob/main/CODE_OF_CONDUCT.md).
 
 ---
 
@@ -22,8 +22,8 @@ By participating in this project, you agree to abide by our
 | Bug reports | [open an issue](https://github.com/Kuanhao-Chao/gffbase/issues/new?template=bug_report.md) |
 | Feature requests | [open an issue](https://github.com/Kuanhao-Chao/gffbase/issues/new?template=feature_request.md) |
 | Discussions / questions | [GitHub Discussions](https://github.com/Kuanhao-Chao/gffbase/discussions) |
-| Architecture overview | [`PERFORMANCE_COMPARISON.md`](PERFORMANCE_COMPARISON.md) |
-| Migration from `gffutils` | [`MIGRATION.md`](MIGRATION.md) |
+| Performance &amp; architecture notes | [Performance](https://khchao.com/gffbase/performance/) |
+| Migration from `gffutils` | [Migration guide](https://khchao.com/gffbase/migration/) |
 | API reference | [`docs/api/`](docs/api/) (rendered: `mkdocs serve`) |
 
 ---
@@ -32,8 +32,8 @@ By participating in this project, you agree to abide by our
 
 You will need:
 
-- **Python 3.9 – 3.13** (any one of them; CI matrix tests 3.9 / 3.11 / 3.13)
-- **Rust ≥ 1.69** with `cargo` on `$PATH`. Install via
+- **Python 3.10 – 3.14** (any one of them; the CI matrix tests 3.10 / 3.12 / 3.14)
+- **Rust >= 1.83** with `cargo` on `$PATH`. Install via
   [`rustup`](https://rustup.rs/).
 - **maturin ≥ 1.5** for building the Rust extension.
 - **git**, **make** (optional, for convenience targets), and a working
@@ -42,8 +42,8 @@ You will need:
 Verify:
 
 ```bash
-python --version          # 3.9–3.13
-rustc --version           # ≥ 1.69
+python --version          # 3.10-3.14
+rustc --version           # >= 1.83
 maturin --version         # ≥ 1.5
 ```
 
@@ -68,7 +68,7 @@ pip install -e .[dev,test,docs]
 
 This installs:
 - The runtime: `duckdb`, `pyarrow`.
-- Test tools: `pytest`, `pytest-cov`, `hypothesis`.
+- Test tools: `pytest`, `pytest-cov`, `pyyaml` (the release-hygiene suite parses the workflows).
 - Lint tools: `ruff`, `mypy`.
 - Doc tools: `mkdocs`, `mkdocs-material`, `mkdocstrings[python]`.
 - Build tools: `maturin`.
@@ -94,7 +94,7 @@ maturin develop --release
 ### 3.4 Verify your install
 
 ```bash
-python -c "import gffbase; print(gffbase.__version__)"      # 0.1.0
+python -c "import gffbase; print(gffbase.__version__)"      # 0.2.0
 python -c "from gffbase import native_available; print(native_available())"   # True
 ```
 
@@ -105,12 +105,14 @@ build — check `maturin develop` output for compilation errors.
 
 | Extra | When you need it |
 |---|---|
+| `pandas` | If you want to test the `format="df"` path. |
 | `polars` | If you want to test the `format="polars"` zero-copy path. |
-| `pyfaidx` | If you want to test `Feature.sequence(fasta=str_path)`. |
+| `fasta` | pyfaidx, for `Feature.sequence(fasta=str_path)`. |
+| `all` | All three at once. |
 | `gffutils>=0.13` | If you're running `benchmarks/06_mega.py` or any differential-correctness test against the legacy library. |
 
 ```bash
-pip install polars pyfaidx gffutils
+pip install -e '.[all]' gffutils
 ```
 
 ---
@@ -118,19 +120,19 @@ pip install polars pyfaidx gffutils
 ## 4. Running the test suite
 
 GFFBase's correctness story rests on two things: the unit tests
-(currently 523 passing at ≥ 99 % branch coverage) and the
-differential-correctness checks against legacy `gffutils` in the
-benchmark harness.
+(currently 530, all passing) and the differential-correctness checks against
+legacy `gffutils` in the benchmark harness.
 
 ### 4.1 Full unit suite + coverage
 
 ```bash
-pytest
+pytest                                  # tests only
+pytest --cov=gffbase --cov-report=term  # tests + coverage
 ```
 
-This runs the complete suite and enforces the coverage gate
-(`--cov-fail-under=99`, configured in `pyproject.toml`). Any drop
-below 99 % fails CI.
+Coverage is **not** part of the default invocation — a bare `pytest` reports on
+tests, not on coverage. CI applies the gate explicitly with
+`--cov-fail-under`; see `.github/workflows/ci.yml` for the enforced threshold.
 
 The default invocation also writes:
 - `coverage.xml` — for codecov / Codacy / your CI's coverage parser.
@@ -146,12 +148,18 @@ pytest tests/test_featuredb_basic.py -q
 # Run a single test:
 pytest tests/test_featuredb_basic.py::test_seqids_iter -q
 
-# Skip coverage (faster — useful for tight TDD loops):
-pytest --no-cov
-
 # Stop at the first failure:
 pytest -x
+
+# Put the scratch databases somewhere with room (see below):
+pytest --basetemp=/path/with/space
 ```
+
+> **Disk:** a full run needs **~4 GB of temporary space**. DuckDB pre-allocates
+> every database file it creates and the suite builds a lot of them;
+> `tmp_path_retention_policy = "failed"` keeps only failed tests' directories,
+> but nothing is reclaimed until the run ends. If `/tmp` is small, point
+> `--basetemp` somewhere with room.
 
 ### 4.3 Targeted coverage check
 
@@ -177,15 +185,15 @@ This forces the B-tree path for every test. Both paths must pass.
 ### 4.5 Linting
 
 ```bash
-ruff check python/ tests/ benchmarks/ bench/
-ruff format --check python/ tests/ benchmarks/ bench/
+ruff check python/gffbase tests benchmarks tools
+ruff format --check python/gffbase tests benchmarks tools
 ```
 
 Fix automatically with:
 
 ```bash
-ruff check --fix python/ tests/ benchmarks/ bench/
-ruff format python/ tests/ benchmarks/ bench/
+ruff check --fix python/gffbase tests benchmarks tools
+ruff format python/gffbase tests benchmarks tools
 ```
 
 CI requires both to pass.
@@ -201,13 +209,35 @@ mkdocs build --strict     # what CI runs — fails on any broken anchor
 
 ### 4.7 Benchmarks (optional)
 
-Long-running. Don't run as part of normal development.
+Long-running — several hours for a full sweep. Don't run as part of normal
+development.
 
 ```bash
-pip install -e .[bench]
-python benchmarks/download_corpora.py     # ~3 min, ~113 MB
-python benchmarks/06_mega.py --legacy-timeout 900
+pip install -e ".[bench,all]"
+python benchmarks/download_corpora.py     # ~5 min, ~257 MB
+
+# Full sweep. Keeps the GENCODE GFF3 databases for stages 01-05.
+python benchmarks/06_mega.py --legacy-timeout 5400 --keep-db gencode-gff3
+
+# Publish: copy the measurements in, then regenerate every table from them.
+cp benchmarks/out/06_mega.json benchmarks/results/06_mega.json
+python tools/gen_benchmark_tables.py --write
 ```
+
+**Disk.** The five corpus pairs total ~38 GiB. Each is purged as soon as its
+numbers are recorded, which holds the peak near 16 GiB; the harness refuses to
+start a corpus it cannot finish. Set `GFFBASE_BENCH_OUT` to use another volume.
+
+**Never hand-edit a published benchmark table.** They live between
+`<!-- BEGIN GENERATED: ... -->` markers and are rendered from
+`benchmarks/results/06_mega.json`.
+`tools/gen_benchmark_tables.py --check` runs in the test suite and will fail.
+
+**Never write a number that was not measured.** A run killed at the safety
+valve reports `wall_seconds: null` plus `wall_seconds_lower_bound`, and renders
+as `> N`. The generator refuses to publish a capped run that carries a wall
+time. This is not a style preference — the previous harness multiplied a
+timeout by two and that invented figure became a headline claim.
 
 ---
 
@@ -254,8 +284,14 @@ For multi-paragraph rationale, use the body of the commit — explain
 
 - [ ] **Tests.** New behaviour: a new test. Bug fix: a regression
       test that fails on `main` and passes on your branch.
-- [ ] **Coverage held at ≥ 99 %.** Run `pytest` locally and confirm.
-- [ ] **`ruff check` clean.** No new lint warnings.
+- [ ] **Coverage not regressed.** Run
+      `pytest --cov=gffbase --cov-report=term` and confirm.
+- [ ] **`ruff check` and `ruff format --check` clean.** No new lint warnings
+      and no formatting drift.
+- [ ] **Rust clean** if you touched `rust/`:
+      `cargo fmt --manifest-path rust/Cargo.toml --all -- --check`,
+      `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings`,
+      and `cargo test --manifest-path rust/Cargo.toml`.
 - [ ] **Documentation updated** if you touched a public API: the
       docstring, the migration guide, the cookbook, or the API
       reference.
@@ -296,15 +332,14 @@ If you're trying to find your way around:
   (`_ArrowBatchBuilder`, `from_file`, GTF synthesis, R-tree finalize).
 - `python/gffbase/interface.py` — `FeatureDB` and the smart
   R-tree/B-tree + closure/dynamic-CTE query routers.
-- `python/gffbase/schema.py` — the 7-table DuckDB schema (one source
+- `python/gffbase/schema.py` — the 11-table DuckDB schema (plus 3 compatibility views) (one source
   of truth).
 - `tests/conftest.py` — every shared fixture.
-- `tests/test_coverage_gaps.py` — the targeted edge-case suite that
-  guards the 99 % gate.
+- `tests/test_coverage_gaps.py` — the targeted edge-case suite.
 
-The `PHASE*_*_SUMMARY.md` files in `plans/` document the design
-decisions phase-by-phase — useful when you want to know *why*
-something works the way it does, not just what the current code says.
+`CHANGELOG.md` records what changed in each release and why — useful when you
+want to know *why* something works the way it does, not just what the current
+code says.
 
 ---
 

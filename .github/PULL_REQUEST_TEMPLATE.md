@@ -52,7 +52,7 @@ or the specific commands you ran. -->
 ```text
 $ pytest
 523 passed, 7 skipped in 30.73s
-Required test coverage of 99% reached. Total coverage: 99.19%
+Required test coverage of 95% reached. Total coverage: 95.83%
 ```
 
 ## Checklist
@@ -76,7 +76,7 @@ Required test coverage of 99% reached. Total coverage: 99.19%
 
 - [ ] I added tests that cover the new behavior, or a regression test
       that fails on `main` and passes on this branch.
-- [ ] I ran the full suite locally: `pytest` (passes, ≥ 99 % coverage).
+- [ ] I ran the full suite locally: `pytest` (passes, ≥ 95 % coverage).
 - [ ] If I touched the spatial-index path, I also ran
       `GFFBASE_TEST_DISABLE_RTREE=1 pytest` (B-tree fallback path).
 

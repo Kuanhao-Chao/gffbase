@@ -34,27 +34,69 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-import json
 
 from benchmarks.common import (
-    GFFBASE_DB, LEGACY_DB, OUT,
-    pretty_bytes, pretty_seconds, run_subprocess, write_results,
+    GFFBASE_DB,
+    LEGACY_DB,
+    OUT,
+    pretty_bytes,
+    pretty_seconds,
+    run_subprocess,
+    write_results,
 )
+
+
+def mark_timeout(info: dict, timeout: float) -> dict:
+    """Record a killed run as a LOWER BOUND, in its own key.
+
+    `common.run_subprocess` omits `wall_seconds` when it kills a child, and
+    this is the stage where that happens by design: the row-by-row loop is
+    *supposed* to be too slow to finish at 50 000 anchors.
+
+    An earlier version of this file filled `wall_seconds` in with the cap.
+    That is better than the figure it replaced -- the published "≥ 642 s" was
+    hand-computed as 64.2 s × 10 and pasted in, and cannot have come out of
+    this script at all -- but it still puts a bound and a measurement in the
+    same key, so nothing downstream can tell them apart. `06_mega.py` keeps
+    them separate; so does this now.
+    """
+    if info.get("wall_seconds") is None:
+        info["wall_seconds"] = None
+        info["wall_seconds_lower_bound"] = float(timeout)
+        info["cap_seconds"] = timeout
+    return info
+
+
+def _wall_or_bound(info: dict) -> float | None:
+    """The best figure available, for deriving a speedup or a floor."""
+    return info.get("wall_seconds") or info.get("wall_seconds_lower_bound")
+
+
+def _fmt_wall(info: dict) -> str:
+    if info.get("wall_seconds"):
+        return pretty_seconds(info["wall_seconds"])
+    if info.get("wall_seconds_lower_bound"):
+        return "> " + pretty_seconds(info["wall_seconds_lower_bound"])
+    return "failed"
 
 
 def sample_common_ids(n: int, seed: int = 20260501):
     """Pick gene IDs that exist in BOTH DBs so per-engine descendant counts
     can be compared apples-to-apples."""
-    import duckdb, random, sqlite3
+    import random
+    import sqlite3
+
+    import duckdb
+
     duck = duckdb.connect(str(GFFBASE_DB), read_only=True)
-    duck_genes = {r[0] for r in duck.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene'"
-    ).fetchall()}
+    duck_genes = {
+        r[0] for r in duck.execute("SELECT id FROM features WHERE featuretype = 'gene'").fetchall()
+    }
     duck.close()
     sq = sqlite3.connect(str(LEGACY_DB))
-    sq_genes = {r[0] for r in sq.execute(
-        "SELECT id FROM features WHERE featuretype = 'gene'"
-    ).fetchall()}
+    sq_genes = {
+        r[0] for r in sq.execute("SELECT id FROM features WHERE featuretype = 'gene'").fetchall()
+    }
     sq.close()
     common = sorted(duck_genes & sq_genes)
     rng = random.Random(seed)
@@ -73,7 +115,7 @@ def _ids_path_payload(gene_ids, tag: str) -> Path:
 def gffbase_batched_script(ids_path: Path):
     return f"""
 import json, time, sys
-sys.path.insert(0, {str(ROOT / 'python')!r})
+sys.path.insert(0, {str(ROOT / "python")!r})
 from gffbase import FeatureDB
 db = FeatureDB({str(GFFBASE_DB)!r})
 gene_ids = json.load(open({str(ids_path)!r}))
@@ -93,7 +135,7 @@ print(json.dumps({{
 def gffbase_loop_script(ids_path: Path):
     return f"""
 import json, time, sys
-sys.path.insert(0, {str(ROOT / 'python')!r})
+sys.path.insert(0, {str(ROOT / "python")!r})
 from gffbase import FeatureDB
 db = FeatureDB({str(GFFBASE_DB)!r})
 gene_ids = json.load(open({str(ids_path)!r}))
@@ -139,37 +181,57 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
 
     ids_path = _ids_path_payload(gene_ids, str(n))
 
-    print(f"[vectorized] gffbase children_batched (format='arrow')…", flush=True)
-    batched = run_subprocess(gffbase_batched_script(ids_path),
-                             label=f"gffbase.batched(n={n})",
-                             timeout=timeout_per_run)
-    print(f"  wall={pretty_seconds(batched['wall_seconds'])}, "
-          f"RSS={pretty_bytes(batched['peak_rss_bytes'])}, "
-          f"descendants={batched.get('n_descendants')}",
-          flush=True)
+    print("[vectorized] gffbase children_batched (format='arrow')…", flush=True)
+    batched = run_subprocess(
+        gffbase_batched_script(ids_path), label=f"gffbase.batched(n={n})", timeout=timeout_per_run
+    )
+    print(
+        f"  wall={pretty_seconds(batched['wall_seconds'])}, "
+        f"RSS={pretty_bytes(batched['peak_rss_bytes'])}, "
+        f"descendants={batched.get('n_descendants')}",
+        flush=True,
+    )
 
-    print(f"[vectorized] gffbase row-by-row loop…", flush=True)
-    g_loop = run_subprocess(gffbase_loop_script(ids_path),
-                            label=f"gffbase.loop(n={n})",
-                            timeout=timeout_per_run)
-    print(f"  wall={pretty_seconds(g_loop['wall_seconds'])}, "
-          f"RSS={pretty_bytes(g_loop['peak_rss_bytes'])}, "
-          f"descendants={g_loop.get('n_descendants')}",
-          flush=True)
+    print("[vectorized] gffbase row-by-row loop…", flush=True)
+    g_loop = mark_timeout(
+        run_subprocess(
+            gffbase_loop_script(ids_path), label=f"gffbase.loop(n={n})", timeout=timeout_per_run
+        ),
+        timeout_per_run,
+    )
+    print(
+        f"  wall={_fmt_wall(g_loop)}"
+        f"{' (killed; lower bound)' if g_loop.get('timed_out') else ''}, "
+        f"RSS={pretty_bytes(g_loop['peak_rss_bytes'])}, "
+        f"descendants={g_loop.get('n_descendants')}",
+        flush=True,
+    )
 
-    print(f"[vectorized] legacy gffutils loop…", flush=True)
-    legacy = run_subprocess(legacy_loop_script(ids_path),
-                            label=f"legacy.loop(n={n})",
-                            timeout=timeout_per_run)
-    print(f"  wall={pretty_seconds(legacy['wall_seconds'])}, "
-          f"RSS={pretty_bytes(legacy['peak_rss_bytes'])}, "
-          f"descendants={legacy.get('n_descendants')}",
-          flush=True)
+    print("[vectorized] legacy gffutils loop…", flush=True)
+    legacy = mark_timeout(
+        run_subprocess(
+            legacy_loop_script(ids_path), label=f"legacy.loop(n={n})", timeout=timeout_per_run
+        ),
+        timeout_per_run,
+    )
+    print(
+        f"  wall={_fmt_wall(legacy)}"
+        f"{' (killed; lower bound)' if legacy.get('timed_out') else ''}, "
+        f"RSS={pretty_bytes(legacy['peak_rss_bytes'])}, "
+        f"descendants={legacy.get('n_descendants')}",
+        flush=True,
+    )
 
-    speedup_vs_loop = (g_loop["wall_seconds"] / batched["wall_seconds"]
-                       if batched["wall_seconds"] else None)
-    speedup_vs_legacy = (legacy["wall_seconds"] / batched["wall_seconds"]
-                         if batched["wall_seconds"] else None)
+    speedup_vs_loop = (
+        (_wall_or_bound(g_loop) or 0) / batched["wall_seconds"]
+        if batched.get("wall_seconds")
+        else None
+    )
+    speedup_vs_legacy = (
+        (_wall_or_bound(legacy) or 0) / batched["wall_seconds"]
+        if batched.get("wall_seconds")
+        else None
+    )
 
     return {
         "n_genes": len(gene_ids),
@@ -179,20 +241,25 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
         "comparison": {
             "batched_speedup_vs_gffbase_loop": speedup_vs_loop,
             "batched_speedup_vs_legacy_loop": speedup_vs_legacy,
-            "batched_qps": (len(gene_ids) / batched["wall_seconds"]
-                            if batched["wall_seconds"] else None),
-            "legacy_loop_qps": (len(gene_ids) / legacy["wall_seconds"]
-                                if legacy["wall_seconds"] else None),
-            "rss_ratio_legacy_over_batched":
-                legacy["peak_rss_bytes"] / max(batched["peak_rss_bytes"], 1),
+            "batched_qps": (
+                len(gene_ids) / batched["wall_seconds"] if batched["wall_seconds"] else None
+            ),
+            "legacy_loop_qps": (
+                len(gene_ids) / legacy["wall_seconds"] if legacy.get("wall_seconds") else None
+            ),
+            "rss_ratio_legacy_over_batched": legacy["peak_rss_bytes"]
+            / max(batched["peak_rss_bytes"], 1),
         },
     }
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scales", default="500,5000,50000",
-                    help="comma-separated batch sizes (default 500,5000,50000)")
+    ap.add_argument(
+        "--scales",
+        default="500,5000,50000",
+        help="comma-separated batch sizes (default 500,5000,50000)",
+    )
     ap.add_argument("--timeout-per-run", type=int, default=1800)
     args = ap.parse_args()
 
@@ -206,24 +273,34 @@ def main():
 
     # Print a compact summary table.
     print("\n" + "=" * 78, flush=True)
-    print(f"{'scale':>8}  {'batched':>10}  {'gffbase loop':>14}  {'legacy loop':>14}  "
-          f"{'speedup vs loop':>18}  {'speedup vs legacy':>20}",
-          flush=True)
+    print(
+        f"{'scale':>8}  {'batched':>10}  {'gffbase loop':>14}  {'legacy loop':>14}  "
+        f"{'speedup vs loop':>18}  {'speedup vs legacy':>20}",
+        flush=True,
+    )
     print("-" * 78, flush=True)
     for n_str, r in payload["scales"].items():
-        b = r["gffbase_batched"]["wall_seconds"]
-        gl = r["gffbase_loop"]["wall_seconds"]
-        ll = r["legacy_loop"]["wall_seconds"]
+        b = r["gffbase_batched"].get("wall_seconds")
         sp1 = r["comparison"]["batched_speedup_vs_gffbase_loop"]
         sp2 = r["comparison"]["batched_speedup_vs_legacy_loop"]
-        print(f"{n_str:>8}  "
-              f"{pretty_seconds(b):>10}  "
-              f"{pretty_seconds(gl):>14}  "
-              f"{pretty_seconds(ll):>14}  "
-              f"{(f'{sp1:.2f}×' if sp1 else 'n/a'):>18}  "
-              f"{(f'{sp2:.2f}×' if sp2 else 'n/a'):>20}",
-              flush=True)
+        # A speedup derived from a capped run is a floor, and prints as one.
+        m1 = ">" if r["gffbase_loop"].get("wall_seconds") is None else " "
+        m2 = ">" if r["legacy_loop"].get("wall_seconds") is None else " "
+        print(
+            f"{n_str:>8}  "
+            f"{(pretty_seconds(b) if b else 'failed'):>10}  "
+            f"{_fmt_wall(r['gffbase_loop']):>14}  "
+            f"{_fmt_wall(r['legacy_loop']):>14}  "
+            f"{(f'{m1}{sp1:.2f}×' if sp1 else 'n/a'):>18}  "
+            f"{(f'{m2}{sp2:.2f}×' if sp2 else 'n/a'):>20}",
+            flush=True,
+        )
     print("=" * 78, flush=True)
+    print(
+        "'>' = the row-by-row arm was killed at --timeout-per-run without "
+        "finishing, so its wall and the speedup derived from it are floors.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

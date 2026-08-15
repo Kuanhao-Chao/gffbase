@@ -23,18 +23,12 @@ import os
 from pathlib import Path
 
 import pytest
-
 from gffbase import FeatureDB, create_db
-from gffbase.ingest import from_file
 
 DATA = Path(__file__).parent / "data"
 
-RTREE_DISABLED = os.environ.get(
-    "GFFBASE_TEST_DISABLE_RTREE", ""
-).lower() in ("1", "true", "yes")
-requires_rtree = pytest.mark.skipif(
-    RTREE_DISABLED, reason="GFFBASE_TEST_DISABLE_RTREE active"
-)
+RTREE_DISABLED = os.environ.get("GFFBASE_TEST_DISABLE_RTREE", "").lower() in ("1", "true", "yes")
+requires_rtree = pytest.mark.skipif(RTREE_DISABLED, reason="GFFBASE_TEST_DISABLE_RTREE active")
 
 
 @pytest.fixture
@@ -169,9 +163,9 @@ def test_region_unknown_seqid_returns_empty():
 def test_region_completely_within_excludes_overhanging(hier_db):
     # exon e1 is 100..200; querying 150..400 with completely_within=True
     # should NOT return it (overhangs left).
-    feats = list(hier_db.region(seqid="chr1", start=150, end=400,
-                                 featuretype="exon",
-                                 completely_within=True))
+    feats = list(
+        hier_db.region(seqid="chr1", start=150, end=400, featuretype="exon", completely_within=True)
+    )
     assert "e1" not in [f.id for f in feats]
 
 
@@ -221,10 +215,16 @@ def test_region_filter_featuretype_list(hier_db):
 # ---------------------------------------------------------------------------
 
 
-def test_schema_property_returns_string(hier_db):
-    s = hier_db.schema
+def test_schema_is_a_method_returning_sql_text(hier_db):
+    """`db.schema()` -- a method, matching gffutils.
+
+    It was a property here, so the documented call raised
+    `TypeError: 'str' object is not callable`.
+    """
+    assert callable(hier_db.schema)
+    s = hier_db.schema()
     assert isinstance(s, str)
-    assert "features" in s.lower() or "table" in s.lower() or s == ""
+    assert "features" in s.lower()
 
 
 def test_analyze_marks_db_analyzed(hier_db):

@@ -1,0 +1,23 @@
+{
+  "n_genes": 500,
+  "gffbase_auto": {
+    "wall_seconds": 7.2953062080196105,
+    "qps": 68.5372191026551,
+    "descendants": 14995
+  },
+  "gffbase_forced_dynamic": {
+    "wall_seconds": 6.202879249991383,
+    "qps": 80.60772745184336,
+    "descendants": 14995
+  },
+  "legacy": {
+    "wall_seconds": 0.7003111660014838,
+    "qps": 713.9683390382221,
+    "descendants": 14578
+  },
+  "comparison": {
+    "auto_speedup_vs_legacy": 0.09599475964855912,
+    "dynamic_speedup_vs_legacy": 0.11290098320106048,
+    "gffbase_legacy_descendants_match": false
+  }
+}

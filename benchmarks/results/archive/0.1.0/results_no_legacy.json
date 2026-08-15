@@ -1,0 +1,65 @@
+{
+  "input": {
+    "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffutils2/bench/data/gencode.v45.basic.annotation.gtf.gz",
+    "compressed_bytes": 29623361
+  },
+  "ingestion": {
+    "gffutils2": {
+      "label": "gffutils2 (cached)",
+      "wall_seconds": 0.0,
+      "peak_rss_bytes": 0,
+      "peak_rss_mb": 0.0,
+      "n_features": 2182889,
+      "rtree_built": true,
+      "fmt": "gtf",
+      "max_depth": 8,
+      "cached": true
+    }
+  },
+  "routing": {
+    "region": {
+      "rtree": {
+        "n_queries": 10000,
+        "wall_seconds": 49.9118849580118,
+        "qps": 200.3530824053723,
+        "total_features_returned": 91894,
+        "path": "rtree"
+      },
+      "btree": {
+        "n_queries": 10000,
+        "wall_seconds": 14.39952216600068,
+        "qps": 694.4674889012236,
+        "total_features_returned": 91894,
+        "path": "btree_fallback"
+      },
+      "rtree_speedup_vs_btree": 0.2884988651122719
+    },
+    "children": {
+      "closure_cache": {
+        "n_queries": 2000,
+        "wall_seconds": 74.97960470800172,
+        "qps": 26.67392029857638,
+        "total_descendants": 274013,
+        "path": "closure_cache"
+      },
+      "dynamic_cte": {
+        "n_queries": 2000,
+        "wall_seconds": 72.21198258400545,
+        "qps": 27.696234453518365,
+        "total_descendants": 274013,
+        "path": "dynamic_cte"
+      },
+      "cache_speedup_vs_dynamic": 0.9630883340239735
+    }
+  },
+  "correctness": {
+    "legacy_n": 50000,
+    "new_n": 50000,
+    "match": true,
+    "n_only_legacy": 0,
+    "n_only_new": 0,
+    "only_legacy_first_5": [],
+    "only_new_first_5": [],
+    "n_input_lines": 50000
+  }
+}

@@ -19,12 +19,11 @@ list-wrapped attrs, generator return types, dialect round-trip)."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import types
+from pathlib import Path
 
 import pytest
-
-from gffbase import create_db, Feature
+from gffbase import create_db
 
 DATA = Path(__file__).parent / "data"
 

@@ -26,9 +26,9 @@ pub enum Format {
 #[derive(Debug, Clone)]
 pub struct Dialect {
     pub fmt: Format,
-    pub field_separator: String,        // ";", "; ", " ; "
-    pub keyval_separator: char,         // '=' for GFF3, ' ' for GTF
-    pub multival_separator: char,       // typically ','
+    pub field_separator: String,  // ";", "; ", " ; "
+    pub keyval_separator: char,   // '=' for GFF3, ' ' for GTF
+    pub multival_separator: char, // typically ','
     pub leading_semicolon: bool,
     pub trailing_semicolon: bool,
     pub quoted_gff2_values: bool,
@@ -71,14 +71,20 @@ pub fn choose(samples: &[Dialect]) -> Dialect {
     }
     let n_gtf = samples.iter().filter(|d| d.fmt == Format::Gtf).count();
     let n_gff3 = samples.len() - n_gtf;
-    let fmt = if n_gtf > n_gff3 { Format::Gtf } else { Format::Gff3 };
+    let fmt = if n_gtf > n_gff3 {
+        Format::Gtf
+    } else {
+        Format::Gff3
+    };
 
     // For each flag, take the OR — if *any* line had a trailing semicolon,
     // the file has trailing semicolons. Mirrors gffutils' weighted-vote outcome
     // closely enough for round-trip purposes.
-    let mut chosen = Dialect::default();
-    chosen.fmt = fmt;
-    chosen.keyval_separator = if fmt == Format::Gtf { ' ' } else { '=' };
+    let mut chosen = Dialect {
+        fmt,
+        keyval_separator: if fmt == Format::Gtf { ' ' } else { '=' },
+        ..Default::default()
+    };
     for s in samples {
         chosen.leading_semicolon |= s.leading_semicolon;
         chosen.trailing_semicolon |= s.trailing_semicolon;
@@ -86,13 +92,29 @@ pub fn choose(samples: &[Dialect]) -> Dialect {
         chosen.repeated_keys |= s.repeated_keys;
         chosen.semicolon_in_quotes |= s.semicolon_in_quotes;
     }
-    // Field separator: pick the most common.
-    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    // Field separator: pick the most common, breaking ties by first
+    // appearance.
+    //
+    // This deliberately does NOT tally into a HashMap. Rust's HashMap is
+    // seeded from a per-process RandomState, so iterating one to find a
+    // maximum resolves ties differently on every run -- which made dialect
+    // inference nondeterministic, and with it the separator used when a
+    // feature is re-serialized. The same input file could round-trip to
+    // different text on different runs. An insertion-ordered tally makes the
+    // outcome a function of the input alone.
+    let mut counts: Vec<(&str, usize)> = Vec::new();
     for s in samples {
-        *counts.entry(s.field_separator.as_str()).or_insert(0) += 1;
+        let sep = s.field_separator.as_str();
+        match counts.iter_mut().find(|(k, _)| *k == sep) {
+            Some((_, c)) => *c += 1,
+            None => counts.push((sep, 1)),
+        }
     }
     chosen.field_separator = counts
         .into_iter()
+        // `max_by_key` keeps the LAST maximum, so compare on count alone and
+        // reverse the scan to keep the FIRST-seen separator on a tie.
+        .rev()
         .max_by_key(|(_, c)| *c)
         .map(|(k, _)| k.to_string())
         .unwrap_or_else(|| ";".into());

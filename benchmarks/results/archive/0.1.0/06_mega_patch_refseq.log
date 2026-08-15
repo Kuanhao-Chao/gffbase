@@ -1,0 +1,9 @@
+=== Patching RefSeq GRCh38.p14 ===
+  [gffbase] reingest…
+    wall=7 min 48.6 s, RSS=1.59 GB, disk=5.96 GB
+  [gffbase] spatial — 5000 regions…
+    wall=4.95 s, qps=1011, features_returned=13764
+  [gffbase] batched — 5000 anchors…
+    wall=263.4 ms, anchors=5000, descendants=999468
+
+Patched /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/06_mega.json

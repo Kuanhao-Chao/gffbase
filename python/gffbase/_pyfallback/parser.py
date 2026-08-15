@@ -18,7 +18,7 @@
 serve as a correctness oracle and as a fallback when the native extension is
 unavailable.
 
-Phase 16: same NCBI GFF3 validation rules as the Rust parser, with the same
+Applies the same NCBI GFF3 validation rules as the Rust parser, with the same
 `strict=True` raise / `strict=False` warning-collect semantics.
 """
 
@@ -26,11 +26,11 @@ from __future__ import annotations
 
 import gzip
 import io
-from typing import Iterator, List, Optional
+from collections.abc import Iterator
 
+from gffbase._pyfallback.attributes import parse_attributes
 from gffbase.dialect import merge_dialects
 from gffbase.feature import ParsedFeature
-from gffbase._pyfallback.attributes import parse_attributes
 
 
 def _gff_format_error_class():
@@ -44,10 +44,12 @@ def _gff_format_error_class():
     the Python fallback raised.
     """
     try:
-        from gffbase._native import GFFFormatError as _C   # type: ignore
+        from gffbase._native import GFFFormatError as _C
+
         return _C
-    except Exception:
+    except Exception:  # pragma: no cover - only on a build without the extension
         from gffbase.exceptions import GFFFormatError as _C
+
         return _C
 
 
@@ -64,17 +66,12 @@ def _make_error(message: str, line_no: int, kind: str):
             err.line_no = line_no
             err.kind = kind
             err.message = message
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError):  # pragma: no cover - defensive
+            # A future PyO3 exception type might not accept attribute
+            # assignment. The message is already correct; the structured
+            # metadata is a nicety.
             pass
         return err
-
-
-# Backwards-compat: tests importing `GFFFormatError` from this module.
-class _LazyGFFFormatErrorProxy:
-    def __instancecheck__(self, instance):
-        return isinstance(instance, _gff_format_error_class())
-    def __call__(self, *a, **kw):
-        return _gff_format_error_class()(*a, **kw)
 
 
 GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise sites below
@@ -83,11 +80,37 @@ GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise s
 def _open(path: str):
     if path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8", newline="")
-    return open(path, "r", encoding="utf-8", newline="")
+    return open(path, encoding="utf-8", newline="")
+
+
+def _decode_error(err: UnicodeDecodeError, line_no: int):
+    """Turn a raw `UnicodeDecodeError` into the parser's own error type.
+
+    The Rust engine reports invalid UTF-8 as a `GFFFormatError` naming the
+    line. Letting the fallback surface Python's own exception instead made the
+    two engines distinguishable, and cost the reader the line number -- the
+    only part of the message that helps you find the byte.
+    """
+    return _make_error(
+        f"line {line_no}: attribute column is not valid UTF-8",
+        line_no,
+        "InvalidAttribute",
+    )
 
 
 def _iter_lines(stream) -> Iterator[str]:
-    for line in stream:
+    # Every read in the fallback funnels through here, which is why the decode
+    # guard lives here rather than at each call site. Text-mode decoding is
+    # lazy, so the `UnicodeDecodeError` surfaces on iteration, not on open().
+    line_no = 0
+    while True:
+        line_no += 1
+        try:
+            line = next(stream)
+        except StopIteration:
+            return
+        except UnicodeDecodeError as err:
+            raise _decode_error(err, line_no) from err
         if line.endswith("\n"):
             line = line[:-1]
         if line.endswith("\r"):
@@ -95,64 +118,67 @@ def _iter_lines(stream) -> Iterator[str]:
         yield line
 
 
-def _parse_coord(s: str) -> Optional[int]:
-    if s == "." or s == "":
-        return None
-    return int(s)
-
-
 def _validate(
     *,
     line_no: int,
     seqid: str,
     featuretype: str,
-    start: Optional[int],
-    end: Optional[int],
+    start: int | None,
+    end: int | None,
     score: str,
     strand: str,
     frame: str,
     n_pairs: int,
     blob: str,
-) -> Optional[GFFFormatError]:
+) -> Exception | None:
     """Mirror of `validate.rs::validate_fields` + `validate_attributes_pairs`."""
     if not seqid:
         return _make_error(
-            f"line {line_no}: seqid (col 1) is empty", line_no, "EmptySeqid",
+            f"line {line_no}: seqid (col 1) is empty",
+            line_no,
+            "EmptySeqid",
         )
     if not featuretype:
         return _make_error(
             f"line {line_no}: featuretype (col 3) is empty",
-            line_no, "EmptyFeaturetype",
+            line_no,
+            "EmptyFeaturetype",
         )
     if any(ch.isspace() for ch in featuretype):
         return _make_error(
             f"line {line_no}: featuretype contains whitespace: {featuretype!r}",
-            line_no, "InvalidFeaturetype",
+            line_no,
+            "InvalidFeaturetype",
         )
     if start is not None and start < 1:
         return _make_error(
             f"line {line_no}: start coordinate must be >= 1 (got {start})",
-            line_no, "InvalidCoordinate",
+            line_no,
+            "InvalidCoordinate",
         )
     if start is not None and end is not None and end < start:
         return _make_error(
             f"line {line_no}: end < start ({end} < {start})",
-            line_no, "InvalidCoordinate",
+            line_no,
+            "InvalidCoordinate",
         )
     if strand not in ("+", "-", "?", "."):
         return _make_error(
             f"line {line_no}: strand must be one of '+', '-', '?', '.'; got {strand!r}",
-            line_no, "InvalidStrand",
+            line_no,
+            "InvalidStrand",
         )
     if frame not in (".", "0", "1", "2"):
         return _make_error(
             f"line {line_no}: phase must be 0, 1, 2, or '.'; got {frame!r}",
-            line_no, "InvalidPhase",
+            line_no,
+            "InvalidPhase",
         )
     if featuretype == "CDS" and frame == ".":
         return _make_error(
             f"line {line_no}: CDS row missing required phase (must be 0, 1, or 2)",
-            line_no, "InvalidPhase",
+            line_no,
+            "InvalidPhase",
         )
     if score not in ("", "."):
         try:
@@ -160,7 +186,8 @@ def _validate(
         except ValueError:
             return _make_error(
                 f"line {line_no}: score must be a float or '.'; got {score!r}",
-                line_no, "InvalidScore",
+                line_no,
+                "InvalidScore",
             )
     trimmed = blob.strip()
     if trimmed and trimmed != ".":
@@ -176,32 +203,68 @@ def _validate(
             return _make_error(
                 f"line {line_no}: attribute string did not parse into any "
                 f"key=value pair: {trimmed[:60]!r}",
-                line_no, "InvalidAttribute",
+                line_no,
+                "InvalidAttribute",
             )
     return None
 
 
-def _coord_or_error(s: str, line_no: int, which: str) -> Optional[int]:
+#: The range a DuckDB BIGINT can hold, which is where coordinates are stored.
+_I64_MIN = -(2**63)
+_I64_MAX = 2**63 - 1
+
+
+def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
     """Returns the int, or raises GFFFormatError with structured info."""
     if s == "." or s == "":
         return None
     try:
-        return int(s)
-    except ValueError:
+        value = int(s)
+    except ValueError as err:
         raise _make_error(
             f"line {line_no}: {which} coordinate is not an integer: {s!r}",
-            line_no, "InvalidCoordinate",
+            line_no,
+            "InvalidCoordinate",
+        ) from err
+    # Python ints are unbounded; the column they land in is a DuckDB BIGINT.
+    # Without this the fallback accepted a 20-digit coordinate that the Rust
+    # engine rejects, and deferred the failure to INSERT time -- a confusing
+    # error, far from the line that caused it, and only on one engine.
+    if not (_I64_MIN <= value <= _I64_MAX):
+        raise _make_error(
+            f"line {line_no}: {which} coordinate is not an integer: {s!r}",
+            line_no,
+            "InvalidCoordinate",
         )
+    return value
 
 
-def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
+def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
+    """Parse one line into a ParsedFeature.
+
+    Returns ``(feature, violation_or_None)``. Under the ``ncbi`` profile a
+    violation is raised; under ``gffutils`` it is returned alongside the
+    feature, because the compatibility contract is to keep the record and
+    annotate it. Mirrors `parser.rs` exactly -- the two engines are diffed
+    against each other by `test_engine_equivalence`.
+    """
+    rejects = profile == "ncbi"
+    violation = None
     fields = line.split("\t")
     if len(fields) < 9:
-        raise _make_error(
-            f"line {line_no}: expected at least 9 tab-separated fields, "
-            f"found {len(fields)}",
-            line_no, "TooFewFields",
+        violation = _make_error(
+            f"line {line_no}: expected at least 9 tab-separated fields, found {len(fields)}",
+            line_no,
+            "TooFewFields",
         )
+        if rejects:
+            raise violation
+        # Compat: gffutils never errors here. `feature_from_line` splits on
+        # tab and `zip(_gffkeys, fields)` truncates, so the missing columns
+        # take their defaults and a space-delimited line becomes one feature
+        # whose seqid is the whole line.
+        while len(fields) < 9:
+            fields.append("" if len(fields) == 8 else ".")
     seqid, source, featuretype, start_s, end_s, score, strand, frame = fields[:8]
     blob = fields[8]
     extra = fields[9:]
@@ -210,13 +273,20 @@ def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
     end = _coord_or_error(end_s, line_no, "end")
     err = _validate(
         line_no=line_no,
-        seqid=seqid, featuretype=featuretype,
-        start=start, end=end,
-        score=score, strand=strand, frame=frame,
-        n_pairs=len(pairs), blob=blob,
+        seqid=seqid,
+        featuretype=featuretype,
+        start=start,
+        end=end,
+        score=score,
+        strand=strand,
+        frame=frame,
+        n_pairs=len(pairs),
+        blob=blob,
     )
     if err is not None:
-        raise err
+        if rejects:
+            raise err
+        violation = violation or err
     return ParsedFeature(
         seqid=seqid,
         source=source,
@@ -229,7 +299,7 @@ def _parse_line_into_feature(line: str, line_no: int) -> ParsedFeature:
         attributes_blob=blob.encode("utf-8"),
         attributes_pairs=pairs,
         extra=extra,
-    )
+    ), violation
 
 
 def _stream_features(
@@ -238,28 +308,44 @@ def _stream_features(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
-    warnings: List[dict],
-    directives: List[str],
+    warnings: list[dict],
+    directives: list[str],
+    profile: str = "ncbi",
 ):
     """Two-pass iteration: collect the first `checklines` features and their
     dialect observations, then continue streaming. Behaves identically when the
     file is shorter than `directives`. ``directives`` is mutated in place so
     callers can read it even if the file contains zero feature rows."""
-    samples: List[dict] = []
-    buffered: List[ParsedFeature] = []
+    samples: list[dict] = []
+    buffered: list[ParsedFeature] = []
     fasta_reached = False
     line_no = 0
 
+    def _record(err) -> None:
+        warnings.append(
+            {
+                "line_no": getattr(err, "line_no", 0),
+                "kind": getattr(err, "kind", ""),
+                "message": getattr(err, "message", str(err)),
+            }
+        )
+
     def _maybe_handle(err) -> bool:
-        """Return True when caller should skip the line, False when caller
-        should propagate (i.e., raise)."""
-        if strict:
+        """Return True when the caller should skip the line, False when it
+        should propagate (i.e. raise).
+
+        Under the compat profile nothing propagates: a record that cannot be
+        parsed at all is dropped with a warning rather than killing the load.
+        """
+        if strict and profile == "ncbi":
             return False
-        warnings.append({
-            "line_no": getattr(err, "line_no", 0),
-            "kind":    getattr(err, "kind", ""),
-            "message": getattr(err, "message", str(err)),
-        })
+        warnings.append(
+            {
+                "line_no": getattr(err, "line_no", 0),
+                "kind": getattr(err, "kind", ""),
+                "message": getattr(err, "message", str(err)),
+            }
+        )
         return True
 
     for line in _iter_lines(stream):
@@ -270,16 +356,26 @@ def _stream_features(
             if line.startswith("##FASTA"):
                 fasta_reached = True
                 break
-            directives.append(line)
+            # Strip the leading `##`, matching gffutils' `_directive_handler`.
+            # `db.directives` is a documented attribute, so the stored form is
+            # part of the compatibility contract.
+            directives.append(line[2:])
             continue
         if line.startswith("#"):
             continue
+        if line.startswith(">"):
+            # A bare `>` starts an embedded FASTA section even without a
+            # preceding `##FASTA` directive; gffutils stops at either.
+            fasta_reached = True
+            break
         try:
-            feat = _parse_line_into_feature(line, line_no)
+            feat, violation = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
+        if violation is not None:
+            _record(violation)
         _, obs = parse_attributes(feat.attributes_blob.decode("utf-8", errors="replace"))
         samples.append(obs)
         buffered.append(feat)
@@ -304,16 +400,24 @@ def _stream_features(
         if line.startswith("##"):
             if line.startswith("##FASTA"):
                 return
-            directives.append(line)
+            # Strip the leading `##`, matching gffutils' `_directive_handler`.
+            # `db.directives` is a documented attribute, so the stored form is
+            # part of the compatibility contract.
+            directives.append(line[2:])
             continue
         if line.startswith("#"):
             continue
+        if line.startswith(">"):
+            # See above: a bare `>` ends the feature section.
+            return
         try:
-            feat = _parse_line_into_feature(line, line_no)
+            feat, violation = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
+        if violation is not None:
+            _record(violation)
         yield feat, directives, dialect
 
 
@@ -321,20 +425,32 @@ class _FallbackIterator:
     """Mirrors the Rust iterator's surface: __iter__/__next__, dialect(),
     directives(). Backwards-compat callers expect both forms.
 
-    Phase 16: also exposes ``warnings`` (a list of dicts populated when
+    Also exposes ``warnings`` (a list of dicts populated when
     ``strict=False``).
     """
 
-    def __init__(self, stream, checklines: int, force_dialect_check: bool,
-                 force_gff: bool, strict: bool = True):
-        self._warnings: List[dict] = []
-        self._directives: List[str] = []
+    def __init__(
+        self,
+        stream,
+        checklines: int,
+        force_dialect_check: bool,
+        force_gff: bool,
+        strict: bool = True,
+        validation: str = "ncbi",
+    ):
+        self._warnings: list[dict] = []
+        self._directives: list[str] = []
         self._gen = _stream_features(
-            stream, checklines, force_dialect_check, force_gff,
-            strict=strict, warnings=self._warnings,
+            stream,
+            checklines,
+            force_dialect_check,
+            force_gff,
+            strict=strict,
+            warnings=self._warnings,
             directives=self._directives,
+            profile=validation,
         )
-        self._dialect = None
+        self._dialect: dict | None = None
         self._exhausted = False
 
     def __iter__(self):
@@ -355,11 +471,30 @@ class _FallbackIterator:
             # The generator runs the dialect-peek phase before its first
             # yield, populating directives + dialect along the way. We
             # drive it just enough to reach that point.
-            first = next(self._gen)
+            item = next(self._gen)
+            # The generator yields `(feature, directives, dialect)`, and the
+            # dialect has to be captured HERE as well as in `__next__`.
+            # Draining without capturing left `.dialect()` returning `{}`
+            # until someone happened to iterate -- so the same call gave a
+            # populated dialect or an empty one depending on nothing the
+            # caller could see. `directives` was fine because the generator
+            # appends into a list this object already owns.
+            _feat, _directives, dialect = item
+            self._dialect = dialect
             # Restore: stash the first record so __next__ still sees it.
-            self._gen = self._chain([first], self._gen)
+            self._gen = self._chain([item], self._gen)
         except StopIteration:
             self._exhausted = True
+            if self._dialect is None:
+                # A file with directives but no features never reaches a
+                # yield, so nothing ever handed us a dialect. Returning `{}`
+                # made `.dialect()["fmt"]` a KeyError on exactly the inputs
+                # where a caller is most likely to be probing before deciding
+                # what to do. The Rust engine reports the default here, so
+                # report the same thing.
+                from gffbase.dialect import default_dialect
+
+                self._dialect = default_dialect()
 
     @staticmethod
     def _chain(prefix, suffix):
@@ -373,13 +508,13 @@ class _FallbackIterator:
             self._drain_for_metadata()
         return self._dialect or {}
 
-    def directives(self) -> List[str]:
+    def directives(self) -> list[str]:
         if not self._directives:
             self._drain_for_metadata()
         return list(self._directives)
 
     @property
-    def warnings(self) -> List[dict]:
+    def warnings(self) -> list[dict]:
         return list(self._warnings)
 
 
@@ -389,9 +524,10 @@ def parse_file(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
 ) -> _FallbackIterator:
     stream = _open(path)
-    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict)
+    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
 def parse_bytes(
@@ -400,15 +536,17 @@ def parse_bytes(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
+    validation: str = "ncbi",
 ) -> _FallbackIterator:
     stream = io.StringIO(data.decode("utf-8", errors="replace"))
-    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict)
+    return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
 def detect_dialect(path: str, checklines: int = 10) -> dict:
-    # Dialect detection is non-strict by design.
-    it = parse_file(path, checklines=checklines, strict=False)
-    drained: List[ParsedFeature] = []
+    # Dialect detection is non-strict by design, and uses the permissive
+    # profile so a malformed line in the sample cannot poison detection.
+    it = parse_file(path, checklines=checklines, strict=False, validation="gffutils")
+    drained: list[ParsedFeature] = []
     try:
         for _ in range(checklines):
             drained.append(next(it))

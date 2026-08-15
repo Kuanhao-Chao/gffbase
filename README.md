@@ -1,13 +1,15 @@
-# GFFBase
+<p align="center">
+  <img src="docs/assets/logo.svg#gh-light-mode-only" alt="gffbase" width="62%">
+  <img src="docs/assets/logo-white.svg#gh-dark-mode-only" alt="gffbase" width="62%">
+</p>
+
 
 [![PyPI version](https://img.shields.io/pypi/v/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![Python versions](https://img.shields.io/pypi/pyversions/gffbase.svg)](https://pypi.org/project/gffbase/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-gffbase.khchao.com-blue.svg)](https://gffbase.khchao.com/)
-[![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen.svg)](#testing)
-[![Coverage](https://img.shields.io/badge/coverage-99.19%25-brightgreen.svg)](#testing)
-[![Validated](https://img.shields.io/badge/validated-GENCODE%20%7C%20RefSeq%20%7C%20MANE%20%7C%20CHESS%203-blue.svg)](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus)
+[![Docs](https://img.shields.io/badge/docs-khchao.com%2Fgffbase-blue.svg)](https://khchao.com/gffbase/)
+[![CI](https://github.com/Kuanhao-Chao/gffbase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kuanhao-Chao/gffbase/actions/workflows/ci.yml)
 
 ---
 
@@ -30,19 +32,21 @@ migrate by changing one import line.
 
 ### Three reasons it matters
 
-1. **🚀 ≥ 32× faster GENCODE GTF ingest** (v49, 6.07 M lines) — and
-   **mathematically more efficient**: legacy needs a Python loop +
-   ~5 million correlated SQLite subqueries to *invent* the missing
-   gene/transcript rows, while gffbase does the same work in two
-   set-based DuckDB `GROUP BY` aggregations + one recursive CTE.
-   *([Proven by a same-release GTF/GFF3 head-to-head](#-comprehensive-human-genome-annotations--validated-across-every-canonical-corpus))*
-2. **⚡ 36.68× faster bulk ML extraction** — `children_batched(format='arrow')`
-   returns 50 000 transcripts → 1.6 M exons as a zero-copy PyArrow
-   table in **1.16 s**. No Python `Feature` objects, ever. *([How?](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
-3. **🛡️  Validated NCBI compliance** — all four canonical human-genome
-   annotations (GENCODE / RefSeq / MANE / CHESS 3) ingest cleanly with
-   **zero strict-mode warnings**. RefSeq's split-CDS duplicate-ID
-   convention is handled automatically.
+1. **Whole-genome ingest, measured.** gffbase is faster than legacy `gffutils`
+   on every corpus benchmarked, and the gap is widest on GTF — where the
+   missing gene and transcript rows have to be *invented*. Legacy does that
+   with a Python loop and millions of correlated SQLite subqueries; gffbase
+   does it with two set-based DuckDB `GROUP BY` aggregations and one recursive
+   CTE. *([The numbers](#-measured-against-legacy-gffutils))*
+2. **Bulk extraction without Python objects.**
+   `children_batched(format='arrow')` answers "every exon for these tens of
+   thousands of transcripts" with a single set-based query returning a
+   `pyarrow.Table` that shares memory with DuckDB. No `Feature` object is
+   constructed at any layer. *([How](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
+3. **Validated against real annotations.** All five canonical human-genome
+   releases (GENCODE GTF + GFF3, RefSeq, MANE, CHESS 3) ingest cleanly and pass
+   a 14-invariant structural validator. The split-CDS duplicate-ID convention
+   is handled either way you ask for it.
 
 ---
 
@@ -52,10 +56,10 @@ migrate by changing one import line.
 pip install gffbase
 ```
 
-Universal `abi3-py39` wheels — single binary per arch covers CPython
-3.9 → 3.13. No Rust toolchain required at install time.
+Universal `abi3-py310` wheels — single binary per arch covers CPython
+3.10 → 3.14. No Rust toolchain required at install time.
 
-For source/dev installs (Rust ≥ 1.69 + maturin):
+For source/dev installs (Rust >= 1.83 + maturin):
 
 ```bash
 pip install -e .[dev]
@@ -66,6 +70,7 @@ maturin develop --release
 
 ## 🏃 Quick start — row-by-row (drop-in for `gffutils`)
 
+<!-- docs-test: skip reason="needs the GENCODE v49 corpus" -->
 ```python
 from gffbase import create_db
 
@@ -84,18 +89,20 @@ for f in db.region("chr17:43044295-43125483", featuretype="exon"):
 
 If you're migrating from `gffutils`, change one line:
 
+<!-- docs-test: skip reason="illustrative: contains an elided fragment" -->
 ```python
 import gffbase as gffutils    # one-line alias migration
 db = gffutils.create_db(...)  # everything else identical
 ```
 
-(But please read the [Migration Guide](https://gffbase.khchao.com/migration/) first — it has
+(But please read the [Migration Guide](https://khchao.com/gffbase/migration/) first — it has
 **one** important note about ML loops.)
 
 ---
 
 ## 🤖 Quick start — vectorized for ML
 
+<!-- docs-test: skip reason="illustrative: names gencode.duckdb, which the reader supplies" -->
 ```python
 from gffbase import FeatureDB
 
@@ -115,52 +122,63 @@ overlaps = db.region_batched(peaks, featuretype="CDS", format="arrow")
 ```
 
 See the [Machine Learning Workflows
-Cookbook](https://gffbase.khchao.com/cookbooks/machine_learning_workflows/) for end-to-end
+Cookbook](https://khchao.com/gffbase/cookbooks/machine_learning_workflows/) for end-to-end
 pipelines with PyTorch and Hugging Face `datasets`.
 
 ---
 
-## ⚡ Comprehensive Human Genome Annotations — validated across every canonical corpus
+## ⚡ Measured against legacy `gffutils`
 
-Validated head-to-head against legacy `gffutils` on the four canonical
-human-genome annotation sources, including the **GENCODE v49 GTF and
-GFF3 versions of the same release** — a same-biology, same-features,
-different-format pairing that exposes the GTF Synthesis Advantage in
-its purest form:
+Head-to-head on the five canonical human-genome annotation releases — including
+the **GENCODE v49 GTF and GFF3 editions of the same release**, a same-biology,
+different-format pairing that isolates where the ingest cost actually lives.
 
-| Corpus                   | Format | Lines      | gffbase ingest | legacy ingest | **speedup**   | spatial qps | batched (5 k anchors) |
-| ------------------------ | :----: | ---------: | -------------: | ------------: | ------------: | ----------: | --------------------: |
-| **GENCODE v49** (basic)  |  GTF   |  6,068,892 |   **4 min 37 s** | ≥ 2 hr 30 min[^1]    | **🚀 ≥ 32×**  |   **1,204** | 172 ms / 596 k desc   |
-| **GENCODE v49** (basic)  |  GFF3  |  6,066,054 |   **6 min 7 s** | 11 min 23 s    | **1.86×**     |   **1,292** | 422 ms / 1.93 M desc  |
-| **RefSeq GRCh38.p14**    |  GFF3  |  4,932,571 |   **4 min 12 s**[^2] |   6 min 5 s   | **1.45×**     |   **1,011** | 263 ms / 999 k desc   |
-| **MANE v1.5** (Ensembl)  |  GFF3  |    524,834 |    **21.6 s**  |    45.1 s     | **2.09×**     |   **1,766** |  78 ms / 156 k desc   |
-| **CHESS 3.1.3**          |  GFF3  |  2,761,061 |    **53.6 s**  |  2 min 13.1 s | **2.48×**     |   **1,175** |  91 ms / 161 k desc   |
+<!-- BEGIN GENERATED: corpus-table -->
+| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
+| --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | > 1 hr 30 min | **> 22.0×** | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
+| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **3 min 1 s** | 3 min 37 s | **1.20×** | 4.73 GB | **1,188** | 352 ms / 999 k desc |
+| **CHESS 3.1.3** | GFF3 | 2,761,061 | **48.4 s** | 1 min 9 s | **1.43×** | 2.43 GB | **1,893** | 96 ms / 161 k desc |
+| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **19.8 s** | 26.5 s | **1.34×** | 1.61 GB | **2,086** | 80 ms / 156 k desc |
+<!-- END GENERATED: corpus-table -->
 
-[^1]: Legacy `gffutils.create_db()` on GENCODE v49 GTF (6.07 M lines) hits the bench's safety-valve cap (75 min). The reported wall is a conservative 2× extrapolation — the canonical GENCODE v45 GTF (2.0 M lines, 3× smaller) ran uncapped at **3,582 s (59 min 42 s)** on the same hardware, so the v49 wall is well past 2 hours. See [Performance Comparison §"GTF Synthesis Advantage"](https://gffbase.khchao.com/performance/#the-gtf-synthesis-advantage-proven-by-a-same-release-head-to-head) for the formal cost model.
-[^2]: Result of the v0.1.0 ingest-pipeline optimization — the same RefSeq corpus used to take 7 min 49 s before the GFF3 path was re-architected to stamp `seqid_y` and `bbox` inline during the Arrow batch INSERT.
+<!-- BEGIN GENERATED: benchmark-provenance -->
+**Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O  
+**Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13  
+**Commit:** `1d52bf6738e0` · **Run:** 2026-08-15T22:56:50Z  
+*Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
+<!-- END GENERATED: benchmark-provenance -->
 
-**The same biological release, ingested in two different formats, by
-two different engines** — that's the load-bearing comparison. Legacy
-GFF3 ingest finishes in 11 min because every parent edge is explicit;
-legacy GTF ingest takes hours because the parent rows have to be
-*invented* from the data (one Python ↔ SQLite round-trip per missing
-row). gffbase replaces those millions of round-trips with two
-set-based DuckDB `GROUP BY` aggregations + one recursive CTE — the
-**same code path** runs for GTF and GFF3, which is why the gffbase
-column barely shifts (4 min 37 s → 6 min 7 s) between the two rows
-while the legacy column balloons by 13×–20×.
+A `>` in the legacy column marks a run that was **killed at the safety valve
+without finishing**, so both the wall time and the speedup are floors. Nothing
+in this table is extrapolated.
 
-**Robustness:** every corpus ingests cleanly with **zero strict-mode
-warnings** from the NCBI-spec-hardened Rust parser (9 enforced rules,
-line-numbered `GFFFormatError`, opt-in non-strict mode). RefSeq's
-notorious duplicate-`ID=cds-NP_xxx` convention (split CDS segments) is
-handled transparently — gffbase mirrors
-`gffutils.merge_strategy="create_unique"` automatically and records the
-remap in the `duplicates` table. No config knobs to flip.
+**Why the two GENCODE rows differ so much for legacy and so little for
+gffbase.** GFF3 states parentage explicitly; GTF only implies it, so the gene
+and transcript rows have to be *invented* from the span of their children.
+Legacy does that with a Python loop and one correlated SQL subquery per missing
+parent — millions of round trips. gffbase does it with two set-based `GROUP BY`
+aggregations and one recursive CTE, and runs the *same* code path for both
+formats.
 
-📊 Full reproducible numbers + per-corpus root-cause analysis:
-[Performance Comparison](https://gffbase.khchao.com/performance/). Re-run via
-`python benchmarks/06_mega.py --legacy-timeout 900`.
+**Robustness.** Every corpus ingests cleanly through the NCBI-spec-hardened
+Rust parser (9 enforced rules, line-numbered `GFFFormatError`), and every one
+passes the 14-invariant structural validator afterwards.
+
+**Three of the five use the split-CDS convention** — one CDS spread over
+several lines that share an `ID` — namely RefSeq, MANE, and GENCODE's GFF3
+edition. That is not an edge case, so gffbase does not pick a reading for you:
+`merge_strategy` defaults to `"error"`, exactly as in `gffutils`, and you say
+which you want. `merge_strategy="create_unique"` renames the rows as `gffutils`
+would, so a ported script sees what it expects; `mode="strict"` fuses them into
+one discontinuous feature backed by the `segments` table, which is what the
+GFF3 specification actually describes.
+
+📊 Method, fairness constraints and re-run instructions:
+**[Methodology](https://khchao.com/gffbase/performance/methodology/)**. Every
+number is generated from a committed measurement file by
+`tools/gen_benchmark_tables.py`, and a test fails if a published table stops
+matching it.
 
 ---
 
@@ -174,6 +192,7 @@ both wall time and memory. gffbase bypasses Python entirely with a
 single batched call that returns DuckDB's internal Arrow buffers
 directly:
 
+<!-- docs-test: skip reason="illustrative: an id list the reader supplies" -->
 ```python
 # 50 000 transcript IDs → every exon, in one query.
 # Returns a zero-copy pyarrow.Table — no Python `Feature` object
@@ -192,21 +211,18 @@ ends   = torch.from_numpy(exons.column("end").to_numpy())
 # reconstruct per-transcript groups without re-issuing N queries.
 ```
 
-**Numbers for that one call** (50 000 transcripts, GENCODE basic
-annotation, returning 1.6 M exon rows):
+**Why it is faster, and by how much.** The batched call issues one set-based
+SQL query and hands back DuckDB's own Arrow buffers. The row-by-row
+alternative constructs one Python `Feature` per result row, and at 1.6 M exons
+that allocation dominates everything else — in *both* libraries. Per-corpus
+batched throughput is in the
+[table above](#-measured-against-legacy-gffutils); the
+[Performance page](https://khchao.com/gffbase/performance/) breaks it down.
 
-| Path                                      |        Wall | vs legacy        |
-| ----------------------------------------- | ----------: | ---------------- |
-| gffbase `children_batched(format='arrow')`|   **1.16 s**| **36.68× faster**|
-| legacy `gffutils` row-by-row loop         |     42.55 s | 1.0× (baseline)  |
-| gffbase row-by-row loop                   |     ≥ 642 s | 0.07× *(slower!)*|
-
-This is **the** reason GFFBase exists. Iterating
-`for x in ids: db.children(x)` with DuckDB pays vectorization startup
-per call and is *slower* than legacy's SQLite row-by-row path — but
-the batched API obliterates both row-by-row paths because it issues
-one set-based SQL query and avoids constructing any Python `Feature`
-objects whatsoever.
+Note the trade honestly: iterating `for x in ids: db.children(x)` in gffbase is
+**slower** than legacy's SQLite row-by-row path, because DuckDB pays
+vectorization startup per call. That is why the batched API exists, and why the
+[Migration guide](https://khchao.com/gffbase/migration/) puts it front and centre.
 
 `region_batched(...)` and `parents_batched(...)` have the same
 zero-copy contract for spatial and parent workloads.
@@ -215,11 +231,13 @@ zero-copy contract for spatial and parent workloads.
 
 ## ✨ What's inside
 
-- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding,
-  GTF semicolon-in-quotes safe, gzipped input transparent. Hardened
-  against the NCBI GFF3 spec (line-numbered `GFFFormatError`,
-  strict / non-strict modes, 9 enforced rules).
-- **DuckDB columnar storage** — 7-table schema, set-based GTF
+- **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding
+  *and* percent-encoding on the way back out, GTF semicolon-in-quotes safe,
+  gzipped input transparent. Hardened against the NCBI GFF3 spec
+  (line-numbered `GFFFormatError`, 9 enforced rules, `compat`/`strict`
+  profiles).
+- **DuckDB columnar storage** — 11-table schema (plus 3 compatibility
+  views), set-based GTF
   gene/transcript synthesis, recursive-CTE transitive closure,
   per-seqid-banded R-tree spatial index built inline during ingest.
 - **Smart routing** — `region()` auto-picks R-tree vs B-tree;
@@ -230,23 +248,32 @@ zero-copy contract for spatial and parent workloads.
   `polars.DataFrame` directly out of DuckDB's buffer pool.
 - **Drop-in legacy API** — `FeatureDB`, `Feature`, `create_db`,
   `DataIterator`, `GFFWriter`, `merge_criteria`, `interfeatures`,
-  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`.
-- **abi3 wheels** — single binary per arch covers CPython 3.9–3.13.
+  `bed12`, `execute()` SQL escape hatch, `export_sqlite()`. 97% of the
+  gffutils 0.14 symbol surface, with every remaining difference declared and
+  tested.
+- **Discontinuous features** — `MultipartFeature` / `FeatureSegment`, per
+  segment phase, `covered_length`, and `explode_segments=` on the batched
+  APIs. Several lines sharing one `ID` are one logical feature.
+- **A command line** — `gffbase create|fetch|children|parents|region|search|
+  rmdups|sanitize|validate|migrate`. See [the CLI reference](cli.md).
+- **Post-ingest validation** — `gffbase.validate` checks 14 invariants, and
+  `gffbase.migrate` upgrades a v1 database in place.
+- **abi3 wheels** — single binary per arch covers CPython 3.10-3.14.
 
 ---
 
 ## 📚 Documentation
 
 Full site rendered with MkDocs Material:
-**[https://gffbase.khchao.com/](https://gffbase.khchao.com/)**
+**[https://khchao.com/gffbase/](https://khchao.com/gffbase/)**
 
 | Page                                                                                       | What's there                                                              |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| [Usage Gallery](https://gffbase.khchao.com/usage_gallery/)                     | Copy-pasteable snippets for every public API method                       |
-| [Performance comparison](https://gffbase.khchao.com/performance/)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
-| [Migration guide for `gffutils` users](https://gffbase.khchao.com/migration/)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
-| [Cookbooks](https://gffbase.khchao.com/cookbooks/)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
-| [API reference](https://gffbase.khchao.com/api/)                               | Every public method, full signatures + docstrings                         |
+| [Usage Gallery](https://khchao.com/gffbase/usage_gallery/)                     | Copy-pasteable snippets for every public API method                       |
+| [Performance comparison](https://khchao.com/gffbase/performance/)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
+| [Migration guide for `gffutils` users](https://khchao.com/gffbase/migration/)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
+| [Cookbooks](https://khchao.com/gffbase/cookbooks/)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
+| [API reference](https://khchao.com/gffbase/api/)                               | Every public method, full signatures + docstrings                         |
 
 To build the docs locally:
 
@@ -260,12 +287,34 @@ mkdocs serve            # http://localhost:8000
 ## 🧪 Testing
 
 ```bash
-pip install -e .[test]
-pytest                  # 523 passed, 7 skipped, 99.19% coverage
+pip install -e '.[test,all]'
+pytest
+pytest --cov=gffbase --cov-report=term     # coverage report
 ```
 
+The suite passes in full with the compiled extension built and the DuckDB
+spatial extension available. Without them, the Rust-engine and R-tree cells
+skip rather than fail — CI runs dedicated jobs where a missing capability is
+an error, so those paths cannot silently go unexercised.
+
+Three things are checked that most suites do not:
+
+- **Differential parity** against a git-pinned `gffutils` build, with every
+  deliberate difference declared in a register that fails both on an
+  undeclared gap and on a declaration that has gone stale.
+- **The documentation's own code.** Every runnable snippet in `docs/`,
+  `README.md` and `MIGRATION.md` is executed against the vendored fixtures, so
+  a documented example cannot rot unnoticed.
+- **Release invariants** — version agreement across every file that states one,
+  packaging manifests resolving to real files, workflow YAML that GitHub will
+  actually load, and every published benchmark table matching its committed
+  measurements.
+
+Add `-m corpus`, after `python benchmarks/download_corpora.py`, to run the
+same operations against the real human-genome annotations.
+
 CI runs the full matrix on Linux + macOS + Windows, both R-tree and
-B-tree fallback paths, on Python 3.9 / 3.11 / 3.13.
+B-tree fallback paths, on Python 3.10 / 3.12 / 3.14.
 
 ---
 
@@ -275,7 +324,7 @@ GFFBase welcomes pull requests, bug reports, and feature suggestions.
 Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide:
 
 - Rust + Python development setup (`maturin develop --release`)
-- Running the test suite + the 99 % coverage gate
+- Running the test suite + the coverage gate (95 % R-tree / 94 % B-tree)
 - Branch naming, Conventional Commits, the PR checklist
 
 The repo ships standard
@@ -302,13 +351,14 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.1.0},
+  version = {0.2.0},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```
 
-Per-version DOIs and a `CITATION.cff` for GitHub's "Cite this
-repository" button are tracked on the
+The repository also ships a [`CITATION.cff`](CITATION.cff), so GitHub's
+"Cite this repository" button produces an up-to-date reference. Per-version
+DOIs are tracked on the
 [Releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
 
 ---

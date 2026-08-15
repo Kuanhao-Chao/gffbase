@@ -18,12 +18,16 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import tempfile
-from typing import Iterable, Optional, Union
+from collections.abc import Iterable
+from typing import IO, TYPE_CHECKING
 
-from gffbase.feature import Feature
+if TYPE_CHECKING:  # pragma: no cover - import cycle at runtime
+    from gffbase.feature import Feature
+    from gffbase.interface import FeatureDB
 
 
 class GFFWriter:
@@ -31,23 +35,27 @@ class GFFWriter:
 
     def __init__(
         self,
-        out: Union[str, "os.PathLike", "io.IOBase"],
+        out: str | os.PathLike | io.IOBase,
         with_header: bool = True,
         in_place: bool = False,
     ):
         self.with_header = with_header
         self.in_place = in_place
-        self._opened_path: Optional[str] = None
-        self._target_path: Optional[str] = None
+        self._opened_path: str | None = None
+        self._target_path: str | None = None
+        self._fh: IO[str]
 
         if hasattr(out, "write"):
-            self._fh = out
+            self._fh = out  # type: ignore[assignment]
         elif in_place:
             # Atomic write via tempfile, swap on close.
             self._target_path = str(out)
             tmp = tempfile.NamedTemporaryFile(
-                mode="w", delete=False, dir=os.path.dirname(self._target_path) or ".",
-                suffix=".gffbase.tmp", encoding="utf-8",
+                mode="w",
+                delete=False,
+                dir=os.path.dirname(self._target_path) or ".",
+                suffix=".gffbase.tmp",
+                encoding="utf-8",
             )
             self._fh = tmp.file
             self._opened_path = tmp.name
@@ -60,7 +68,13 @@ class GFFWriter:
         if self.with_header:
             self._fh.write("##gff-version 3\n")
 
-    def write_rec(self, rec) -> None:
+    def write_rec(self, rec: Feature | str) -> None:
+        """Write one record, followed by a newline.
+
+        Args:
+            rec: A `Feature`, or a pre-formatted GFF line as a string. A
+                trailing newline on a string is not doubled.
+        """
         if isinstance(rec, str):
             line = rec.rstrip("\n")
         else:
@@ -68,31 +82,64 @@ class GFFWriter:
         self._fh.write(line + "\n")
 
     def write_recs(self, recs: Iterable) -> None:
+        """Write many records, in the order given.
+
+        Args:
+            recs: An iterable of `Feature` objects or GFF line strings.
+        """
         for r in recs:
             self.write_rec(r)
 
-    def write_gene_recs(self, db, gene_id) -> None:
+    def write_gene_recs(self, db: FeatureDB, gene_id: str | Feature) -> None:
+        """Write a gene and its ENTIRE subtree, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            gene_id: The gene, as an id or a `Feature`.
+        """
         gene = db[gene_id] if isinstance(gene_id, str) else gene_id
         self.write_rec(gene)
         for child in db.children(gene, level=None, order_by="start"):
             self.write_rec(child)
 
-    def write_mRNA_children(self, db, mrna_id) -> None:
+    def write_mRNA_children(self, db: FeatureDB, mrna_id: str | Feature) -> None:
+        """Write a transcript and its DIRECT children, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            mrna_id: The transcript, as an id or a `Feature`.
+        """
         mrna = db[mrna_id] if isinstance(mrna_id, str) else mrna_id
         self.write_rec(mrna)
         for child in db.children(mrna, level=1, order_by="start"):
             self.write_rec(child)
 
-    def write_exon_children(self, db, exon_id) -> None:
+    def write_exon_children(self, db: FeatureDB, exon_id: str | Feature) -> None:
+        """Write an exon and its direct children, sorted by start.
+
+        Args:
+            db: The `FeatureDB` to read from.
+            exon_id: The exon, as an id or a `Feature`.
+        """
         exon = db[exon_id] if isinstance(exon_id, str) else exon_id
         self.write_rec(exon)
         for child in db.children(exon, level=1, order_by="start"):
             self.write_rec(child)
 
     def close(self) -> None:
+        """Flush, and close only a handle this writer opened.
+
+        A stream the caller passed in belongs to the caller. Closing it -- as
+        this used to, and as gffutils still does -- means
+        `GFFWriter(sys.stdout)` shuts stdout down for the whole process, so
+        anything written afterwards raises `ValueError: I/O operation on closed
+        file`. It is flushed instead, which is the part that actually matters
+        for the output being complete.
+        """
         if self._fh is not None and not self._fh.closed:
             self._fh.flush()
-            self._fh.close()
+            if self._opened_path is not None:
+                self._fh.close()
         if self.in_place and self._opened_path and self._target_path:
             shutil.move(self._opened_path, self._target_path)
 

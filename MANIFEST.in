@@ -10,19 +10,19 @@ recursive-include rust/src *.rs
 
 # Python source tree (also covered by [tool.maturin] python-source).
 recursive-include python/gffbase *.py
-recursive-include python/gffbase *.pyi
+include python/gffbase/py.typed
 
 # Tests + fixtures bundled so `pytest` works against an installed sdist.
 recursive-include tests *.py
 recursive-include tests/data *.gff3 *.gtf
 
-# Developer documentation (Phase reports + summaries).
-include PHASE3_PARSER_SUMMARY.md
-include PHASE4_INGESTION_SUMMARY.md
-include PHASE5_API_SUMMARY.md
-include PHASE6_BENCHMARK_REPORT.md
-include PHASE7_REMEDIATION_REPORT.md
-include PHASE8_PACKAGING_SUMMARY.md
+# Project documentation shipped in the sdist.
+include CHANGELOG.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+include SECURITY.md
+include CITATION.cff
+include MIGRATION.md
 
 # Excludes — we never want compiled extensions / caches in the sdist.
 prune target

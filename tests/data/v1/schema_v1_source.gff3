@@ -1,0 +1,6 @@
+##gff-version 3
+chr1	rs	gene	100	900	.	+	.	ID=g1;Name=alpha
+chr1	rs	mRNA	100	900	.	+	.	ID=t1;Parent=g1
+chr1	rs	CDS	100	200	.	+	0	ID=cds1;Parent=t1
+chr1	rs	CDS	800	900	.	+	2	ID=cds1;Parent=t1
+chr1	rs	exon	100	200	.	+	.	ID=e1;Parent=t1

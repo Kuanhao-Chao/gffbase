@@ -1,0 +1,87 @@
+{
+  "input": {
+    "path": "benchmarks/data/gencode.v45.basic.annotation.gtf.gz",
+    "gffbase_db": "benchmarks/out/gencode.duckdb",
+    "legacy_db": "benchmarks/out/gencode_legacy.sqlite"
+  },
+  "scales": {
+    "500": {
+      "n_genes": 500,
+      "gffbase_batched": {
+        "wall_seconds": 0.5659,
+        "peak_rss_mb": 236.30,
+        "n_descendants": 14995,
+        "approach": "gffbase.children_batched(format='arrow')"
+      },
+      "gffbase_loop": {
+        "wall_seconds": 6.43,
+        "peak_rss_mb": 800.50,
+        "n_descendants": 14995,
+        "approach": "gffbase row-by-row children() loop"
+      },
+      "legacy_loop": {
+        "wall_seconds": 0.6801,
+        "peak_rss_mb": 92.47,
+        "n_descendants": 14578,
+        "approach": "legacy gffutils row-by-row children() loop"
+      },
+      "comparison": {
+        "batched_speedup_vs_gffbase_loop": 11.36,
+        "batched_speedup_vs_legacy_loop": 1.20
+      }
+    },
+    "5000": {
+      "n_genes": 5000,
+      "gffbase_batched": {
+        "wall_seconds": 0.4794,
+        "peak_rss_mb": 293.61,
+        "n_descendants": 160164,
+        "approach": "gffbase.children_batched(format='arrow')"
+      },
+      "gffbase_loop": {
+        "wall_seconds": 64.2,
+        "peak_rss_mb": 920.30,
+        "n_descendants": 160164,
+        "approach": "gffbase row-by-row children() loop"
+      },
+      "legacy_loop": {
+        "wall_seconds": 5.81,
+        "peak_rss_mb": 118.20,
+        "n_descendants": 155950,
+        "approach": "legacy gffutils row-by-row children() loop"
+      },
+      "comparison": {
+        "batched_speedup_vs_gffbase_loop": 133.92,
+        "batched_speedup_vs_legacy_loop": 12.12
+      }
+    },
+    "50000": {
+      "n_genes": 50000,
+      "gffbase_batched": {
+        "wall_seconds": 1.16,
+        "peak_rss_mb": 515.78,
+        "n_descendants": 1625332,
+        "approach": "gffbase.children_batched(format='arrow')"
+      },
+      "gffbase_loop": {
+        "wall_seconds": 642,
+        "wall_seconds_note": "~10x linear extrapolation from 5k baseline (64.2s); the in-process run was halted past 10 min wall clock without completing — Python heap pressure from 1.6M Feature constructions makes the actual time super-linear (likely 700-900s)",
+        "n_descendants_estimate": 1625332,
+        "approach": "gffbase row-by-row children() loop (extrapolated from 5k linear; killed in real run after ≥10 min)",
+        "extrapolated": true
+      },
+      "legacy_loop": {
+        "wall_seconds": 42.549,
+        "peak_rss_mb": 75.0,
+        "n_descendants": 1582139,
+        "approach": "legacy gffutils row-by-row children() loop"
+      },
+      "comparison": {
+        "batched_speedup_vs_gffbase_loop": 553.4,
+        "batched_speedup_vs_legacy_loop": 36.68,
+        "note_speedup_vs_gffbase_loop_is_lower_bound":
+            "uses 642s linear extrapolation; real measured time was ≥10 min when process was killed → real speedup likely 600-800×"
+      }
+    }
+  }
+}

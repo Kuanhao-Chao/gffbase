@@ -30,7 +30,9 @@ use memchr::memchr;
 
 use crate::attributes::parse_attributes;
 use crate::dialect::{self, Dialect};
-use crate::validate::{validate_attributes_pairs, validate_fields, ErrorKind, GffError};
+use crate::validate::{
+    validate_attributes_pairs, validate_fields, ErrorKind, GffError, ValidationProfile,
+};
 
 #[derive(Debug, Clone)]
 pub struct Record {
@@ -58,6 +60,10 @@ pub struct ParseOptions {
     /// `warnings` vector — the caller can inspect them via
     /// `RecordIter::warnings()`.
     pub strict: bool,
+    /// Which rule set to apply. `Gffutils` keeps a violating record and
+    /// records a warning; `Ncbi` rejects it (raising or dropping per
+    /// `strict`). See `validate::ValidationProfile`.
+    pub profile: ValidationProfile,
 }
 
 /// A simple text source: either a Vec<u8> we own or a Read trait object.
@@ -72,7 +78,9 @@ impl FileSource {
         let f = File::open(path)?;
         let is_gz = path.extension().map(|e| e == "gz").unwrap_or(false);
         if is_gz {
-            Ok(FileSource::Stream(Box::new(BufReader::new(MultiGzDecoder::new(f)))))
+            Ok(FileSource::Stream(Box::new(BufReader::new(
+                MultiGzDecoder::new(f),
+            ))))
         } else {
             // For plain text we read fully into memory. mmap could be a future
             // optimization but adds platform complexity; the parser is already
@@ -89,13 +97,14 @@ impl FileSource {
 }
 
 pub struct RecordIter {
-    buf: Vec<u8>,            // entire input materialized
+    buf: Vec<u8>, // entire input materialized
     pos: usize,
     dialect: Dialect,
     directives: Vec<String>,
     fasta_reached: bool,
     line_no: usize,
     strict: bool,
+    profile: ValidationProfile,
     warnings: Vec<GffError>,
 }
 
@@ -117,6 +126,7 @@ impl RecordIter {
             fasta_reached: false,
             line_no: 0,
             strict: opts.strict,
+            profile: opts.profile,
             warnings: Vec::new(),
         };
         iter.peek_dialect(&opts);
@@ -146,7 +156,11 @@ impl RecordIter {
         let saved_fasta = self.fasta_reached;
 
         let mut samples: Vec<Dialect> = Vec::new();
-        let limit = if opts.force_dialect_check { usize::MAX } else { opts.checklines };
+        let limit = if opts.force_dialect_check {
+            usize::MAX
+        } else {
+            opts.checklines
+        };
         while samples.len() < limit {
             match self.next_raw_record() {
                 Some(Ok((_, _, _, _, _, _, _, _, blob, _))) => {
@@ -180,36 +194,60 @@ impl RecordIter {
     #[allow(clippy::type_complexity)]
     fn next_raw_record(
         &mut self,
-    ) -> Option<Result<
-        (
-            String, // seqid
-            String, // source
-            String, // featuretype
-            Option<i64>, // start
-            Option<i64>, // end
-            String, // score
-            String, // strand
-            String, // frame
-            Vec<u8>, // blob
-            Vec<String>, // extra
-        ),
-        GffError,
-    >> {
+    ) -> Option<
+        Result<
+            (
+                String,      // seqid
+                String,      // source
+                String,      // featuretype
+                Option<i64>, // start
+                Option<i64>, // end
+                String,      // score
+                String,      // strand
+                String,      // frame
+                Vec<u8>,     // blob
+                Vec<String>, // extra
+            ),
+            GffError,
+        >,
+    > {
         loop {
             if self.fasta_reached || self.pos >= self.buf.len() {
                 return None;
             }
             // We materialize the line into an owned Vec to drop the borrow on
             // self.buf before we touch other &self fields below.
-            let line_owned: Vec<u8> = match self.read_line() {
-                Some(slice) => slice.to_vec(),
-                None => return None,
-            };
+            let line_owned: Vec<u8> = self.read_line()?.to_vec();
             let cur_line_no = self.line_no;
             if line_owned.is_empty() {
                 continue;
             }
-            let line = line_owned.as_slice();
+            // Trim the trailing \r BEFORE anything inspects the line. It used
+            // to happen further down, after directive handling had already
+            // run, so on a CRLF file every directive was stored with a
+            // trailing \r -- `##sequence-region chr1 1 1000\r` -- while the
+            // Python fallback, which reads with universal newlines, stored it
+            // clean. The two engines are supposed to be indistinguishable.
+            let line = trim_cr(line_owned.as_slice());
+            if line.is_empty() {
+                continue;
+            }
+            // Validate UTF-8 once, for the whole line, before any field is
+            // read. Doing it per-field meant each field chose its own failure
+            // mode: the attribute blob silently became "" (dropping every
+            // attribute on the line, ID included), while seqid and
+            // featuretype went through `from_utf8_lossy` and silently became
+            // U+FFFD -- a chromosome name that matches nothing, with no
+            // warning. The Python fallback decodes the whole line at read
+            // time, so a line-level check is also what makes the two engines
+            // agree.
+            if std::str::from_utf8(line).is_err() {
+                return Some(Err(GffError::new(
+                    self.line_no,
+                    ErrorKind::InvalidAttribute,
+                    "line is not valid UTF-8".to_string(),
+                )));
+            }
             // Directive / comment handling.
             if line.starts_with(b"##") {
                 let s = std::str::from_utf8(line).unwrap_or("").to_string();
@@ -217,25 +255,49 @@ impl RecordIter {
                     self.fasta_reached = true;
                     return None;
                 }
-                self.directives.push(s);
+                // Strip the leading `##`, matching gffutils' directive
+                // handler: `db.directives` is a documented attribute, so the
+                // stored form is part of the compatibility contract.
+                self.directives.push(s[2..].to_string());
                 continue;
+            }
+            // A bare `>` line starts an embedded FASTA section even without a
+            // preceding `##FASTA` directive -- gffutils stops at either, and
+            // FBgn0031208.gff relies on it. Without this the sequence lines
+            // become degenerate features.
+            if line.first() == Some(&b'>') {
+                self.fasta_reached = true;
+                return None;
             }
             if line.starts_with(b"#") {
                 continue;
             }
-            // Trim trailing \r (Windows files).
-            let line = trim_cr(line);
-            // Tab split.
-            let fields = split_tabs(line);
+            // Tab split. (`line` was \r-trimmed above, before any path
+            // inspected it.)
+            let mut fields = split_tabs(line);
             if fields.len() < 9 {
-                return Some(Err(GffError::new(
+                let err = GffError::new(
                     cur_line_no,
                     ErrorKind::TooFewFields,
                     format!(
                         "expected at least 9 tab-separated fields, found {}",
                         fields.len()
                     ),
-                )));
+                );
+                if self.profile.rejects() {
+                    return Some(Err(err));
+                }
+                // Compat: gffutils never errors here. `feature_from_line`
+                // splits on tab and `zip(_gffkeys, fields)` truncates, so a
+                // space-delimited line becomes one feature whose seqid is the
+                // whole line and whose remaining columns take their defaults.
+                // Reproducing that is deliberate -- refusing a file the oracle
+                // reads is worse for a drop-in -- and the warning is what
+                // makes it safe.
+                self.warnings.push(err);
+                while fields.len() < 9 {
+                    fields.push(if fields.len() == 8 { b"" } else { b"." });
+                }
             }
             let seqid = bytes_to_string(fields[0]);
             let source = bytes_to_string(fields[1]);
@@ -276,7 +338,18 @@ impl RecordIter {
             for ex in fields.iter().skip(9) {
                 extra.push(bytes_to_string(ex));
             }
-            return Some(Ok((seqid, source, featuretype, start, end, score, strand, frame, blob, extra)));
+            return Some(Ok((
+                seqid,
+                source,
+                featuretype,
+                start,
+                end,
+                score,
+                strand,
+                frame,
+                blob,
+                extra,
+            )));
         }
     }
 
@@ -304,11 +377,10 @@ impl Iterator for RecordIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let line_no_for_err = self.line_no.saturating_add(1);
             let raw = match self.next_raw_record() {
                 Some(Ok(r)) => r,
                 Some(Err(e)) => {
-                    if self.strict {
+                    if self.strict && self.profile.rejects() {
                         return Some(Err(e));
                     }
                     self.warnings.push(e);
@@ -321,7 +393,7 @@ impl Iterator for RecordIter {
 
             let is_gtf = matches!(self.dialect.fmt, crate::dialect::Format::Gtf);
             if let Err(e) = validate_fields(
-                self.line_no,           // line we just consumed
+                self.line_no, // line we just consumed
                 &seqid,
                 &featuretype,
                 start,
@@ -332,29 +404,33 @@ impl Iterator for RecordIter {
                 &blob,
                 is_gtf,
             ) {
-                if self.strict {
-                    return Some(Err(e));
+                if self.profile.rejects() {
+                    if self.strict {
+                        return Some(Err(e));
+                    }
+                    self.warnings.push(e);
+                    continue;
                 }
+                // Compat: annotate, keep the record.
                 self.warnings.push(e);
-                continue;
             }
 
+            // Safe: the whole line was UTF-8 validated before any field was
+            // read, so the blob -- a slice of it -- is valid too.
             let blob_str = std::str::from_utf8(&blob).unwrap_or("");
             let (pairs, _obs) = parse_attributes(blob_str);
             // Post-parse attribute structure check (handles both GFF3 and
             // GTF correctly because it inspects what the parser produced).
-            if let Err(e) = validate_attributes_pairs(
-                self.line_no, pairs.len(), &blob, is_gtf,
-            ) {
-                if self.strict {
-                    return Some(Err(e));
+            if let Err(e) = validate_attributes_pairs(self.line_no, pairs.len(), &blob, is_gtf) {
+                if self.profile.rejects() {
+                    if self.strict {
+                        return Some(Err(e));
+                    }
+                    self.warnings.push(e);
+                    continue;
                 }
                 self.warnings.push(e);
-                continue;
             }
-            // Suppress unused-warning under release builds (line_no_for_err is a
-            // defensive snapshot — not used on the happy path).
-            let _ = line_no_for_err;
             return Some(Ok(Record {
                 seqid,
                 source,
@@ -388,7 +464,7 @@ fn split_tabs(line: &[u8]) -> Vec<&[u8]> {
 }
 
 fn trim_cr(line: &[u8]) -> &[u8] {
-    if let Some((&b'\r', rest)) = line.split_last().map(|(b, r)| (b, r)) {
+    if let Some((&b'\r', rest)) = line.split_last() {
         rest
     } else {
         line
@@ -399,22 +475,22 @@ fn bytes_to_string(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-fn parse_coord(b: &[u8]) -> Option<i64> {
-    if b == b"." || b.is_empty() {
-        return None;
-    }
-    let s = std::str::from_utf8(b).ok()?;
-    s.parse::<i64>().ok()
-}
-
-/// Like `parse_coord` but distinguishes "valid `.` / empty" from
+/// Parse a coordinate column, distinguishing "valid `.` / empty" from
 /// "non-numeric trash". Returns `Ok(None)` for `.` / empty, `Ok(Some(n))`
 /// for a real integer, and `Err(())` for anything else. The caller turns
 /// the `Err` into a structured `GffError`.
 fn parse_coord_strict(b: &[u8]) -> Result<Option<i64>, ()> {
-    if b == b"." || b.is_empty() {
+    let s = std::str::from_utf8(b).map_err(|_| ())?;
+    // Trim surrounding whitespace before parsing.
+    //
+    // Python's `int()` strips whitespace and Rust's `parse::<i64>()` does not,
+    // so without this the two engines disagree on any file with a padded
+    // coordinate column -- `wormbase_gff2.txt` has `944828 ` and the Rust
+    // engine dropped that record while the pure-Python fallback kept it.
+    // gffutils accepts it, so compat requires accepting it too.
+    let s = s.trim();
+    if s == "." || s.is_empty() {
         return Ok(None);
     }
-    let s = std::str::from_utf8(b).map_err(|_| ())?;
     s.parse::<i64>().map(Some).map_err(|_| ())
 }

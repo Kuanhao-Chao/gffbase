@@ -20,26 +20,28 @@
 //! callable plus a `parse_bytes(data, ...)` callable. Both yield Python tuples
 //! with the canonical 11-tuple shape that `gffbase.parser` consumes:
 //!
-//!     (seqid, source, featuretype, start, end, score, strand, frame,
-//!      attributes_blob, attributes_pairs, extra)
+//! ```text
+//! (seqid, source, featuretype, start, end, score, strand, frame,
+//!  attributes_blob, attributes_pairs, extra)
+//! ```
 //!
 //! `attributes_pairs` is a list[(key, value, idx)]; `idx` preserves multi-value
 //! ordering. `start`/`end` are int or None (`.` becomes None). `attributes_blob`
 //! is the raw col-9 bytes for byte-faithful round-trip.
 
+use pyo3::create_exception;
+use pyo3::exceptions::{PyIOError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
-use pyo3::exceptions::{PyIOError, PyValueError};
-use pyo3::create_exception;
 
-mod dialect;
 mod attributes;
+mod dialect;
 mod escape;
 mod parser;
 mod validate;
 
-use parser::{ParseOptions, RecordIter, FileSource};
-use validate::GffError;
+use parser::{FileSource, ParseOptions, RecordIter};
+use validate::{GffError, ValidationProfile};
 
 // Phase 16: descriptive parser errors. Subclassing `PyValueError` keeps
 // legacy `pytest.raises(ValueError)` calls working while letting users
@@ -52,22 +54,33 @@ create_exception!(_native, GFFFormatError, PyValueError);
 fn gff_error_to_py(py: Python<'_>, e: GffError) -> PyErr {
     let msg = format!("line {}: {}", e.line_no, e.message);
     let err = GFFFormatError::new_err(msg);
-    // Attach structured fields onto the exception's `value` object.
-    if let Ok(value_obj) = err.value_bound(py).clone().into_any().getattr("__class__") {
-        // mypy / runtime path — set on the bound value, not the type.
-        let _ = value_obj;
-    }
-    if let Some(inst) = err.value_bound(py).extract::<Bound<'_, PyAny>>().ok() {
-        let _ = inst.setattr("line_no", e.line_no);
-        let _ = inst.setattr("kind", e.kind.as_str());
-        let _ = inst.setattr("message", e.message.clone());
-    }
+    // Attach structured fields onto the exception instance so Python callers
+    // can branch on `.kind` and report `.line_no` without re-parsing `str(e)`.
+    let inst = err.value(py);
+    let _ = inst.setattr("line_no", e.line_no);
+    let _ = inst.setattr("kind", e.kind.as_str());
+    let _ = inst.setattr("message", e.message.clone());
     err
+}
+
+/// Map the Python-facing profile name onto the enum.
+///
+/// `"gffutils"` is the compatibility rule set used by `create_db()`;
+/// `"ncbi"` is the full specification. Anything else is a caller error.
+fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
+    match name {
+        "gffutils" | "compat" => Ok(ValidationProfile::Gffutils),
+        "ncbi" | "strict" => Ok(ValidationProfile::Ncbi),
+        other => Err(PyValueError::new_err(format!(
+            "validation must be 'gffutils' or 'ncbi'; got {:?}",
+            other
+        ))),
+    }
 }
 
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
+#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
 fn parse_file(
     py: Python<'_>,
     path: &str,
@@ -75,12 +88,14 @@ fn parse_file(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
-) -> PyResult<PyObject> {
+    validation: &str,
+) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
         strict,
+        profile: parse_profile(validation)?,
     };
     let source = FileSource::open(path)
         .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
@@ -92,7 +107,7 @@ fn parse_file(
 
 /// Parse an in-memory byte buffer. Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true))]
+#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -100,12 +115,14 @@ fn parse_bytes(
     force_dialect_check: bool,
     force_gff: bool,
     strict: bool,
-) -> PyResult<PyObject> {
+    validation: &str,
+) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
         force_dialect_check,
         force_gff,
         strict,
+        profile: parse_profile(validation)?,
     };
     let source = FileSource::from_bytes(data.to_vec());
     let iter = RecordIter::new(source, opts)
@@ -118,7 +135,7 @@ fn parse_bytes(
 /// and return it as a Python dict. Useful for tests and for the API layer.
 #[pyfunction]
 #[pyo3(signature = (path, checklines=10))]
-fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<PyObject> {
+fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<Py<PyAny>> {
     let source = FileSource::open(path)
         .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
     let opts = ParseOptions {
@@ -128,10 +145,11 @@ fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<PyO
         // Dialect detection is non-strict by design: malformed lines in
         // the first `checklines` get skipped without poisoning detection.
         strict: false,
+        profile: ValidationProfile::Gffutils,
     };
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
-    Ok(dialect_to_pydict(py, iter.dialect())?)
+    dialect_to_pydict(py, iter.dialect())
 }
 
 #[pyclass]
@@ -145,7 +163,7 @@ impl PyRecordIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<Option<PyObject>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         let iter = match slf.inner.as_mut() {
             Some(i) => i,
             None => return Ok(None),
@@ -165,11 +183,11 @@ impl PyRecordIterator {
     /// is a dict with keys `line_no`, `kind`, and `message`. Empty when
     /// the iterator was created with `strict=True` (the default), since
     /// errors propagate via `__next__` instead in that mode.
-    fn warnings(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let list = PyList::empty_bound(py);
+    fn warnings(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let list = PyList::empty(py);
         if let Some(it) = &self.inner {
             for w in it.warnings() {
-                let d = PyDict::new_bound(py);
+                let d = PyDict::new(py);
                 d.set_item("line_no", w.line_no)?;
                 d.set_item("kind", w.kind.as_str())?;
                 d.set_item("message", w.message.as_str())?;
@@ -181,7 +199,7 @@ impl PyRecordIterator {
 
     /// Return the inferred dialect dict. Available after iteration begins or
     /// after the peek phase completes.
-    fn dialect(&self, py: Python<'_>) -> PyResult<PyObject> {
+    fn dialect(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match &self.inner {
             Some(it) => dialect_to_pydict(py, it.dialect()),
             None => Ok(py.None()),
@@ -189,8 +207,8 @@ impl PyRecordIterator {
     }
 
     /// Return the list of `##` directives encountered so far.
-    fn directives(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let list = PyList::empty_bound(py);
+    fn directives(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let list = PyList::empty(py);
         if let Some(it) = &self.inner {
             for d in it.directives() {
                 list.append(d.as_str())?;
@@ -200,46 +218,54 @@ impl PyRecordIterator {
     }
 }
 
-fn record_to_pytuple(py: Python<'_>, rec: &parser::Record) -> PyResult<PyObject> {
-    let start_obj: PyObject = match rec.start {
-        Some(v) => v.into_py(py),
-        None => py.None(),
-    };
-    let end_obj: PyObject = match rec.end {
-        Some(v) => v.into_py(py),
-        None => py.None(),
-    };
-    let attrs_blob = PyBytes::new_bound(py, &rec.attributes_blob);
-    let pairs = PyList::empty_bound(py);
+fn record_to_pytuple(py: Python<'_>, rec: &parser::Record) -> PyResult<Py<PyAny>> {
+    // `Option<i64>` converts to an int or to `None`, which is what preserves a
+    // `.` coordinate as Python `None` rather than coercing it to 0.
+    let start_obj = rec.start.into_pyobject(py)?;
+    let end_obj = rec.end.into_pyobject(py)?;
+
+    let attrs_blob = PyBytes::new(py, &rec.attributes_blob);
+
+    let pairs = PyList::empty(py);
     for (k, v, idx) in &rec.attributes_pairs {
-        let t = PyTuple::new_bound(py, &[k.into_py(py), v.into_py(py), (*idx as i64).into_py(py)]);
-        pairs.append(t)?;
+        // `idx` stays an int: the Python side stores it in a SMALLINT column
+        // and orders multi-valued attributes by it.
+        pairs.append(PyTuple::new(
+            py,
+            [
+                k.as_str().into_pyobject(py)?.into_any(),
+                v.as_str().into_pyobject(py)?.into_any(),
+                (*idx as i64).into_pyobject(py)?.into_any(),
+            ],
+        )?)?;
     }
-    let extra_list = PyList::empty_bound(py);
+
+    let extra_list = PyList::empty(py);
     for e in &rec.extra {
         extra_list.append(e.as_str())?;
     }
-    let tup = PyTuple::new_bound(
+
+    let tup = PyTuple::new(
         py,
-        &[
-            rec.seqid.clone().into_py(py),
-            rec.source.clone().into_py(py),
-            rec.featuretype.clone().into_py(py),
-            start_obj,
-            end_obj,
-            rec.score.clone().into_py(py),
-            rec.strand.clone().into_py(py),
-            rec.frame.clone().into_py(py),
-            attrs_blob.into_any().unbind(),
-            pairs.into_any().unbind(),
-            extra_list.into_any().unbind(),
+        [
+            rec.seqid.as_str().into_pyobject(py)?.into_any(),
+            rec.source.as_str().into_pyobject(py)?.into_any(),
+            rec.featuretype.as_str().into_pyobject(py)?.into_any(),
+            start_obj.into_any(),
+            end_obj.into_any(),
+            rec.score.as_str().into_pyobject(py)?.into_any(),
+            rec.strand.as_str().into_pyobject(py)?.into_any(),
+            rec.frame.as_str().into_pyobject(py)?.into_any(),
+            attrs_blob.into_any(),
+            pairs.into_any(),
+            extra_list.into_any(),
         ],
-    );
+    )?;
     Ok(tup.into_any().unbind())
 }
 
-fn dialect_to_pydict(py: Python<'_>, d: &dialect::Dialect) -> PyResult<PyObject> {
-    let dict = pyo3::types::PyDict::new_bound(py);
+fn dialect_to_pydict(py: Python<'_>, d: &dialect::Dialect) -> PyResult<Py<PyAny>> {
+    let dict = pyo3::types::PyDict::new(py);
     dict.set_item("fmt", d.fmt_str())?;
     dict.set_item("field separator", d.field_separator.as_str())?;
     dict.set_item("keyval separator", d.keyval_separator.to_string())?;
@@ -249,7 +275,7 @@ fn dialect_to_pydict(py: Python<'_>, d: &dialect::Dialect) -> PyResult<PyObject>
     dict.set_item("quoted GFF2 values", d.quoted_gff2_values)?;
     dict.set_item("repeated keys", d.repeated_keys)?;
     dict.set_item("semicolon in quotes", d.semicolon_in_quotes)?;
-    let order = PyList::empty_bound(py);
+    let order = PyList::empty(py);
     for k in &d.order {
         order.append(k.as_str())?;
     }
@@ -264,6 +290,6 @@ fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(detect_dialect, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     // Phase 16 — expose the descriptive Python exception type.
-    m.add("GFFFormatError", py.get_type_bound::<GFFFormatError>())?;
+    m.add("GFFFormatError", py.get_type::<GFFFormatError>())?;
     Ok(())
 }

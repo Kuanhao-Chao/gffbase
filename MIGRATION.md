@@ -29,7 +29,7 @@ migration is one import change.
 > ```python
 > # ✅ ONE set-based SQL query for all 50 000 transcripts.
 > # Returns a zero-copy pyarrow.Table — no `Feature` object is ever
-> # constructed. 1.16 s wall on GENCODE v49 → a 553× speedup.
+> # constructed — one set-based query instead of N.
 > exons = db.children_batched(
 >     fifty_thousand_transcript_ids,
 >     featuretype="exon",
@@ -48,8 +48,9 @@ migration is one import change.
 > ```
 >
 > If your code has a `for x in ids: db.children(x, …)` loop and you
-> care about wall time, **convert it now**, before you migrate. This
-> is the only common change required of legacy `gffutils` users.
+> care about wall time, **convert it now**, before you migrate. It is
+> the only change required for *performance*; §6 lists the behaviour
+> changes that may require one for *correctness*.
 
 ---
 
@@ -68,6 +69,7 @@ Every public surface from legacy `gffutils` is preserved verbatim:
 | `gffutils.example_filename(name)` | `gffbase.example_filename(name)` |
 | Exceptions (`FeatureNotFoundError`, …) | same names |
 
+<!-- docs-test: skip reason="illustrative: needs a real annotation file and the gffutils package" -->
 ```python
 # Before
 import gffutils
@@ -77,6 +79,49 @@ db = gffutils.create_db("annotation.gff3", "annotation.db")
 import gffbase as gffutils      # one-line alias migration
 db = gffutils.create_db("annotation.gff3", "annotation.duckdb")
 ```
+
+### The one addition worth making straight away: close the handle
+
+`gffutils` uses SQLite, which hands out shared connections and never locks a
+reader out. gffbase uses DuckDB, which takes an **exclusive lock on the
+database file for the life of a writable handle**. Ported code that opens a
+database and never closes it will work — right up until something else needs
+that file:
+
+<!-- docs-test: skip reason="illustrative: names annotation.gff3, which the reader supplies" -->
+```python
+from gffbase import FeatureDB, create_db
+
+# Best: scope it.
+with create_db("annotation.gff3", "annotation.duckdb", force=True) as db:
+    ...
+
+with FeatureDB("annotation.duckdb") as db:
+    ...
+
+# Or close it yourself.
+db = FeatureDB("annotation.duckdb")
+try:
+    ...
+finally:
+    db.close()
+```
+
+Two symptoms tell you the lock is the problem: another process cannot open the
+database, and on Windows the file cannot be deleted or replaced.
+
+If you fan work out across processes — a PyTorch `DataLoader` with
+`num_workers > 1`, or a `multiprocessing.Pool` — open each worker's handle
+**read-only**, which takes no exclusive lock and so allows any number of
+concurrent readers:
+
+<!-- docs-test: skip reason="illustrative: names annotation.duckdb, which the reader supplies" -->
+```python
+with FeatureDB("annotation.duckdb", read_only=True) as db:
+    ...
+```
+
+Full detail: [Connections & concurrency](https://khchao.com/gffbase/guides/connections/).
 
 All `FeatureDB` methods (`children`, `parents`, `region`,
 `features_of_type`, `interfeatures`, `merge`, `bed12`, `update`,
@@ -94,27 +139,38 @@ database into a legacy `.sqlite` file when you need the old format.
 
 ## 2. What you gain immediately, no code changes
 
-The comprehensive human-genome benchmark, with the v0.1.0 GFF3 ingest
-optimizations applied — head-to-head against legacy `gffutils` across
-GENCODE, RefSeq, MANE, and CHESS 3:
+Head-to-head against legacy `gffutils` across the five canonical human-genome
+annotation releases:
 
-| Corpus                  | Format | gffbase ingest | legacy ingest | speedup       | spatial qps (gffbase R-tree) | batched 5 k anchors |
-| ----------------------- | :----: | -------------: | ------------: | ------------: | ---------------------------: | ------------------: |
-| GENCODE v49 (basic)     |  GTF   |   4 min 37 s   | ≥ 2 hr 30 min | **🚀 ≥ 32×**  |                    **1,204** | 172 ms / 596 k desc |
-| GENCODE v49 (basic)     |  GFF3  |   6 min 7 s    |  11 min 23 s  |    **1.86×**  |                    **1,292** | 422 ms / 1.93 M desc|
-| RefSeq GRCh38.p14       |  GFF3  |   4 min 12 s   |     6 min 5 s | **1.45×**     |                    **1,011** | 263 ms / 999 k desc |
-| MANE v1.5 (Ensembl)     |  GFF3  |       21.6 s   |        45.1 s | **2.09×**     |                    **1,766** |  78 ms / 156 k desc |
-| CHESS 3.1.3             |  GFF3  |       53.6 s   |   2 min 13.1 s| **2.48×**     |                    **1,175** |  91 ms / 161 k desc |
+<!-- BEGIN GENERATED: corpus-table -->
+| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
+| --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | > 1 hr 30 min | **> 22.0×** | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
+| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **3 min 1 s** | 3 min 37 s | **1.20×** | 4.73 GB | **1,188** | 352 ms / 999 k desc |
+| **CHESS 3.1.3** | GFF3 | 2,761,061 | **48.4 s** | 1 min 9 s | **1.43×** | 2.43 GB | **1,893** | 96 ms / 161 k desc |
+| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **19.8 s** | 26.5 s | **1.34×** | 1.61 GB | **2,086** | 80 ms / 156 k desc |
+<!-- END GENERATED: corpus-table -->
 
-| Single-call workload                                  | Speedup      |
+<!-- BEGIN GENERATED: benchmark-provenance -->
+**Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O  
+**Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13  
+**Commit:** `1d52bf6738e0` · **Run:** 2026-08-15T22:56:50Z  
+*Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
+<!-- END GENERATED: benchmark-provenance -->
+
+A `>` marks a legacy run killed at the safety valve without finishing, so both
+the wall and the speedup are floors rather than estimates. Method and fairness
+constraints: [Methodology](https://khchao.com/gffbase/performance/methodology/).
+
+| Single-call workload | Versus legacy |
 |---|---|
-| Spatial overlap (`db.region(...)`, p50 latency)       | **8.35× lower** (0.72 ms vs 6.01 ms) |
-| `db.children(id, level=1)` indexed lookup             | comparable   |
-| `db.children_batched(ids, format="arrow")` (50 k ids) | **🚀 36.68×** |
+| Spatial overlap (`db.region(...)`) | substantially lower latency — gffbase has a spatial index, `gffutils` has none |
+| `db.children(id, level=1)` indexed lookup | comparable |
+| `db.children_batched(ids, format="arrow")` | one query, no Python `Feature` objects — see below |
 
-Your existing `gffutils` script gets the ingest, spatial, and
-attribute-query wins the moment you swap the import. To unlock the
-36.68× ML-batched win, see the warning at the top of this page.
+Your existing `gffutils` script gets the ingest, spatial and attribute-query
+wins the moment you swap the import. To unlock the batched-extraction win, see
+the warning at the top of this page.
 
 ---
 
@@ -126,10 +182,12 @@ engine — optimized for tiny indexed point lookups against cache-warm
 pages. **For tiny, repeated point queries against a cache-warm DB,
 SQLite (and therefore legacy gffutils) is faster.**
 
-The fix is the canonical PyArrow snippet at the top of this page.
-Full benchmark: at 50 000 transcripts the row-by-row gffbase loop is
-≥ 10 minutes; the batched call is **1.16 s — a 553× speedup over the
-gffbase loop, 36.68× over legacy** (`PERFORMANCE_COMPARISON.md` §4b).
+The fix is the canonical PyArrow snippet at the top of this page. At the scale
+of tens of thousands of anchors the row-by-row gffbase loop is the slowest
+option available and the batched call is the fastest, by a wide margin in both
+directions — because the batched call issues one set-based query and never
+constructs a Python `Feature`. Current measurements:
+[Performance](https://khchao.com/gffbase/performance/).
 
 ### Vectorized methods at a glance
 
@@ -209,22 +267,80 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
   `.duckdb` by convention. The legacy SQLite layout is reachable via
   `export_sqlite()` (above) or the compat views.
 - **Disk size**: GFFBase databases are ~1.5× larger than legacy
-  SQLite (the price of materializing the closure + R-tree). Worth it
-  for the 5–550× query speedups.
-- **Peak ingest RSS**: ~10× higher (~1.6 GB vs ~150 MB on GENCODE
-  v49). DuckDB allocates a vectorized ingest buffer pool; reduce with
-  `PRAGMA memory_limit='512MB'` if needed.
+  SQLite -- the price of materializing the transitive closure and the R-tree,
+  which is what turns hierarchy and spatial queries into indexed lookups.
+  Current measurements: [Performance](https://khchao.com/gffbase/performance/).
+- **Peak ingest RSS**: substantially higher -- a couple of GB against roughly
+  150 MB, on a whole-genome corpus. DuckDB allocates a vectorized ingest
+  buffer pool; cap it with `GFFBASE_THREADS` or
+  `PRAGMA memory_limit='512MB'` if that matters more than wall time.
 - **Hierarchy depth**: GFFBase materializes the closure to depth 8 by
   default (vs depth 2 in legacy). Anything past 8 falls through to a
   dynamic recursive CTE — the dispatcher is automatic.
 - **Attributes column shape**: in raw SQL, the legacy single-cell
   JSON blob is replaced by a normalized
-  `attributes(feature_id, key, value, idx)` long-form table. Filtering
-  by attribute is now an indexed query, not a full scan.
+  `attributes(feature_id, key, value, idx, seg_idx, ord)` long-form table.
+  Filtering by attribute is now an indexed query, not a full scan.
 - **Duplicate IDs**: NCBI RefSeq emits multiple GFF3 rows that share
-  `ID=cds-NP_xxx`. gffbase auto-suffixes repeats with `__N` (mirroring
-  `gffutils.merge_strategy="create_unique"`) and records the remap in
-  the `duplicates` table. No config change required.
+  `ID=cds-NP_xxx`. Under the default `mode="compat"` gffbase renames the
+  repeats as `gffutils.merge_strategy="create_unique"` would and records the
+  remap in `duplicates`. Under `mode="strict"` it instead **fuses them into
+  one discontinuous feature** — see below.
+
+### Behaviour changes that can change your results
+
+These are the ones worth reading before a production run. Each is small in
+isolation; each can change what your script computes.
+
+- **`merge_all` now persists.** It always documented that "the resulting
+  records are added to the database", and did not. It also returned every
+  input feature rather than only genuine merges, and accepted
+  `exclude_components` while ignoring it. All three are fixed, so a script
+  that called `merge_all` expecting a read-only generator now **writes to the
+  database** and gets back a shorter list.
+- **`merge_criteria.overlap_*_threshold` changed meaning.** They were distance
+  tests (`abs(acc.end - cur.start) <= threshold`) and are now range tests, so
+  a feature lying entirely inside the accumulator merges where it did not
+  before. If you pass one of these to `merge` or `merge_all`, the set of
+  features that merge has changed.
+- **`create_introns` computes per transcript.** It treated
+  `grandparent_featuretype="gene"` as the direct anchor and pooled every
+  isoform's exons into one list, so for a multi-isoform gene the "introns"
+  spanned transcript boundaries. On `FBgn0031208.gff` that was 1 where the
+  oracle finds 3.
+- **Splice sites are 2 bp**, strand-aware (`five_prime_cis_splice_site` /
+  `three_prime_cis_splice_site`), and carry the intron's merged attributes.
+  They were 1 bp, always typed `splice_site`, and attribute-less.
+- **`bed12` output changed**: no trailing comma on `blockSizes`/`blockStarts`,
+  `thin_featuretype` is honoured rather than ignored, and a feature with no
+  CDS is now marked entirely *thick* rather than entirely thin.
+- **Attribute values are percent-encoded on write.** Reading
+  `feature.attributes` and re-serializing used to drop the escaping, which
+  could emit structurally invalid GFF3 when a value contained `;` or `,`. If
+  you diff gffbase output against gffutils output you will now see them agree
+  where they previously did not. Note that space and non-ASCII are
+  deliberately *not* encoded, per the specification.
+- **Raw SQL against `features` returns ENVELOPE coordinates** for a
+  discontinuous feature — `MIN(start)`, `MAX(end)` over its segments, not the
+  coordinates of any one line. The `segments_all` view gives one row per
+  physical input line, which is what a line-oriented consumer wants.
+- **Coordinates can be NULL.** A GFF row may carry `.` in columns 4 and 5, and
+  gffbase preserves that rather than coercing to 0. Such features are not in
+  coordinate space and are skipped by `region()` and the derived-feature
+  methods.
+- **`type(f) is Feature` is no longer universally true.** A fused feature is a
+  `MultipartFeature`, which subclasses `Feature` and overrides none of the
+  compatibility surface. `isinstance` still holds.
+- **Derived features carry a mode-dependent `source`.** `gffutils_derived`
+  under `mode="compat"`, `gffbase_derived` under `mode="strict"`. If you
+  filter on that string, `db.derived_source` gives you the right one.
+
+### Command line
+
+`gffutils-cli` becomes `gffbase`, with the same argument names. Seven of its
+commands work there; ten work here. See [the CLI reference](https://khchao.com/gffbase/cli/) for
+the mapping, including the four upstream commands that raise on every
+invocation.
 
 ---
 

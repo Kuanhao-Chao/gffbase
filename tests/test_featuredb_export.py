@@ -22,7 +22,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-
 from gffbase import create_db, export_sqlite
 
 DATA = Path(__file__).parent / "data"
@@ -38,9 +37,7 @@ def test_export_sqlite_writes_legacy_tables(tmp_path):
     try:
         # Legacy schema must have features, relations, meta, directives.
         tables = sorted(
-            r[0] for r in sq.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            r[0] for r in sq.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         )
         assert "features" in tables
         assert "relations" in tables

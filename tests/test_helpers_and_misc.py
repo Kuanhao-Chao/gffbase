@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from gffbase import (
     AttributeStringError,
     DuplicateIDError,
@@ -136,7 +135,8 @@ def test_create_db_force_overwrite(tmp_path):
 def test_create_db_accepts_legacy_kwargs_without_error():
     # All accepted-but-no-op kwargs from the legacy signature.
     db = create_db(
-        str(DATA / "simple.gff3"), ":memory:",
+        str(DATA / "simple.gff3"),
+        ":memory:",
         keep_order=False,
         sort_attribute_values=False,
         text_factory=str,
@@ -154,3 +154,84 @@ def test_create_db_accepts_legacy_kwargs_without_error():
     )
     n = db.count_features_of_type()
     assert n > 0
+
+
+def test_make_query_parameterises_the_value_arguments():
+    """`featuretype`, `limit` and `strand` are data, and are bound as data.
+
+    The register of what is and is not escaped matters more here than usual,
+    because `make_query` also accepts raw-SQL slots (see the next test).
+    """
+    from gffbase import helpers
+
+    for kwargs, expected in (
+        ({"featuretype": "x' OR '1'='1"}, 1),
+        ({"featuretype": ["a", "x' OR '1'='1"]}, 2),
+        ({"strand": "+' OR '1'='1"}, 1),
+        ({"limit": ("chr1'; DROP TABLE features; --", 1, 100)}, 3),
+    ):
+        args: list = []
+        sql, bound = helpers.make_query(args, **kwargs)
+        assert "DROP TABLE" not in sql
+        assert "OR '1'='1" not in sql
+        assert len(bound) == expected
+
+
+def test_make_query_rejects_an_unvalidated_order_by():
+    """Upstream interpolates a bare string verbatim; gffbase does not."""
+    import pytest
+    from gffbase import helpers
+
+    with pytest.raises(ValueError):
+        helpers.make_query([], order_by="start; DROP TABLE features")
+
+
+def test_make_query_documents_other_and_extra_as_raw_sql():
+    """A pinned expectation, not an aspiration.
+
+    `other` and `extra` carry the caller's own SQL by design -- upstream builds
+    its relation joins through `other`. That is defensible, but only while it
+    is written down: everything *around* them is validated, which makes it easy
+    to assume they are too.
+    """
+    from gffbase import helpers
+
+    doc = helpers.make_query.__doc__ or ""
+    assert "raw SQL" in doc
+    collapsed = " ".join(doc.split())
+    assert "`other` and `extra`\n        are interpolated verbatim" in doc or (
+        "are interpolated verbatim" in collapsed
+    )
+
+    args: list = []
+    sql, bound = helpers.make_query(args, other="WHERE 1=1")
+    assert "WHERE 1=1" in sql and not bound
+
+
+def test_example_filename_finds_the_upstream_corpus():
+    """`FBgn0031208.gff` is the fixture every gffutils example opens.
+
+    It is vendored under `tests/data/upstream/`, but that directory was not on
+    the search path -- so the canonical example failed even in a source
+    checkout, where the file was sitting on disk the whole time.
+    """
+    from pathlib import Path
+
+    from gffbase import helpers
+
+    for name in ("FBgn0031208.gff", "FBgn0031208.gtf"):
+        assert Path(helpers.example_filename(name)).is_file()
+
+
+def test_example_filename_explains_the_wheel_limitation():
+    """A bare "file not found" sends the reader looking for a typo.
+
+    The fixtures ship in the sdist and the checkout, not the binary wheel, so
+    the error names the install that does work. Declared in
+    `tests/parity/deviations.toml`.
+    """
+    import pytest
+    from gffbase import helpers
+
+    with pytest.raises(FileNotFoundError, match="binary wheel"):
+        helpers.example_filename("no_such_example.gff")

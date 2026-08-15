@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from gffbase import parse_gff, detect_dialect
+from gffbase import detect_dialect, parse_gff
 
 
 def test_simple_gff3_record_count(gff3_path, engine):
@@ -61,8 +61,10 @@ def test_simple_gff3_directives(gff3_path, engine):
     it = parse_gff(gff3_path, engine=engine)
     list(it)  # drive iterator
     directives = it.directives()
-    assert any(d.startswith("##gff-version") for d in directives)
-    assert any(d.startswith("##sequence-region") for d in directives)
+    # `##` is stripped on capture, matching gffutils.
+    assert any(d.startswith("gff-version") for d in directives)
+    assert any(d.startswith("sequence-region") for d in directives)
+    assert not any(d.startswith("#") for d in directives)
 
 
 def test_simple_gtf_dialect(gtf_path, engine):

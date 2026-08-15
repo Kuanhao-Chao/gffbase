@@ -1,0 +1,6 @@
+
+=== GENCODE v49 (GTF) (gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz) ===
+  feature lines: 6,068,892
+  [gffbase] ingest…
+    wall=4 min 36.9 s, RSS=2.18 GB, disk=6.20 GB
+  [legacy ] ingest (timeout 4500s)…

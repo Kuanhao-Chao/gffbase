@@ -1,0 +1,36 @@
+{
+  "input": {
+    "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/data/gencode.v45.basic.annotation.gtf.gz",
+    "compressed_bytes": 29623361
+  },
+  "gffbase": {
+    "label": "gffbase create_db (Phase 6 cache)",
+    "wall_seconds": 225.78,
+    "peak_rss_bytes": 1556925644,
+    "peak_rss_mb": 1484.8,
+    "n_features": 2182889,
+    "rtree_built": true,
+    "fmt": "gtf",
+    "exit_code": 0,
+    "cached": true,
+    "source": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/out/gencode.duckdb",
+    "disk_bytes": 2932355072
+  },
+  "legacy": {
+    "label": "legacy gffutils create_db (Phase 6 cache)",
+    "wall_seconds": 3582.040768540988,
+    "n_features": 2001750,
+    "peak_rss_bytes": 152846336,
+    "peak_rss_mb": 145.765625,
+    "exit_code": 0,
+    "cached": true,
+    "source": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/out/legacy_full.log",
+    "disk_bytes": 1923682304
+  },
+  "comparison": {
+    "wall_speedup": 15.865181896275082,
+    "rss_ratio_legacy_over_gffbase": 0.09817189188772846,
+    "throughput_gffbase_features_per_sec": 9668.212419169102,
+    "throughput_legacy_features_per_sec": 558.8294855771111
+  }
+}

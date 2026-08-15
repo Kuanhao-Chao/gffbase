@@ -26,21 +26,61 @@ jobs:
   # Lint job — fast, single cell. Runs ruff against the Python sources.
   # ------------------------------------------------------------------------
   lint:
-    name: Lint (ruff)
+    name: Lint (ruff + rustfmt + clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install --upgrade pip ruff
-      - run: ruff check python/gffbase tests bench
+      # Pin ruff: an unpinned lint tool turns any upstream release into a
+      # surprise CI failure on an unrelated PR.
+      - run: pip install --upgrade pip 'ruff==0.16.2'
+      # `benchmarks/` is included here. It was omitted before, so 70 errors in
+      # it were invisible to CI while CONTRIBUTING told contributors to lint it.
+      - name: ruff check
+        run: ruff check python/gffbase tests benchmarks tools
+      - name: ruff format --check
+        run: ruff format --check python/gffbase tests benchmarks tools
+
+      # `Typing :: Typed` is a promise to downstream type checkers; this is
+      # what keeps it true. The package ships py.typed and mypy runs clean.
+      - name: mypy
+        run: |
+          pip install 'mypy==2.3.0' duckdb pyarrow
+          mypy
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.83
+        with:
+          components: clippy, rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+      # clippy was installed by CI but never actually invoked.
+      - name: cargo clippy
+        run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
+
+      # `CONTRIBUTING.md` and the PR template both told contributors that
+      # `mkdocs build --strict` is "what CI runs". It was not: the only mkdocs
+      # invocation was `gh-deploy`, on `main`, after merge -- so a broken link
+      # or a page missing from the nav was found by the deploy rather than by
+      # the PR that introduced it. Now the claim is true.
+      #
+      # After the Rust toolchain on purpose: `pip install -e .` goes through
+      # maturin, which needs cargo, and mkdocstrings imports the package to
+      # read its docstrings.
+      - name: mkdocs build --strict
+        run: |
+          pip install -e ".[docs]"
+          mkdocs build --strict
 
   # ------------------------------------------------------------------------
   # Test matrix — exhaustive over the *routing* axis (rtree vs btree).
-  #   3 OS × 3 Python × 2 spatial paths = 18 cells.
-  #   Excludes trim Windows down to the 3.9 cells (Windows 3.11 / 3.13
-  #   provide no additional Rust- or DuckDB-specific signal beyond 3.9).
+  #   3 OS x 3 Python x 2 spatial paths, minus 4 Windows excludes = 14 cells.
+  #   Python is sampled at the floor (3.10), a middle version (3.12), and the
+  #   newest supported (3.14). Windows keeps only the floor: the extra Windows
+  #   cells exercise the same abi3 wheel and add no Rust- or DuckDB-specific
+  #   signal.
   # ------------------------------------------------------------------------
   test:
     name: Test ${{ matrix.os }} • py${{ matrix.python-version }} • ${{ matrix.spatial }}
@@ -49,13 +89,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.9", "3.11", "3.13"]
+        python-version: ["3.10", "3.12", "3.14"]
         spatial: [rtree, btree]
         exclude:
           - os: windows-latest
-            python-version: "3.11"
+            python-version: "3.12"
           - os: windows-latest
-            python-version: "3.13"
+            python-version: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -81,39 +121,87 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install maturin
+          # Pinned for the same reason as ruff and mypy above: an unpinned
+          # build tool turns an upstream release into a surprise failure on
+          # an unrelated PR.
+          pip install 'maturin==1.14.1'
 
-      - name: Build extension (maturin develop --release)
+      # `pip install -e .`, NOT `maturin develop`. maturin refuses to run
+      # `develop` without an active virtualenv ("Couldn't find a virtualenv or
+      # conda environment"), and `actions/setup-python` does not create one --
+      # so every matrix cell failed at this step before reaching a single test.
+      # maturin is the PEP 517 backend declared in pyproject.toml, so a plain
+      # editable install builds the same extension, in release profile, and
+      # needs no venv.
+      - name: Build extension + install runtime and test deps
         shell: bash
-        run: maturin develop --release --manifest-path rust/Cargo.toml
+        run: pip install -e ".[test,all]"
 
-      - name: Install runtime + test deps
-        shell: bash
-        run: pip install -e .[test]
+      # `pybedtools` is a thin wrapper around the bedtools BINARY: it imports
+      # without it and then raises `NotImplementedError: "sortBed" does not
+      # appear to be installed` from every method. Without this, the
+      # `pybedtools_integration` tests skip and that module sits at ~10%
+      # coverage -- most of the gap between measured coverage and the gate.
+      #
+      # Linux and macOS only: pybedtools does not install on Windows at all
+      # (its `pysam` dependency is POSIX-only), so the extra carries a
+      # `sys_platform != 'win32'` marker and the tests skip there by design.
+      - name: Install bedtools (for the pybedtools integration)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bedtools
+      - name: Install bedtools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bedtools
 
-      - name: Rust unit tests (cargo test --lib)
+      # Full `cargo test`, not `--lib`. The doc-test target was excluded
+      # before, which hid a module doc comment that failed to compile.
+      - name: Rust tests
         shell: bash
         working-directory: rust
-        run: cargo test --lib --release
+        run: cargo test --locked --release
 
-      - name: Run pytest — R-tree path (≥95% coverage gate)
+      # The compiled extension must be present. Previously the `engine`
+      # fixture silently skipped every Rust cell when it was missing, so a
+      # broken native build looked like a pass.
+      - name: Assert native extension is available
+        shell: bash
+        run: python -c "import gffbase, sys; sys.exit(0 if gffbase.native_available() else 'native extension missing')"
+
+      - name: Run pytest — R-tree path
         if: matrix.spatial == 'rtree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: ""
-        # Inherits --cov-fail-under=95 from pyproject's addopts.
-        run: pytest -q
+        # The threshold is per-platform, because what is REACHABLE is
+        # per-platform. `pybedtools` cannot be installed on Windows at all --
+        # its `pysam` dependency is POSIX-only and ships no wheel -- so
+        # `pybedtools_integration` (39 statements) is unreachable there by
+        # construction, and holding Windows to the Linux number would mean
+        # either a permanently red cell or a threshold set to the weakest
+        # platform for every platform.
+        #
+        # 96, not 99. The 99 was never met: it was set when `*/_pyfallback/*`
+        # was omitted from measurement entirely, and the omit was removed in
+        # 0.2.0 as its own comment promised. A gate nobody has ever passed is
+        # not a standard.
+        run: |
+          MIN=95
+          [ "$RUNNER_OS" = "Windows" ] && MIN=92
+          pytest -q --cov=gffbase --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=$MIN
 
-      - name: Run pytest — B-tree fallback path (≥93% coverage gate)
+      - name: Run pytest — B-tree fallback path
         if: matrix.spatial == 'btree'
         shell: bash
         env:
           GFFBASE_TEST_DISABLE_RTREE: "1"
-        # B-tree cells skip 3 R-tree-specific tests; the R-tree-only branches
-        # in interface.py / ingest.py are unreachable here. Lower threshold
-        # by ~2 points so this matrix axis still has a meaningful gate
-        # (catches regressions on the B-tree-reachable code).
-        run: pytest -q --cov-fail-under=93
+        # B-tree cells skip the R-tree-specific tests, so the R-tree-only
+        # branches are unreachable here; the threshold is a point lower to
+        # keep the gate meaningful for the B-tree-reachable code rather than
+        # vacuous. Windows is lower again, for the pybedtools reason above.
+        run: |
+          MIN=94
+          [ "$RUNNER_OS" = "Windows" ] && MIN=91
+          pytest -q --cov=gffbase --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=$MIN
 
       - name: Upload coverage report
         if: always()
@@ -125,9 +213,9 @@ jobs:
             htmlcov/
 
       - name: Smoke-test pip install . (PyPI build path)
-        # Only on the ubuntu-3.11-rtree cell — running this on every cell
+        # Only on the ubuntu-3.12-rtree cell — running this on every cell
         # would triple CI wall time without adding signal.
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && matrix.spatial == 'rtree'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && matrix.spatial == 'rtree'
         shell: bash
         run: |
           python -m venv /tmp/_install_smoke
@@ -135,7 +223,49 @@ jobs:
           pip install --upgrade pip
           pip install .
           python -c "from gffbase import create_db, FeatureDB, Feature, GFFWriter, DataIterator; print('gffbase imported OK')"
+          # The console script, as an INSTALLED entry point. tests/test_cli.py
+          # calls main() in-process, which cannot catch a broken
+          # [project.scripts] line, a missing launcher, or an import failure
+          # at entry-point resolution time.
+          gffbase --version
+          gffbase --help > /dev/null
+          python -m gffbase --version
+          # And the subpackage added in 0.2.0, which only ships if maturin
+          # walks the python source tree recursively.
+          python -c "import gffbase.contrib.plotting; print('contrib subpackage OK')"
           deactivate
+
+  # ------------------------------------------------------------------------
+  # Differential parity against the frozen gffutils oracle. Separate from the
+  # main matrix because it needs gffutils installed alongside gffbase, and a
+  # single cell is enough: it compares behaviour, which does not vary by OS or
+  # interpreter.
+  # ------------------------------------------------------------------------
+  parity:
+    name: gffutils parity
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.83
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install gffbase + the oracle
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,all]"
+          # Pinned to the commit the manifest was generated from. gffutils is
+          # not released at this commit, so it is installed from git rather
+          # than PyPI.
+          pip install 'gffutils @ git+https://github.com/daler/gffutils@6b84330f472dd2b4c69e36f319da7ade95bd5961'
+
+      # The manifest is committed data; this proves it still describes the
+      # pinned oracle rather than having drifted.
+      - name: Parity manifest is current
+        run: python tools/gen_parity_manifest.py --check
+
+      - name: Differential suite
+        run: pytest -m parity -q
 
   # ------------------------------------------------------------------------
   # Sdist build smoke test — confirms `python -m build --sdist` produces a
@@ -156,7 +286,24 @@ jobs:
           tarball=$(ls dist/*.tar.gz | head -1)
           echo "Inspecting $tarball"
           tar -tzf "$tarball" | tee /tmp/sdist.list
-          for needle in rust/Cargo.toml rust/src/lib.rs python/gffbase/interface.py tests/data/simple.gff3; do
+          # These needles are the ones that were actually missing, not a
+          # token sample: the upstream fixture corpus lives in a
+          # subdirectory that the old `tests/data/*` include did not reach,
+          # and the parity data files were packaged by nothing at all -- so
+          # "users can rebuild from sdist and run the suite" was not true.
+          for needle in \
+            rust/Cargo.toml \
+            rust/src/lib.rs \
+            python/gffbase/interface.py \
+            python/gffbase/cli.py \
+            python/gffbase/contrib/plotting.py \
+            tests/data/simple.gff3 \
+            tests/data/upstream/FBgn0031208.gff \
+            tests/data/upstream/nonascii \
+            tests/data/v1/schema_v1.duckdb.gz \
+            tests/parity/gffutils_manifest.json \
+            tests/parity/deviations.toml \
+          ; do
             if ! grep -q "$needle" /tmp/sdist.list; then
               echo "::error ::sdist missing $needle"
               exit 1
@@ -166,3 +313,34 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
+
+  # ------------------------------------------------------------------------
+  # Dependency floors. `pyproject.toml` justifies `duckdb>=1.4.1` and
+  # `pyarrow>=18.1` by saying they are "the oldest versions CI actually
+  # tests" -- which was not true, because this job did not exist. A floor
+  # nobody installs is a guess.
+  # ------------------------------------------------------------------------
+  minimum-deps:
+    name: Minimum dependency floors
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.83
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.10" }
+      - name: Build extension
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Install at the declared floors
+        run: |
+          pip install -e ".[test]"
+          # Force the exact floors. `==` rather than `~=` so a resolver cannot
+          # quietly satisfy the constraint with something newer.
+          pip install 'duckdb==1.4.1' 'pyarrow==18.1.0'
+          python -c "import duckdb, pyarrow; print('duckdb', duckdb.__version__, 'pyarrow', pyarrow.__version__)"
+      - name: Run the suite at the floors
+        env:
+          GFFBASE_TEST_DISABLE_RTREE: ""
+        run: pytest -q

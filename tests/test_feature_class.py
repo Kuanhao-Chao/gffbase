@@ -22,23 +22,24 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from gffbase import Feature
-from gffbase.feature import _LazyAttributes, _coord_to_int, _revcomp, feature_from_row
-
+from gffbase.feature import _coord_to_int, _LazyAttributes, _revcomp, feature_from_row
 
 # ---------------------------------------------------------------------------
 # _coord_to_int / _revcomp
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("raw,expected", [
-    (None, None),
-    ("", None),
-    (".", None),
-    ("100", 100),
-    (100, 100),
-])
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, None),
+        ("", None),
+        (".", None),
+        ("100", 100),
+        (100, 100),
+    ],
+)
 def test_coord_to_int(raw, expected):
     assert _coord_to_int(raw) == expected
 
@@ -129,9 +130,16 @@ def test_lazy_attributes_unsupported_init_type():
 
 def _basic_feat(**overrides):
     defaults = dict(
-        seqid="chr1", source="src", featuretype="exon",
-        start=100, end=200, score=".", strand="+", frame=".",
-        id="x1", dialect={"fmt": "gff3"},
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=100,
+        end=200,
+        score=".",
+        strand="+",
+        frame=".",
+        id="x1",
+        dialect={"fmt": "gff3"},
     )
     defaults.update(overrides)
     return Feature(**defaults)
@@ -181,8 +189,14 @@ def test_repr_format():
 
 def test_str_byte_faithful_blob_round_trip():
     f = Feature(
-        seqid="chr1", source="src", featuretype="exon",
-        start=100, end=200, score=".", strand="+", frame=".",
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=100,
+        end=200,
+        score=".",
+        strand="+",
+        frame=".",
         attributes=b"ID=g1;Name=alpha;Note=hello%20world",
         dialect={"fmt": "gff3"},
     )
@@ -194,8 +208,12 @@ def test_str_byte_faithful_blob_round_trip():
 
 def test_str_reformats_after_attribute_mutation():
     f = Feature(
-        seqid="chr1", source="src", featuretype="exon",
-        start=100, end=200, attributes=b"ID=g1;Name=alpha",
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=100,
+        end=200,
+        attributes=b"ID=g1;Name=alpha",
         dialect={"fmt": "gff3"},
     )
     f.attributes["Note"] = "added"
@@ -207,8 +225,9 @@ def test_str_reformats_after_attribute_mutation():
 
 
 def test_str_emits_dot_coords_when_none():
-    f = Feature(seqid="chr1", source=".", featuretype=".",
-                start=None, end=None, dialect={"fmt": "gff3"})
+    f = Feature(
+        seqid="chr1", source=".", featuretype=".", start=None, end=None, dialect={"fmt": "gff3"}
+    )
     line = str(f)
     assert line.split("\t")[3] == "."
     assert line.split("\t")[4] == "."
@@ -216,11 +235,19 @@ def test_str_emits_dot_coords_when_none():
 
 def test_str_gtf_emits_quoted_values():
     f = Feature(
-        seqid="chr1", source="src", featuretype="exon",
-        start=1, end=10, attributes={"gene_id": "ENSG1"},
-        dialect={"fmt": "gtf", "keyval separator": " ",
-                 "field separator": "; ", "quoted GFF2 values": True,
-                 "trailing semicolon": True},
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=1,
+        end=10,
+        attributes={"gene_id": "ENSG1"},
+        dialect={
+            "fmt": "gtf",
+            "keyval separator": " ",
+            "field separator": "; ",
+            "quoted GFF2 values": True,
+            "trailing semicolon": True,
+        },
     )
     line = str(f)
     assert 'gene_id "ENSG1"' in line
@@ -230,11 +257,19 @@ def test_str_gtf_emits_quoted_values():
 
 def test_str_gff3_with_field_sep_and_trailing_semi():
     f = Feature(
-        seqid="chr1", source="src", featuretype="exon",
-        start=1, end=10, attributes={"k": "v"},
-        dialect={"fmt": "gff3", "field separator": "; ",
-                 "keyval separator": "=", "trailing semicolon": True,
-                 "leading semicolon": True},
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=1,
+        end=10,
+        attributes={"k": "v"},
+        dialect={
+            "fmt": "gff3",
+            "field separator": "; ",
+            "keyval separator": "=",
+            "trailing semicolon": True,
+            "leading semicolon": True,
+        },
     )
     line = str(f)
     col9 = line.split("\t")[8]
@@ -244,9 +279,14 @@ def test_str_gff3_with_field_sep_and_trailing_semi():
 
 def test_str_sort_attribute_values():
     f = Feature(
-        seqid="chr1", source=".", featuretype=".",
-        start=1, end=10, attributes={"Parent": ["c", "a", "b"]},
-        dialect={"fmt": "gff3"}, sort_attribute_values=True,
+        seqid="chr1",
+        source=".",
+        featuretype=".",
+        start=1,
+        end=10,
+        attributes={"Parent": ["c", "a", "b"]},
+        dialect={"fmt": "gff3"},
+        sort_attribute_values=True,
     )
     col9 = str(f).split("\t")[8]
     assert "Parent=a,b,c" in col9
@@ -278,9 +318,16 @@ def test_extra_empty_string_yields_empty_list():
 
 
 def test_str_includes_extra_columns():
-    f = Feature(seqid="chr1", source="src", featuretype="exon",
-                start=1, end=10, attributes={"ID": "x"},
-                extra=["extra1", "extra2"], dialect={"fmt": "gff3"})
+    f = Feature(
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=1,
+        end=10,
+        attributes={"ID": "x"},
+        extra=["extra1", "extra2"],
+        dialect={"fmt": "gff3"},
+    )
     parts = str(f).split("\t")
     assert parts[-2] == "extra1"
     assert parts[-1] == "extra2"
@@ -327,9 +374,18 @@ def test_eq_ne_returns_notimplemented_for_other_types():
 
 def test_astuple_legacy_shape():
     f = Feature(
-        seqid="chr1", source="src", featuretype="exon",
-        start=100, end=200, score=".", strand="+", frame=".",
-        attributes={"ID": "x"}, extra=["alt"], id="x", bin=None,
+        seqid="chr1",
+        source="src",
+        featuretype="exon",
+        start=100,
+        end=200,
+        score=".",
+        strand="+",
+        frame=".",
+        attributes={"ID": "x"},
+        extra=["alt"],
+        id="x",
+        bin=None,
         dialect={"fmt": "gff3"},
     )
     tup = f.astuple()
@@ -377,14 +433,22 @@ def test_calc_bin_with_explicit_argument_overrides():
 
 
 class _DummyContig:
-    def __init__(self, seq: str): self._s = seq
-    def __getitem__(self, sl): return self._s[sl]
-    def __str__(self): return self._s
+    def __init__(self, seq: str):
+        self._s = seq
+
+    def __getitem__(self, sl):
+        return self._s[sl]
+
+    def __str__(self):
+        return self._s
 
 
 class _DummyFasta:
-    def __init__(self, mapping): self._m = mapping
-    def __getitem__(self, k): return _DummyContig(self._m[k])
+    def __init__(self, mapping):
+        self._m = mapping
+
+    def __getitem__(self, k):
+        return _DummyContig(self._m[k])
 
 
 def test_sequence_plus_strand_no_revcomp():
@@ -412,8 +476,7 @@ def test_sequence_use_strand_false_keeps_raw():
 
 
 def test_feature_from_row_round_trip():
-    row = ("g1", "chr1", "src", "gene", 100, 500,
-           ".", "+", ".", b"ID=g1;Name=alpha", b"", 7)
+    row = ("g1", "chr1", "src", "gene", 100, 500, ".", "+", ".", b"ID=g1;Name=alpha", b"", 7)
     f = feature_from_row(row, dialect={"fmt": "gff3"})
     assert f.id == "g1"
     assert f.seqid == "chr1"
@@ -426,8 +489,7 @@ def test_feature_from_row_round_trip():
 
 
 def test_feature_from_row_with_none_score_falls_back_to_dot():
-    row = ("g1", "chr1", "src", "gene", 1, 10,
-           None, None, None, b"", b"", 0)
+    row = ("g1", "chr1", "src", "gene", 1, 10, None, None, None, b"", b"", 0)
     f = feature_from_row(row)
     assert f.score == "."
     assert f.strand == "."

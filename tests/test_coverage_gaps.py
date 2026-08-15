@@ -25,23 +25,21 @@ import io
 import os
 import sqlite3
 from pathlib import Path
-from unittest import mock
 
 import duckdb
 import pytest
-
 from gffbase import (
-    FeatureDB,
     Feature,
+    FeatureDB,
     GFFWriter,
     ParsedFeature,
     create_db,
 )
-from gffbase.feature import _LazyAttributes, _coord_to_int, feature_from_row
+from gffbase.feature import _coord_to_int, _LazyAttributes, feature_from_row
 from gffbase.ingest import (
-    _try_load_spatial,
     _finalize_rtree,
     _rtree_disabled_by_env,
+    _try_load_spatial,
     from_file,
 )
 
@@ -73,10 +71,18 @@ def test_lazy_attributes_ingest_two_tuple_pairs():
 
 def test_format_attributes_gtf_unquoted_branch():
     f = Feature(
-        seqid="chr1", source=".", featuretype=".", start=1, end=10,
+        seqid="chr1",
+        source=".",
+        featuretype=".",
+        start=1,
+        end=10,
         attributes={"gene_id": "G1"},
-        dialect={"fmt": "gtf", "keyval separator": " ",
-                 "field separator": "; ", "quoted GFF2 values": False},
+        dialect={
+            "fmt": "gtf",
+            "keyval separator": " ",
+            "field separator": "; ",
+            "quoted GFF2 values": False,
+        },
     )
     col9 = str(f).split("\t")[8]
     # No quotes around the value.
@@ -85,16 +91,17 @@ def test_format_attributes_gtf_unquoted_branch():
 
 
 def test_astuple_with_extra_columns_serializes_json_list():
-    f = Feature(start=1, end=10, attributes={"k": "v"},
-                extra=["alt1", "alt2"], dialect={"fmt": "gff3"})
+    f = Feature(
+        start=1, end=10, attributes={"k": "v"}, extra=["alt1", "alt2"], dialect={"fmt": "gff3"}
+    )
     tup = f.astuple()
     import json
+
     assert json.loads(tup[10]) == ["alt1", "alt2"]
 
 
 def test_feature_from_row_with_nonempty_extra_blob():
-    row = ("g1", "chr1", "src", "gene", 1, 10, ".", "+", ".",
-           b"ID=g1", b"alt1\talt2", 0)
+    row = ("g1", "chr1", "src", "gene", 1, 10, ".", "+", ".", b"ID=g1", b"alt1\talt2", 0)
     f = feature_from_row(row)
     assert f.extra == ["alt1", "alt2"]
 
@@ -123,20 +130,34 @@ def test_count_features_of_type_filtered():
 
 
 def test_seqids_generator_empty():
-    """Empty in-memory DuckDB → seqids() yields nothing."""
+    """Empty in-memory DuckDB -> seqids() yields nothing.
+
+    Also pins that wrapping a hand-built connection still works: the
+    incomplete-database refusal deliberately applies only to a database opened
+    from a path, since a caller who constructs and populates their own
+    connection is doing so on purpose.
+    """
     con = duckdb.connect(":memory:")
     from gffbase.schema import DDL
+
     con.execute(DDL)
     db = FeatureDB(con)
     assert list(db.seqids()) == []
 
 
-def test_order_clause_unknown_column_pass_through():
+def test_order_clause_comma_separated_string():
+    """A comma-separated string used to be interpolated verbatim, so it reached
+    SQL as one opaque expression. Each name is now resolved and ordered on
+    individually -- which is what the caller meant, and is what closes the
+    injection this branch used to be."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    # An unknown column is passed verbatim — useful for power-user multi-key
-    # ordering. We just need it to not raise.
-    out = db._order_clause("seqid, start", reverse=False)
-    assert "seqid, start" in out
+    assert db._order_clause("seqid, start", reverse=False) == "seqid ASC, start ASC"
+
+
+def test_order_clause_rejects_anything_not_whitelisted():
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    with pytest.raises(ValueError, match="cannot order by"):
+        db._order_clause("start; DROP TABLE features", reverse=False)
 
 
 def test_parents_integer_level_branch():
@@ -148,9 +169,16 @@ def test_parents_integer_level_branch():
 def test_update_with_parsed_feature_input():
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     pf = ParsedFeature(
-        seqid="chr1", source="test", featuretype="exon",
-        start=99000, end=99500, score=".", strand="+", frame=".",
-        attributes_blob=b"ID=parsed1", attributes_pairs=[("ID", "parsed1", 0)],
+        seqid="chr1",
+        source="test",
+        featuretype="exon",
+        start=99000,
+        end=99500,
+        score=".",
+        strand="+",
+        frame=".",
+        attributes_blob=b"ID=parsed1",
+        attributes_pairs=[("ID", "parsed1", 0)],
         extra=[],
     )
     db.update([pf])
@@ -160,9 +188,17 @@ def test_update_with_parsed_feature_input():
 def test_update_with_parsed_feature_no_id_uses_autoincrement():
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     pf = ParsedFeature(
-        seqid="chr1", source="test", featuretype="leaf",
-        start=1, end=2, score=".", strand=".", frame=".",
-        attributes_blob=b"", attributes_pairs=[], extra=[],
+        seqid="chr1",
+        source="test",
+        featuretype="leaf",
+        start=1,
+        end=2,
+        score=".",
+        strand=".",
+        frame=".",
+        attributes_blob=b"",
+        attributes_pairs=[],
+        extra=[],
     )
     # No ID attr → fallback to "<featuretype>_<file_order>".
     db.update([pf])
@@ -255,20 +291,15 @@ def test_synthesize_transcripts_noop_when_disabled(tmp_path):
     is skipped entirely — exercises the negation branch and the no-op count.
     """
     gtf = tmp_path / "no_synth.gtf"
-    gtf.write_text(
-        'chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
-    )
-    con, stats = from_file(str(gtf), disable_infer_transcripts=True,
-                           disable_infer_genes=True)
+    gtf.write_text('chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n')
+    con, stats = from_file(str(gtf), disable_infer_transcripts=True, disable_infer_genes=True)
     assert stats.n_features_synthetic_transcripts == 0
     assert stats.n_features_synthetic_genes == 0
 
 
 def test_synthesize_genes_noop_when_only_genes_disabled(tmp_path):
     gtf = tmp_path / "no_gene_synth.gtf"
-    gtf.write_text(
-        'chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
-    )
+    gtf.write_text('chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n')
     # disable only genes → transcripts still synthesized, genes not.
     con, stats = from_file(str(gtf), disable_infer_genes=True)
     assert stats.n_features_synthetic_genes == 0
@@ -291,6 +322,7 @@ class _ConnWrapper:
     Mirrors the small subset of the DuckDBPyConnection surface used by the
     spatial-extension helpers.
     """
+
     def __init__(self, real, fail_on: str):
         self._real = real
         self._fail = fail_on
@@ -318,18 +350,17 @@ def test_finalize_rtree_swallows_create_index_error():
     returns False rather than crashing the whole ingest."""
     con = duckdb.connect(":memory:")
     from gffbase.schema import DDL
+
     con.execute(DDL)  # No `bbox` column, no spatial extension loaded.
     # CREATE INDEX ... USING RTREE will fail because spatial isn't loaded
     # AND the `bbox` column doesn't exist. Helper must return False.
-    assert _finalize_rtree(con, {"chr1": 0}) is False
+    assert _finalize_rtree(con) is False
 
 
 def test_ingest_no_directives_path(tmp_path):
     """Bare GTF without ## directives — exercises the empty-directives branch."""
     gtf = tmp_path / "no_directives.gtf"
-    gtf.write_text(
-        'chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G"; transcript_id "T";\n'
-    )
+    gtf.write_text('chr1\tsrc\texon\t1\t100\t.\t+\t.\tgene_id "G"; transcript_id "T";\n')
     con, stats = from_file(str(gtf))
     assert stats.directives == []
 
@@ -352,6 +383,7 @@ def test_create_db_from_string_keep_tempfiles():
 
 def test_export_sqlite_includes_autoincrements(tmp_path):
     from gffbase import export_sqlite
+
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     # Inject a row so the export hits the non-empty `autoincrements` branch.
     db.conn.execute("INSERT INTO autoincrements(base, n) VALUES ('exon', 5)")
@@ -385,8 +417,10 @@ def test_parse_dialect_handles_empty():
 class _FailExecuteConn:
     """Mock of a duckdb connection where every `execute` raises. Used to drive
     the defensive `except duckdb.Error` branches in FeatureDB helpers."""
+
     def execute(self, *a, **kw):
         raise duckdb.Error("simulated")
+
     def executemany(self, *a, **kw):
         raise duckdb.Error("simulated")
 
@@ -450,15 +484,13 @@ def test_all_features_featuretype_list_branch():
 
 def test_children_with_limit_and_featuretype_list():
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    feats = list(db.children("g1", limit="chr1:50-700",
-                              featuretype=["exon", "CDS"]))
+    feats = list(db.children("g1", limit="chr1:50-700", featuretype=["exon", "CDS"]))
     assert all(f.seqid == "chr1" for f in feats)
 
 
 def test_children_with_completely_within_limit():
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    feats = list(db.children("t1", limit="chr1:50-700",
-                              completely_within=True))
+    feats = list(db.children("t1", limit="chr1:50-700", completely_within=True))
     assert all(f.start >= 50 and f.end <= 700 for f in feats)
 
 
@@ -466,7 +498,7 @@ def test_dynamic_cte_with_featuretype_filter():
     """children() forced through the dynamic walker with a featuretype filter
     exercises the qualified featuretype-IN branch."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    db._max_depth = 0   # force every level=N to be 'dynamic'
+    db._max_depth = 0  # force every level=N to be 'dynamic'
     out = list(db.children("g1", level=2, featuretype=["exon", "CDS"]))
     assert all(f.featuretype in ("exon", "CDS") for f in out)
 
@@ -474,8 +506,7 @@ def test_dynamic_cte_with_featuretype_filter():
 def test_dynamic_cte_with_limit_completely_within():
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     db._max_depth = 0
-    out = list(db.children("g1", level=2, limit="chr1:50-700",
-                            completely_within=True))
+    out = list(db.children("g1", level=2, limit="chr1:50-700", completely_within=True))
     assert all(f.start >= 50 and f.end <= 700 for f in out)
 
 
@@ -497,20 +528,27 @@ def test_create_db_kwargs_pass_through_to_keep_tempfiles_skip():
 def test_dialect_safe_falls_back_when_iterator_lacks_attribute():
     """ingest._dialect_fmt_safe handles iterators whose .dialect() raises."""
     from gffbase.ingest import _dialect_fmt_safe
+
     class BadIt:
-        def dialect(self): raise RuntimeError("nope")
+        def dialect(self):
+            raise RuntimeError("nope")
+
     assert _dialect_fmt_safe(BadIt()) == "gff3"
 
 
 def test_dialect_safe_returns_default_when_dialect_is_falsy():
     from gffbase.ingest import _dialect_fmt_safe
+
     class EmptyIt:
-        def dialect(self): return None
+        def dialect(self):
+            return None
+
     assert _dialect_fmt_safe(EmptyIt()) == "gff3"
 
 
 def test_export_sqlite_force_overwrite_existing(tmp_path):
     from gffbase import export_sqlite
+
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     out = tmp_path / "ex.db"
     out.write_text("placeholder")
@@ -567,46 +605,75 @@ def test_ingest_mid_loop_batch_flush(tmp_path):
     src = tmp_path / "many.gff3"
     lines = ["##gff-version 3\n"]
     for i in range(5):
-        lines.append(
-            f"chr1\trs\tfeat\t{i*10+1}\t{i*10+5}\t.\t+\t.\tID=f{i}\n"
-        )
+        lines.append(f"chr1\trs\tfeat\t{i * 10 + 1}\t{i * 10 + 5}\t.\t+\t.\tID=f{i}\n")
     src.write_text("".join(lines))
     con, stats = from_file(str(src), batch_size=2)
     assert stats.n_features_raw == 5
 
 
-def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch):
-    """`ingest.py` line 459 — when `GFFUTILS2_THREADS` is set, the PRAGMA
-    threads SQL is issued."""
-    monkeypatch.setenv("GFFUTILS2_THREADS", "2")
+@pytest.mark.parametrize("var", ["GFFBASE_THREADS", "GFFUTILS2_THREADS"])
+def test_ingest_threads_pragma_from_env(tmp_path, monkeypatch, var):
+    """Both spellings set the thread count.
+
+    `GFFUTILS2_THREADS` predates the rename to gffbase and was the last
+    `GFFUTILS2_*` name left. It still works, because an existing job script
+    silently losing its thread limit on a shared machine is worse than a
+    slightly untidy environment.
+    """
+    monkeypatch.delenv("GFFBASE_THREADS", raising=False)
+    monkeypatch.delenv("GFFUTILS2_THREADS", raising=False)
+    monkeypatch.setenv(var, "2")
     src = tmp_path / "tiny.gff3"
-    src.write_text(
-        "##gff-version 3\n"
-        "chr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n"
-    )
+    src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n")
     con, stats = from_file(str(src))
     assert stats.n_features_raw == 1
+    assert con.execute("SELECT current_setting('threads')").fetchone()[0] == 2
 
 
-def test_finalize_rtree_with_empty_seqid_to_y_skips_seqid_map():
-    """`ingest.py` branch 541→550 — when `seqid_to_y` is empty, the
-    seqid_map population is skipped and we go straight to the
-    CREATE INDEX. Without the spatial extension this still returns False
-    (no R-tree index can be built), but the *empty-dict* branch is what
-    we're after, not a successful index build."""
-    con = duckdb.connect(":memory:")
+def test_the_new_threads_name_wins_over_the_old(tmp_path, monkeypatch):
+    monkeypatch.setenv("GFFUTILS2_THREADS", "2")
+    monkeypatch.setenv("GFFBASE_THREADS", "3")
+    src = tmp_path / "tiny.gff3"
+    src.write_text("##gff-version 3\nchr1\trs\tgene\t1\t10\t.\t+\t.\tID=g1\n")
+    con, _stats = from_file(str(src))
+    assert con.execute("SELECT current_setting('threads')").fetchone()[0] == 3
+
+
+def test_persist_seqid_map_is_a_no_op_for_an_empty_map():
+    """The map population used to live inside `_finalize_rtree`, which runs
+    after GTF synthesis -- so the post-synthesis `UPDATE ... FROM seqid_map`
+    joined an empty table and every synthesized row kept a NULL bbox. It is now
+    its own step, called before synthesis; this covers its empty-input branch."""
+    from gffbase.ingest import _persist_seqid_map
     from gffbase.schema import DDL
+
+    con = duckdb.connect(":memory:")
     con.execute(DDL)
-    # Empty dict → goes through the (skipped) seqid_map block, then attempts
-    # CREATE INDEX, which fails without spatial. The early-skip branch is
-    # exercised regardless.
-    result = _finalize_rtree(con, {})
-    assert result is False
+    _persist_seqid_map(con, {})
+    assert con.execute("SELECT COUNT(*) FROM seqid_map").fetchone() == (0,)
+
+
+def test_persist_seqid_map_writes_the_bands_in_encounter_order():
+    """The first seqid must land on band 0 -- `_region_sql_rtree` translates
+    query bounds through this map, so a shifted band silently misses."""
+    from gffbase.ingest import _persist_seqid_map
+    from gffbase.schema import DDL
+
+    con = duckdb.connect(":memory:")
+    con.execute(DDL)
+    _persist_seqid_map(con, {"chr1": 0, "chr2": 1_000_000_000})
+    assert con.execute("SELECT seqid, seqid_y FROM seqid_map ORDER BY seqid_y").fetchall() == [
+        ("chr1", 0),
+        ("chr2", 1_000_000_000),
+    ]
+    # Idempotent: it clears before writing, so re-running cannot double up.
+    _persist_seqid_map(con, {"chr1": 0, "chr2": 1_000_000_000})
+    assert con.execute("SELECT COUNT(*) FROM seqid_map").fetchone() == (2,)
 
 
 def test_ingest_gff3_row_without_id_falls_through_loop(tmp_path):
     """`ingest.py` branches 246→250 / 247→246 — GFF3 row whose attrs
-    don't contain `ID=` (only Parent=) must fall through `_derive_id`'s
+    do not contain `ID=` (only Parent=) must fall through the id_spec resolver's
     inner loop without finding a match. Synthetic ID is then assigned."""
     src = tmp_path / "no_id.gff3"
     # First row has ID=g1; second row has Parent only — its derive_id
@@ -618,9 +685,7 @@ def test_ingest_gff3_row_without_id_falls_through_loop(tmp_path):
     )
     con, stats = from_file(str(src))
     # The exon got synthesized as `exon_<n>` because no ID was found.
-    rows = con.execute(
-        "SELECT id FROM features WHERE featuretype = 'exon'"
-    ).fetchall()
+    rows = con.execute("SELECT id FROM features WHERE featuretype = 'exon'").fetchall()
     assert any(r[0].startswith("exon_") for r in rows)
 
 
@@ -628,9 +693,14 @@ def test_iterator_transform_returns_feature_replaces_original():
     """`iterators.py` branch 79→81 (True path) — when transform returns a
     non-None, non-False value, that value REPLACES the original feature."""
     from gffbase import DataIterator
+
     sentinel = Feature(
-        seqid="chrREPLACED", source=".", featuretype=".",
-        start=1, end=2, attributes={"ID": "replaced"},
+        seqid="chrREPLACED",
+        source=".",
+        featuretype=".",
+        start=1,
+        end=2,
+        attributes={"ID": "replaced"},
         dialect={"fmt": "gff3"},
     )
 
@@ -683,11 +753,13 @@ def test_region_batched_unregister_failure_is_swallowed():
     class _FlakyUnregisterProxy:
         def __init__(self, inner):
             self._inner = inner
+
         def unregister(self, name):
             if name == "__staging_regions":
                 fail_count["n"] += 1
                 raise RuntimeError("simulated unregister failure")
             return self._inner.unregister(name)
+
         def __getattr__(self, attr):
             return getattr(self._inner, attr)
 
@@ -708,37 +780,39 @@ def test_order_clause_qualified_length_branch():
     assert out.endswith("ASC")
 
 
-def test_order_clause_qualified_custom_expression_branch():
-    """`interface.py` line 1054 — an order_by string outside the known
-    column set is passed through verbatim (escape hatch for power users)."""
-    out = FeatureDB._order_clause_qualified(
-        "f.seqid, f.start", reverse=True, qualifier="f"
-    )
-    assert "f.seqid, f.start" in out
-    assert out.endswith("DESC")
+def test_order_clause_qualified_applies_the_same_whitelist():
+    """The joined paths must not be a way around it. They used to share the
+    pass-through escape hatch, so `children(..., order_by=<payload>)` was
+    injectable exactly like `all_features`."""
+    out = FeatureDB._order_clause_qualified(("seqid", "start"), reverse=True, qualifier="f")
+    assert out == "f.seqid DESC, f.start DESC"
+    with pytest.raises(ValueError, match="cannot order by"):
+        FeatureDB._order_clause_qualified("f.seqid", reverse=True, qualifier="f")
 
 
 def test_interfeatures_with_merge_attributes_true():
-    """`interface.py` branch at 1206 (`if merge_attributes`) — exercise
-    the True path so attribute-merging executes."""
+    """The `merge_attributes=True` path, and the default featuretype.
+
+    An unnamed interfeature is typed after the two features it sits between
+    (`inter_exon_exon`), not with the constant `"interfeature"`. That constant
+    threw away the only information the name carried -- an intergenic gap and
+    an intron were indistinguishable in the output.
+    """
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    feats = sorted(db.children("t1", featuretype="exon"),
-                   key=lambda f: f.start)
+    feats = sorted(db.children("t1", featuretype="exon"), key=lambda f: f.start)
     out = list(db.interfeatures(feats, merge_attributes=True))
-    assert all(f.featuretype == "interfeature" for f in out)
+    assert out
+    assert all(f.featuretype == "inter_exon_exon" for f in out)
+    assert all(f.source == db.derived_source for f in out)
 
 
 def test_interfeatures_with_merge_attributes_false():
-    """`interface.py` branch 1206→1213 (False path) — when
-    `merge_attributes=False`, the per-attr accumulation block is
-    skipped entirely."""
+    """`merge_attributes=False` skips the accumulation block entirely."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    feats = sorted(db.children("t1", featuretype="exon"),
-                   key=lambda f: f.start)
+    feats = sorted(db.children("t1", featuretype="exon"), key=lambda f: f.start)
     out = list(db.interfeatures(feats, merge_attributes=False))
-    # The yielded interfeature has no inherited attributes when merging
-    # is disabled — confirms the accumulator block was skipped.
-    assert all(f.featuretype == "interfeature" for f in out)
+    assert out
+    assert all(f.featuretype == "inter_exon_exon" for f in out)
     assert all(f.attributes == {} for f in out)
 
 
@@ -760,13 +834,19 @@ def test_children_bp_skips_features_with_null_coords(monkeypatch):
     skip path runs."""
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
     null_feat = Feature(
-        seqid="chr1", source="x", featuretype="exon",
-        start=None, end=None, attributes={"ID": "null1"},
+        seqid="chr1",
+        source="x",
+        featuretype="exon",
+        start=None,
+        end=None,
+        attributes={"ID": "null1"},
         dialect={"fmt": "gff3"},
     )
     real_children = db.children
+
     def fake_children(*a, **kw):
         return [null_feat] + list(real_children(*a, **kw))
+
     monkeypatch.setattr(db, "children", fake_children)
     # `g1` has 3 exons: (100-200), (500-600), (100-300) → 101+101+201 = 403 bp.
     # The injected null-start feature must be skipped (the branch we want),

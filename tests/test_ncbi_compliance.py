@@ -30,9 +30,7 @@ from ``conftest.py``.
 from __future__ import annotations
 
 import pytest
-
 from gffbase import GFFFormatError, parse_bytes
-
 
 # A baseline well-formed GFF3 line we can splice into multi-line fixtures.
 GOOD = b"chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=g1\n"
@@ -51,7 +49,7 @@ def _consume(text: bytes, *, strict: bool, engine: str = "rust"):
 
 
 def test_too_few_fields_raises_gff_format_error_strict(engine):
-    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"   # 7 columns
+    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"  # 7 columns
     with pytest.raises(GFFFormatError) as excinfo:
         list(parse_bytes(bad, engine=engine))
     err = excinfo.value
@@ -60,7 +58,7 @@ def test_too_few_fields_raises_gff_format_error_strict(engine):
 
 
 def test_eight_columns_also_too_few(engine):
-    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\n"   # 8 columns, no col 9
+    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\n"  # 8 columns, no col 9
     with pytest.raises(GFFFormatError) as excinfo:
         list(parse_bytes(bad, engine=engine))
     assert excinfo.value.kind == "TooFewFields"
@@ -70,8 +68,7 @@ def test_too_few_fields_non_strict(engine):
     bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"
     records, it = _consume(bad, strict=False, engine=engine)
     assert records == []
-    assert any(w["kind"] == "TooFewFields" and w["line_no"] == 1
-               for w in it.warnings)
+    assert any(w["kind"] == "TooFewFields" and w["line_no"] == 1 for w in it.warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -221,9 +218,9 @@ def test_float_score_accepted(engine):
 
 def test_mixed_input_line_number_correct(engine):
     text = (
-        b"chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=a\n"   # line 1, OK
-        b"chr1\tsrc\texon\tabc\t200\t.\t+\t.\tID=b\n"   # line 2, BAD
-        b"chr1\tsrc\texon\t300\t400\t.\t+\t.\tID=c\n"   # line 3, OK
+        b"chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=a\n"  # line 1, OK
+        b"chr1\tsrc\texon\tabc\t200\t.\t+\t.\tID=b\n"  # line 2, BAD
+        b"chr1\tsrc\texon\t300\t400\t.\t+\t.\tID=c\n"  # line 3, OK
     )
     with pytest.raises(GFFFormatError) as excinfo:
         list(parse_bytes(text, engine=engine))
@@ -237,8 +234,7 @@ def test_mixed_input_non_strict_yields_valid(engine):
         b"chr1\tsrc\texon\t300\t400\t.\t+\t.\tID=c\n"
     )
     records, it = _consume(text, strict=False, engine=engine)
-    ids = [next((v for k, v, _ in r.attributes_pairs if k == "ID"), None)
-           for r in records]
+    ids = [next((v for k, v, _ in r.attributes_pairs if k == "ID"), None) for r in records]
     assert ids == ["a", "c"]
     assert len(it.warnings) == 1
     assert it.warnings[0]["line_no"] == 2
@@ -323,7 +319,7 @@ def test_dot_attribute_string_accepted(engine):
 def test_warning_dict_keys(engine):
     text = (
         b"chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=a\n"
-        b"\tsrc\texon\t1\t10\t.\t+\t.\tID=b\n"   # empty seqid
+        b"\tsrc\texon\t1\t10\t.\t+\t.\tID=b\n"  # empty seqid
     )
     _, it = _consume(text, strict=False, engine=engine)
     assert len(it.warnings) == 1
@@ -340,7 +336,7 @@ def test_gff_format_error_is_value_error_subclass():
 
 def test_legacy_value_error_catch_still_works(engine):
     bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"
-    with pytest.raises(ValueError):     # NOT GFFFormatError specifically
+    with pytest.raises(ValueError):  # NOT GFFFormatError specifically
         list(parse_bytes(bad, engine=engine))
 
 
@@ -364,6 +360,7 @@ def test_clean_input_has_zero_warnings(engine):
 
 def test_python_gff_format_error_constructor_carries_fields():
     from gffbase.exceptions import GFFFormatError as PyGFFFormatError
+
     err = PyGFFFormatError("oops", line_no=42, kind="InvalidStrand")
     assert err.line_no == 42
     assert err.kind == "InvalidStrand"
@@ -385,10 +382,18 @@ def test_warnings_empty_when_inner_lacks_attribute():
     from gffbase.parser import _Iterator
 
     class _Stub:
-        def __iter__(self): return self
-        def __next__(self): raise StopIteration
-        def dialect(self): return {"fmt": "gff3"}
-        def directives(self): return []
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise StopIteration
+
+        def dialect(self):
+            return {"fmt": "gff3"}
+
+        def directives(self):
+            return []
+
         # deliberately no `warnings`
 
     it = _Iterator(_Stub(), native=False)

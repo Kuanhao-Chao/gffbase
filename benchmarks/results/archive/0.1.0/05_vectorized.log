@@ -1,0 +1,52 @@
+
+[vectorized] sampling 500 common gene IDs…
+  sampled 500 genes
+[vectorized] gffbase children_batched (format='arrow')…
+  wall=565.9 ms, RSS=236.30 MB, descendants=14995
+[vectorized] gffbase row-by-row loop…
+  wall=6.43 s, RSS=800.50 MB, descendants=14995
+[vectorized] legacy gffutils loop…
+  wall=680.1 ms, RSS=92.47 MB, descendants=14578
+
+[vectorized] sampling 5000 common gene IDs…
+  sampled 5000 genes
+[vectorized] gffbase children_batched (format='arrow')…
+  wall=479.4 ms, RSS=293.61 MB, descendants=160164
+[vectorized] gffbase row-by-row loop…
+  wall=1 min 4.2 s, RSS=920.30 MB, descendants=160164
+[vectorized] legacy gffutils loop…
+  wall=5.81 s, RSS=118.20 MB, descendants=155950
+
+[vectorized] sampling 50000 common gene IDs…
+  sampled 50000 genes
+[vectorized] gffbase children_batched (format='arrow')…
+Traceback (most recent call last):
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 201, in <module>
+    main()
+    ~~~~^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 173, in main
+    payload["scales"][str(n)] = run_one_scale(n, timeout_per_run=args.timeout_per_run)
+                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/05_vectorized.py", line 114, in run_one_scale
+    batched = run_subprocess(gffbase_batched_script(gene_ids),
+                             label=f"gffbase.batched(n={n})",
+                             timeout=timeout_per_run)
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/common.py", line 60, in run_subprocess
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "-c", script],
+    ...<2 lines>...
+        env=env,
+    )
+  File "/opt/anaconda3/lib/python3.13/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/subprocess.py", line 1972, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+OSError: [Errno 7] Argument list too long: '/opt/anaconda3/bin/python3'
