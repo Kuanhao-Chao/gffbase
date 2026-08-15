@@ -54,11 +54,13 @@ sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
     OUT,
+    RESULTS,
     du,
     merge_results,
     pretty_bytes,
     pretty_seconds,
     purge_db,
+    repeat,
     require_free_disk,
     run_subprocess,
 )
@@ -264,28 +266,47 @@ def sample_regions_from_db(
     return out
 
 
-def bench_spatial(db_path: Path, regions) -> dict:
+def bench_spatial(db_path: Path, regions, repeats: int = 1) -> dict:
     import gffbase
 
-    db = gffbase.FeatureDB(str(db_path))
-    t0 = time.perf_counter()
-    total = 0
-    for seqid, rs, re_ in regions:
-        for _ in db.region(seqid=seqid, start=rs, end=re_, featuretype="exon"):
-            total += 1
-    elapsed = time.perf_counter() - t0
+    # `with`, not a bare constructor: a writable DuckDB connection holds an
+    # exclusive lock, and the sweep purges each corpus's databases as soon as
+    # its numbers are recorded. Leaking the handle left the file locked, which
+    # is merely untidy on POSIX and blocks the delete outright on Windows.
+    with gffbase.FeatureDB(str(db_path), read_only=True) as db:
+        counted = {"total": 0}
+
+        def once() -> float:
+            t0 = time.perf_counter()
+            total = 0
+            for seqid, rs, re_ in regions:
+                for _ in db.region(seqid=seqid, start=rs, end=re_, featuretype="exon"):
+                    total += 1
+            elapsed = time.perf_counter() - t0
+            counted["total"] = total
+            return elapsed
+
+        # One discarded run when repeating: the first pass pays cold page
+        # cache, and a smoke test measured max/min = 6.7x purely from that.
+        # A spread that is really a cold-start artifact is worse than no
+        # spread, because it gets published as measurement uncertainty.
+        timing = repeat(once, repeats, warmup=1 if repeats > 1 else 0)
+
+    seconds = timing.get("median", timing.get("value"))
     return {
         "n_queries": len(regions),
-        "wall_seconds": elapsed,
-        "qps": len(regions) / elapsed if elapsed else None,
-        "total_features_returned": total,
+        "wall_seconds": seconds,
+        "qps": len(regions) / seconds if seconds else None,
+        "total_features_returned": counted["total"],
+        "timing": timing,
     }
 
 
-def bench_batched(db_path: Path, n_genes: int = 5000) -> dict:
+def bench_batched(db_path: Path, n_genes: int = 5000, repeats: int = 1) -> dict:
     import gffbase
 
-    db = gffbase.FeatureDB(str(db_path))
+    # See `bench_spatial` on why this is a `with` block.
+    db = gffbase.FeatureDB(str(db_path), read_only=True)
     # FeatureDB.execute() doesn't accept params — drop down to the
     # underlying duckdb connection for parameter binding.
     cur = db.conn.execute(
@@ -305,21 +326,50 @@ def bench_batched(db_path: Path, n_genes: int = 5000) -> dict:
             if gene_ids:
                 break
     if not gene_ids:
+        db.close()
         return {"skipped": "no top-level feature IDs found"}
-    t0 = time.perf_counter()
-    table = db.children_batched(gene_ids, format="arrow")
-    elapsed = time.perf_counter() - t0
+
+    rows = {"n": 0}
+
+    def once() -> float:
+        t0 = time.perf_counter()
+        table = db.children_batched(gene_ids, format="arrow")
+        elapsed = time.perf_counter() - t0
+        rows["n"] = table.num_rows
+        return elapsed
+
+    try:
+        timing = repeat(once, repeats, warmup=1 if repeats > 1 else 0)
+    finally:
+        db.close()
+
+    seconds = timing.get("median", timing.get("value"))
     return {
         "n_anchors": len(gene_ids),
-        "n_descendants": table.num_rows,
-        "wall_seconds": elapsed,
-        "qps": len(gene_ids) / elapsed if elapsed else None,
+        "n_descendants": rows["n"],
+        "wall_seconds": seconds,
+        "qps": len(gene_ids) / seconds if seconds else None,
+        "timing": timing,
     }
 
 
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
+
+
+def rel(path: Path) -> str:
+    """Path relative to the repo, when it is inside it.
+
+    The committed results file used to record `/Users/<someone>/Documents/...`
+    for every input and database. That leaks whoever ran the sweep into a
+    published artifact and makes the file describe one machine rather than one
+    measurement.
+    """
+    try:
+        return str(Path(path).resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 def run_one(corpus: dict, args) -> dict:
@@ -382,12 +432,26 @@ def run_one(corpus: dict, args) -> dict:
     else:
         print(f"    failed: exit={l_info.get('exit_code')}", flush=True)
 
+    # Both engines must have done the SAME work, or the ratio between their
+    # walls is not a speedup. Nothing checked this: each count was recorded and
+    # then never compared, so a corpus where the two disagreed -- a different
+    # duplicate-ID policy, a parent-synthesis difference on GTF -- would have
+    # published a headline number comparing two different workloads.
+    g_n, l_n = g_info.get("n_features"), l_info.get("n_features")
+    counts_agree = g_n is not None and l_n is not None and g_n == l_n
+    if g_n is not None and l_n is not None and not counts_agree:
+        print(
+            f"    !! feature-count mismatch: gffbase={g_n:,} legacy={l_n:,}. "
+            "Refusing to report a speedup between different workloads.",
+            flush=True,
+        )
+
     # A completed legacy run gives a speedup; a capped one gives a floor.
     # Keeping them in DIFFERENT keys is what stops a renderer printing a
     # bound as though it were a measurement.
     speedup = speedup_lower_bound = None
     g_wall = g_info.get("wall_seconds")
-    if g_wall:
+    if g_wall and counts_agree:
         if l_info.get("wall_seconds"):
             speedup = l_info["wall_seconds"] / g_wall
         elif l_info.get("wall_seconds_lower_bound"):
@@ -399,7 +463,7 @@ def run_one(corpus: dict, args) -> dict:
     if spatial is None:
         regions = sample_regions_from_db(gffbase_db, n=args.n_spatial)
         if regions:
-            spatial = bench_spatial(gffbase_db, regions)
+            spatial = bench_spatial(gffbase_db, regions, repeats=args.repeats)
             print(
                 f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
                 f"qps={spatial['qps']:.0f}, "
@@ -413,7 +477,7 @@ def run_one(corpus: dict, args) -> dict:
     print(f"  [gffbase] batched — {args.n_batched} anchors…", flush=True)
     batched = {"skipped": "no DB"} if not gffbase_db.exists() else None
     if batched is None:
-        batched = bench_batched(gffbase_db, n_genes=args.n_batched)
+        batched = bench_batched(gffbase_db, n_genes=args.n_batched, repeats=args.repeats)
         if "skipped" not in batched:
             print(
                 f"    wall={pretty_seconds(batched['wall_seconds'])}, "
@@ -425,7 +489,7 @@ def run_one(corpus: dict, args) -> dict:
     return {
         "name": name,
         "key": key,
-        "input": str(inp),
+        "input": rel(inp),
         "input_bytes": inp.stat().st_size if inp.exists() else 0,
         "feature_lines": n_lines,
         "gffbase": g_info,
@@ -434,12 +498,13 @@ def run_one(corpus: dict, args) -> dict:
         "ingest_speedup_lower_bound": speedup_lower_bound,
         "spatial": spatial,
         "batched": batched,
-        "db_paths": {"gffbase": str(gffbase_db), "legacy": str(legacy_db)},
+        "db_paths": {"gffbase": rel(gffbase_db), "legacy": rel(legacy_db)},
         "params": {
             "legacy_timeout_sec": args.legacy_timeout,
             "gffbase_timeout_sec": args.gffbase_timeout,
             "n_spatial": args.n_spatial,
             "n_batched": args.n_batched,
+            "repeats": args.repeats,
             "region_seed": REGION_SEED,
         },
     }
@@ -456,6 +521,27 @@ def main() -> None:
     )
     ap.add_argument(
         "--gffbase-timeout", type=int, default=3600, help="seconds before gffbase ingest is killed"
+    )
+    ap.add_argument(
+        "--publish",
+        action="store_true",
+        help=(
+            "copy the finished run to benchmarks/results/06_mega.json, which is "
+            "the committed file the published tables are generated from. "
+            "Without this the run lands only in benchmarks/out/ (gitignored) "
+            "and the docs keep rendering the previous measurement."
+        ),
+    )
+    ap.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help=(
+            "how many times to repeat the two cheap in-process measurements "
+            "(spatial, batched). n=1 records a bare `value`; n>1 records "
+            "median/min/max/values so the spread is publishable. The ingest "
+            "walls are NOT repeated -- legacy GENCODE alone takes over an hour."
+        ),
     )
     ap.add_argument("--n-spatial", type=int, default=5000)
     ap.add_argument("--n-batched", type=int, default=5000)
@@ -509,12 +595,25 @@ def main() -> None:
 
         if not args.no_purge and key not in keep:
             paths = row.get("db_paths") or {}
-            freed = purge_db(*(Path(v) for v in paths.values()))
+            # Stored relative (see `rel`); resolve against the repo to delete.
+            freed = purge_db(*(ROOT / v for v in paths.values()))
             if freed:
                 print(f"  purged {key} databases ({pretty_bytes(freed)})", flush=True)
 
     out_path = merge_results("06_mega", "corpora", results)
     print(f"\nResults → {out_path}", flush=True)
+
+    if args.publish:
+        import shutil
+
+        published = RESULTS / "06_mega.json"
+        published.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_path, published)
+        print(f"Published → {published.relative_to(ROOT)}", flush=True)
+        print(
+            "  Regenerate the tables with: python tools/gen_benchmark_tables.py --write",
+            flush=True,
+        )
 
     # Compact summary table.
     print("\n" + "=" * 92, flush=True)

@@ -114,6 +114,22 @@ def _speedup_cell(row: dict) -> str:
     return "—"
 
 
+def _spread_note(row: dict) -> str:
+    """A parenthetical spread, when the run actually measured one.
+
+    `--repeats N` records `median`/`min`/`max`; a single-shot run records a
+    bare `value` and no median, so this returns nothing rather than dressing
+    one sample up as a central tendency.
+    """
+    timing = (row.get("spatial") or {}).get("timing") or {}
+    if timing.get("n", 1) < 2 or "min" not in timing:
+        return ""
+    lo, hi, n = timing["min"], timing["max"], timing["n"]
+    if not lo:
+        return ""
+    return f" ±{100 * (hi - lo) / (2 * lo):.0f}% (n={n})"
+
+
 def _check_no_invented_numbers(row: dict) -> None:
     """A capped run must not carry a wall time. Refuse to render if it does.
 
@@ -165,7 +181,7 @@ def render_corpus_table(data: dict) -> str:
             f"| {_legacy_cell(row)} "
             f"| {_speedup_cell(row)} "
             f"| {human_bytes(g.get('peak_rss_bytes'))} "
-            f"| {f'**{qps:,.0f}**' if qps else '—'} "
+            f"| {f'**{qps:,.0f}**' + _spread_note(row) if qps else '—'} "
             f"| {batched_cell} |"
         )
     return "\n".join(lines)
