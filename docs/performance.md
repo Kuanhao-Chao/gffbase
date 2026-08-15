@@ -107,11 +107,23 @@ The per-corpus batched column in the table above shows this at 5 000 anchors.
 Being fast at whole-corpus work costs something at the other end, and it is
 worth being explicit about what:
 
+The two costs that can be measured are, so they are generated from the same
+run as the speed numbers rather than retyped:
+
+<!-- BEGIN GENERATED: tradeoffs-table -->
+| | gffbase | legacy `gffutils` | ratio |
+| --- | ---: | ---: | ---: |
+| **Peak ingest RSS** | 1.09 GB | 171.08 MB | 6.55× |
+| **On-disk database** | 607.76 MB | 472.90 MB | 1.29× |
+
+*Measured across 1 corpus; ratios are gffbase ÷ legacy.*
+<!-- END GENERATED: tradeoffs-table -->
+
+The rest of the ledger is qualitative, and stays that way:
+
 | | gffbase | legacy `gffutils` |
 | --- | --- | --- |
 | **Ingest wall** | faster on every corpus measured | — |
-| **Peak ingest RSS** | ~1–2 GB | ~150–180 MB |
-| **On-disk size** | ~1.5× larger | — |
 | **Single-feature point query** | comparable | comparable |
 | **Row-by-row loop over many IDs** | **slower** | faster |
 | **Bulk batched extraction** | one query, zero `Feature` objects | not available |
