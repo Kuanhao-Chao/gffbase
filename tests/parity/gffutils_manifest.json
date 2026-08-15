@@ -152,17 +152,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": null
@@ -1662,17 +1651,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": {
@@ -3726,17 +3704,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": null
@@ -3755,17 +3722,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": null
@@ -3784,17 +3740,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": null
@@ -3845,17 +3790,6 @@
             },
             "__weakref__": {
               "kind": "attribute"
-            },
-            "add_note": {
-              "kind": "method",
-              "signature": null
-            },
-            "args": {
-              "kind": "attribute"
-            },
-            "with_traceback": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": {
@@ -6638,118 +6572,8 @@
             "__weakref__": {
               "kind": "attribute"
             },
-            "clear": {
-              "kind": "method",
-              "signature": null
-            },
-            "copy": {
-              "kind": "method",
-              "signature": null
-            },
             "default_factory": {
               "kind": "attribute"
-            },
-            "fromkeys": {
-              "kind": "method",
-              "signature": {
-                "parameters": [
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "iterable"
-                  },
-                  {
-                    "default": "None",
-                    "has_default": true,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "value"
-                  }
-                ]
-              }
-            },
-            "get": {
-              "kind": "method",
-              "signature": {
-                "parameters": [
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "self"
-                  },
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "key"
-                  },
-                  {
-                    "default": "None",
-                    "has_default": true,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "default"
-                  }
-                ]
-              }
-            },
-            "items": {
-              "kind": "method",
-              "signature": null
-            },
-            "keys": {
-              "kind": "method",
-              "signature": null
-            },
-            "pop": {
-              "kind": "method",
-              "signature": null
-            },
-            "popitem": {
-              "kind": "method",
-              "signature": {
-                "parameters": [
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "self"
-                  }
-                ]
-              }
-            },
-            "setdefault": {
-              "kind": "method",
-              "signature": {
-                "parameters": [
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "self"
-                  },
-                  {
-                    "default": null,
-                    "has_default": false,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "key"
-                  },
-                  {
-                    "default": "None",
-                    "has_default": true,
-                    "kind": "POSITIONAL_ONLY",
-                    "name": "default"
-                  }
-                ]
-              }
-            },
-            "update": {
-              "kind": "method",
-              "signature": null
-            },
-            "values": {
-              "kind": "method",
-              "signature": null
             }
           },
           "signature": null
@@ -6899,9 +6723,10 @@
   },
   "oracle": {
     "commit": "6b84330f472dd2b4c69e36f319da7ade95bd5961",
-    "describe": "v0.13-33-g6b84330",
-    "generator_python": "3.11.15",
-    "package_dir": "/ccb/salz3/kh.chao/gffutils/gffutils",
+    "describe": null,
+    "generator_python": "3.13.5",
+    "installed_as": "installed",
+    "package_dir": "/private/tmp/claude-501/-Users-chaokuan-hao-Documents-Projects-gff-gffbase/73e15c33-603e-4ecf-9b97-f5cb8895f959/scratchpad/oracle-venv/lib/python3.13/site-packages/gffutils",
     "reported_version": "0.14"
   },
   "schema": 1
