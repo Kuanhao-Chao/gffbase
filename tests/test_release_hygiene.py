@@ -798,9 +798,66 @@ def test_the_g_descender_clears_the_exon_block(svg_name):
             f"({len(intruding)} sampled points). The two tiers must clear each other."
         )
 
-    baseline = 240
-    depth = (lowest - baseline) / 200  # 200 = cap height
-    assert 0.15 <= depth <= 0.30, (
-        f"{svg_name}: descender depth is {depth:.2f}x cap height; a grotesque "
-        "g sits at roughly 0.20-0.25x"
+    depth = (lowest - BASELINE) / EM
+    assert 0.18 <= depth <= 0.24, (
+        f"{svg_name}: the g descender is {depth:.3f} em below the baseline. A "
+        "grotesque sits at 0.20-0.21. This band rejects BOTH failures this "
+        "glyph has had: the original 0.265 (too deep, ran through the exon) "
+        "and the 0.069 'fix' (a third of normal, read as stunted)."
+    )
+
+
+#: Measured from the outlines, not from the file's own comment -- which
+#: asserted 240 and was wrong, which is how the descender came to be judged
+#: against a baseline 18 units too high.
+BASELINE = 258
+EM = 318  # ascender 228 above the baseline / 0.718, the Helvetica ratio
+
+#: Each letter, and the label its path carries in the SVG.
+LETTERS = ["g : bowl + descender", "f", "f", "a", "s", "e"]
+
+
+@pytest.mark.parametrize("svg_name", ["logo.svg", "logo-white.svg"])
+def test_the_wordmark_sits_on_one_baseline(svg_name):
+    """Every letter lands on the same line, give or take optical overshoot.
+
+    `a`, `s` and `e` were each drawn too tall (175, 169 and 158 against an
+    x-height of 150) and so hung 25, 19 and 8 units below the line while `f`,
+    `f` and the `b` stem sat on it. "ase" visibly drooped away from "gff b".
+
+    Round letters are allowed a couple of units of overshoot below the line --
+    that is a real typographic convention, not slop -- and flat-bottomed ones
+    are not. Both fit inside the band asserted here; 25 units does not.
+    """
+    import re
+
+    svg = (REPO_ROOT / "docs" / "assets" / svg_name).read_text()
+    paths = re.findall(r'<path d="([^"]+)"', svg)
+    # Document order: g, f, f, cylinder, band, a, s, e.
+    by_label = {
+        "g": paths[0],
+        "f1": paths[1],
+        "f2": paths[2],
+        "a": paths[5],
+        "s": paths[6],
+        "e": paths[7],
+    }
+
+    offenders = []
+    for label, d in by_label.items():
+        bottom = max(y for _, y in _svg_path_points(d))
+        if label == "g":
+            continue  # the g has a descender; checked separately
+        if not (BASELINE - 1 <= bottom <= BASELINE + 4):
+            offenders.append(f"{label} bottom y={bottom:.1f} ({bottom - BASELINE:+.1f})")
+
+    # The `b` stem is a rect, not a path, and defines the line.
+    stem = re.search(r'<rect x="560" y="(\d+)" width="46" height="(\d+)"', svg)
+    assert stem, f"{svg_name}: the b stem is not where this test expects it"
+    stem_bottom = int(stem.group(1)) + int(stem.group(2))
+    if stem_bottom != BASELINE:
+        offenders.append(f"b-stem bottom y={stem_bottom} ({stem_bottom - BASELINE:+d})")
+
+    assert not offenders, f"{svg_name}: letters are off the baseline (y={BASELINE}): " + "; ".join(
+        offenders
     )

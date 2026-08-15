@@ -16,24 +16,33 @@
   Flat 100% black on transparent, no gradients or shadows, per the family.
   `logo-white.svg` is the inverse, for dark backgrounds.
 
-  Geometry: cap height 200 (y 40..240), baseline y=240, x-height letters sit
-  on the same baseline. Gene model occupies y 300..340.
+  Geometry, MEASURED from the outlines rather than asserted:
 
-  The `g` descender stops at y=280: 40 units, or 0.20x cap height, which is
-  the typographic norm for a grotesque. It used to reach y=342 (0.51x, about
-  twice the norm) and ran straight through the first exon block, so at the
-  36px the site renders the logo at, the tail and the exon merged into one
-  black mass. The two tiers now clear each other by 20 units.
+    ascender top  y=30     baseline   y=258     x-height  150
+    x-line        y=108    descender  y=322     em       ~318
+
+  An earlier version of this comment claimed the baseline was y=240. It was
+  not, and the error propagated. The `g` descender was judged against that
+  wrong line, declared twice the normal depth, and compressed to 22 units
+  below the true baseline (0.07 em, about a third of normal), which is why it
+  read as stunted. It is now 64 units, 0.20 em, where a grotesque `g` sits.
+
+  `a`, `s` and `e` were each drawn too tall (175, 169 and 158 against an
+  x-height of 150), so they hung 25, 19 and 8 units below the line while
+  `f`, `f` and the `b` stem sat on it. They are scaled about the x-line to
+  land at y=260: the baseline plus two units of optical overshoot, which
+  round letters should have and flat-bottomed ones should not.
+
+  Gene model occupies y 300..340 and now STARTS at x=250, clear of the `g`
+  (which reaches x=219 inside that band). The exon yields to the letter,
+  rather than the letter being squashed to fit around it.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 365" role="img"
      aria-label="gffbase">
   <title>gffbase</title>
   <g fill="#000000">
     <!-- g : bowl + descender -->
-    <path d="M150 108c-46 0-80 32-80 76 0 43 33 74 78 74 20 0 36-6 47-18v5
-             c0 11-19 18-50 18-22 0-40-3-54-7l-24 14c21 6 48 10 79 10
-             57 0 92-13 92-34V112h-46v16c-12-13-26-20-42-20zm9 41
-             c26 0 44 16 44 37s-18 37-44 37-44-16-44-37 18-37 44-37z"/>
+    <path d="M150 108c-46 0-80 32-80 76 0 43 33 74 78 74 20 0 36-6 47-18v13 c0 23-19 36-50 36-22 0-40-5-54-14l-24 27c21 13 48 20 79 20 57 0 92-24 92-66V112h-46v16c-12-13-26-20-42-20zm9 41 c26 0 44 16 44 37s-18 37-44 37-44-16-44-37 18-37 44-37z"/>
 
     <!-- f -->
     <path d="M300 112h-32v39h32v107h48V151h44v-39h-44V98c0-17 10-26 28-26
@@ -59,28 +68,20 @@
              s-52-7-52-17v-16z"/>
 
     <!-- a -->
-    <path d="M882 108c-27 0-50 9-66 23l21 31c12-10 26-15 41-15 22 0 35 10 35 26v6
-             h-42c-44 0-70 20-70 52 0 31 24 52 61 52 23 0 41-8 52-21v17h46V166
-             c0-39-30-58-78-58zm31 105v10c0 17-16 28-36 28-17 0-28-8-28-20
-             0-12 10-18 29-18h35z"/>
+    <path d="M882 108c-27 0 -50 7.8 -66 20l21 26.9c12 -8.7 26 -13 41 -13 22 0 35 8.7 35 22.6v5.2h-42c-44 0 -70 17.4 -70 45.2 0 26.9 24 45.2 61 45.2 23 0 41 -6.9 52 -18.2v14.8h46V158.4c0 -33.9 -30 -50.4 -78 -50.4zm31 91.2v8.7c0 14.8 -16 24.3 -36 24.3 -17 0 -28 -6.9 -28 -17.4 0 -10.4 10 -15.6 29 -15.6h35z"/>
 
     <!-- s -->
-    <path d="M1050 108c-42 0-70 21-70 52 0 56 83 42 83 65 0 9-9 14-24 14
-             -18 0-36-7-49-18l-19 33c18 14 43 23 68 23 44 0 73-21 73-53
-             0-57-84-43-84-66 0-8 8-13 22-13 15 0 31 5 43 13l19-33
-             c-18-11-40-17-62-17z"/>
+    <path d="M1050 108c-42 0 -70 18.9 -70 46.8 0 50.4 83 37.8 83 58.5 0 8.1 -9 12.6 -24 12.6 -18 0 -36 -6.3 -49 -16.2l-19 29.7c18 12.6 43 20.7 68 20.7 44 0 73 -18.9 73 -47.7 0 -51.3 -84 -38.7 -84 -59.4 0 -7.2 8 -11.7 22 -11.7 15 0 31 4.5 43 11.7l19 -29.7c-18 -9.9 -40 -15.3 -62 -15.3z"/>
 
     <!-- e -->
-    <path d="M1200 108c-47 0-81 33-81 79s34 79 84 79c27 0 49-9 65-24l-25-28
-             c-10 10-23 15-37 15-21 0-36-11-42-30h116c1-4 1-9 1-13
-             0-46-33-78-81-78zm-36 65c4-19 18-30 37-30s32 11 36 30h-73z"/>
+    <path d="M1200 108c-47 0 -81 31.7 -81 76s34 76 84 76c27 0 49 -8.7 65 -23.1l-25 -26.9c-10 9.6 -23 14.4 -37 14.4 -21 0 -36 -10.6 -42 -28.9h116c1 -3.8 1 -8.7 1 -12.5 0 -44.3 -33 -75 -81 -75zm-36 62.5c4 -18.3 18 -28.9 37 -28.9s32 10.6 36 28.9h-73z"/>
   </g>
 
   <!-- Gene model: two exons on an intron line. Splam's vocabulary, reused
        deliberately, because this is the thing being stored. -->
   <g fill="#000000">
-    <rect x="40" y="315" width="1210" height="10" rx="5"/>
-    <rect x="150" y="300" width="380" height="40" rx="4"/>
+    <rect x="250" y="315" width="1000" height="10" rx="5"/>
+    <rect x="310" y="300" width="250" height="40" rx="4"/>
     <rect x="800" y="300" width="390" height="40" rx="4"/>
   </g>
 </svg>

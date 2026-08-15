@@ -43,7 +43,11 @@ import sys
 import time
 from pathlib import Path
 
-import psutil
+# `psutil` is imported lazily, inside the two functions that measure with it.
+# At module scope it made `06_mega.py --help` -- and every import of this
+# module -- fail without the `bench` extra, which took out 15 of 18 CI jobs.
+# A `--help` that dies on a missing measurement library is a bug of its own,
+# independent of the tests that caught it.
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCH_DIR = ROOT / "benchmarks"
@@ -113,6 +117,8 @@ def environment() -> dict:
     result that does not say what it ran on is not a measurement, and one that
     does not say what version it measured cannot detect a regression.
     """
+    import psutil
+
     free = shutil.disk_usage(str(OUT if OUT.exists() else BENCH_DIR)).free
     return {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -230,6 +236,8 @@ def run_subprocess(
     """Run a Python -c snippet in a fresh subprocess. Polls RSS at 50ms.
     Discards stderr (DuckDB progress bars) but captures stdout's last
     JSON line."""
+    import psutil
+
     env = os.environ.copy()
     env["DUCKDB_DISABLE_PROGRESS_BAR"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
