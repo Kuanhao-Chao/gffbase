@@ -5,7 +5,7 @@ All notable changes to GFFBase are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-08-14
+## [0.2.0] — 2026-08-15
 
 Genuine `gffutils` 0.14 API and CLI parity, first-class support for
 discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
