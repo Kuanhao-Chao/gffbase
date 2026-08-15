@@ -46,6 +46,27 @@ from benchmarks.common import (
 )
 
 
+def backfill_timeout_wall(info: dict, timeout: float) -> dict:
+    """Give a killed run a `wall_seconds` equal to the cap it hit.
+
+    `common.run_subprocess` omits `wall_seconds` entirely when it kills a
+    child, so every downstream `info["wall_seconds"]` raised `KeyError` on
+    exactly the case this stage exists to produce: the row-by-row loop is
+    *supposed* to be too slow to finish at 50 000 genes. The published
+    "≥ 642 s (killed after 10 min)" figure therefore cannot have come out of
+    this script -- it was hand-computed as 64.2 s × 10 and pasted in.
+
+    Filling in the cap makes the derived speedup a true lower bound: the run
+    took at least this long. `timed_out` stays set so the caller can print
+    the "≥" and the JSON consumer can tell a measurement from a floor.
+    `06_mega.py` already does this; only this stage was missing it.
+    """
+    if info.get("wall_seconds") is None:
+        info["wall_seconds"] = float(timeout)
+        info["extrapolated"] = True
+    return info
+
+
 def sample_common_ids(n: int, seed: int = 20260501):
     """Pick gene IDs that exist in BOTH DBs so per-engine descendant counts
     can be compared apples-to-apples."""
@@ -159,22 +180,30 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     )
 
     print("[vectorized] gffbase row-by-row loop…", flush=True)
-    g_loop = run_subprocess(
-        gffbase_loop_script(ids_path), label=f"gffbase.loop(n={n})", timeout=timeout_per_run
+    g_loop = backfill_timeout_wall(
+        run_subprocess(
+            gffbase_loop_script(ids_path), label=f"gffbase.loop(n={n})", timeout=timeout_per_run
+        ),
+        timeout_per_run,
     )
     print(
-        f"  wall={pretty_seconds(g_loop['wall_seconds'])}, "
+        f"  wall={pretty_seconds(g_loop['wall_seconds'])}"
+        f"{' (killed; lower bound)' if g_loop.get('timed_out') else ''}, "
         f"RSS={pretty_bytes(g_loop['peak_rss_bytes'])}, "
         f"descendants={g_loop.get('n_descendants')}",
         flush=True,
     )
 
     print("[vectorized] legacy gffutils loop…", flush=True)
-    legacy = run_subprocess(
-        legacy_loop_script(ids_path), label=f"legacy.loop(n={n})", timeout=timeout_per_run
+    legacy = backfill_timeout_wall(
+        run_subprocess(
+            legacy_loop_script(ids_path), label=f"legacy.loop(n={n})", timeout=timeout_per_run
+        ),
+        timeout_per_run,
     )
     print(
-        f"  wall={pretty_seconds(legacy['wall_seconds'])}, "
+        f"  wall={pretty_seconds(legacy['wall_seconds'])}"
+        f"{' (killed; lower bound)' if legacy.get('timed_out') else ''}, "
         f"RSS={pretty_bytes(legacy['peak_rss_bytes'])}, "
         f"descendants={legacy.get('n_descendants')}",
         flush=True,
