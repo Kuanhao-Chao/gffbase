@@ -37,7 +37,15 @@ import json
 from pathlib import Path
 
 import pytest
-import tomllib
+
+# `tomllib` is 3.11+; this project supports 3.10, where the third-party
+# `tomli` provides the same API. Without the fallback this module fails at
+# IMPORT on 3.10 -- which took out the entire parity file, and with it the
+# Windows matrix cells, since Windows is tested at the 3.10 floor.
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - 3.10 only
+    import tomli as tomllib
 
 #: These compare against the recorded manifest rather than a live gffutils, so
 #: they run without the oracle installed. They still belong to the parity
