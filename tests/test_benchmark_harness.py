@@ -31,6 +31,7 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,39 @@ def _source() -> str:
 # ---------------------------------------------------------------------------
 # The documented interface has to exist
 # ---------------------------------------------------------------------------
+
+
+def test_the_harness_imports_without_the_bench_extras():
+    """`--help` must not need a measurement library.
+
+    `benchmarks/common.py` imported `psutil` at module scope, so importing the
+    harness at all -- including to print its usage -- failed without the
+    `bench` extra. The test job installs `[test,all]`, so this took out 15 of
+    18 CI jobs. `psutil` is now imported inside the two functions that measure
+    with it.
+    """
+    code = textwrap.dedent("""
+        import sys
+        class Blocker:
+            def find_module(self, name, path=None):
+                if name == "psutil":
+                    return self
+            def load_module(self, name):
+                raise ImportError("No module named 'psutil'")
+        sys.meta_path.insert(0, Blocker())
+        import benchmarks.common          # noqa: F401
+        print("imported")
+    """)
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=120,
+    )
+    assert proc.returncode == 0, (
+        f"benchmarks.common cannot be imported without psutil:\n{proc.stderr}"
+    )
 
 
 @pytest.mark.parametrize("flag", ["--repeats", "--publish", "--only", "--legacy-timeout"])
