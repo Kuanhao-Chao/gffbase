@@ -122,7 +122,6 @@ nav:
       - Connections & concurrency: guides/connections.md
       - Command line: cli.md
       - Migration from gffutils: migration.md
-      - Troubleshooting & FAQ: guides/troubleshooting.md
   - Cookbooks:
       - cookbooks/index.md
       - GENCODE / Ensembl: cookbooks/gencode_ensembl.md
@@ -132,6 +131,7 @@ nav:
   - Performance:
       - Benchmarks: performance.md
       - Methodology: performance/methodology.md
+      - Datasets: datasets.md
   - API Reference:
       - api/index.md
       - FeatureDB: api/featuredb.md
@@ -144,10 +144,16 @@ nav:
       - validate: api/validate.md
       - migrate: api/migrate.md
       - Compatibility modules: api/compat.md
+  - Help:
+      - FAQ: faq.md
+      - Troubleshooting: guides/troubleshooting.md
   - Design:
       - Schema v2: design/schema-v2.md
   - Project:
       - Changelog: changelog.md
       - Contributing: contributing.md
+      - Citation: citation.md
+      - License: license.md
+      - Contact: contact.md
       - Security policy: security-policy.md
       - "Advisory: SQL injection (0.1.0)": security/2026-sql-injection.md

@@ -88,6 +88,43 @@ nobody can install would only mislead. Everything below is the delta from
   records it as skipped, which the test read as a failure. The skip is the
   designed behaviour, so it is now what the test asserts.
 
+### Testing and CI
+
+- **The parity gate could not pass on any machine but the one that generated
+  it.** Three independent causes, each making the manifest a description of
+  the environment rather than of gffutils' API:
+
+  * `__firstlineno__` and `__static_attributes__` are injected into every
+    class body by CPython 3.13, so a manifest generated there could not
+    validate on 3.11 or 3.12.
+  * Members inherited from builtin bases (`Exception.add_note`, `dict.keys`)
+    were recorded, and their introspectability changes between releases.
+  * `gffutils.contrib.plotting` does `from pybedtools.contrib.plotting import
+    Track`, and **pybedtools sets `Track = None` when matplotlib is absent** --
+    so the manifest recorded the presence of a name bound to `None`, and the
+    inventory tracked a third-party optional dependency.
+
+  All three are excluded now. `--check` also refuses to compare a
+  checkout-generated manifest against a pip-installed oracle (a checkout ships
+  `contrib/` and `scripts/gffutils-cli`, which pip does not package), and it
+  prints **what** differs rather than only that something does -- "out of
+  date" alone sends the reader to regenerate a file that may be correct.
+
+- **`test_api_parity.py` failed at import on Python 3.10**, the declared
+  floor, because it uses `tomllib` (3.11+). Windows is tested at the floor, so
+  this took out the parity module and both Windows cells. `tomli` is now a
+  declared test dependency under an environment marker.
+
+- **`pybedtools_integration` was measured at 9.8% coverage** because its tests
+  skip without the `bedtools` binary and no runner had one. CI installs it, so
+  the module is exercised rather than counted as untested. The coverage gate
+  is now per-platform, because what is *reachable* is per-platform: Windows
+  cannot install pybedtools at all.
+
+- `python -m gffbase` is tested rather than assumed. It runs in a subprocess
+  the tracer cannot follow, so it is excluded from measurement with the test
+  that covers it named -- rather than left reading 0%.
+
 ### Documentation
 
 - **Documentation code is now executed by the test suite.**
@@ -327,6 +364,29 @@ everything from scratch.
   to 3.10.
 
 ### Added
+
+- **`FeatureDB.to_table()`** — the whole database, or a filtered slice of it,
+  as one `pyarrow.Table` / `pandas.DataFrame` / `polars.DataFrame`. The
+  columnar counterpart to `all_features()`: same filters (`featuretype`,
+  `limit`, `strand`, `order_by`, `completely_within`), but no `Feature` object
+  is constructed at any layer.
+
+  ```python
+  exons = db.to_table("exon", format="arrow")
+  df = db.to_table(["exon", "CDS"], format="df", limit="chr1:1-10000")
+  ```
+
+  gffutils has no equivalent; the row-by-row path pays a Python object per
+  row, which on a whole-genome corpus is millions of allocations and dominates
+  everything else.
+
+- **`gffbase stats`** — a summary of what is actually in a database: feature
+  counts broken down by type with percentages, sequence count and names,
+  discontinuous-feature count, and how the database was built (format, mode,
+  schema version, which spatial index). The first question anyone asks of an
+  unfamiliar annotation, which otherwise means writing the same throwaway
+  script every time.
+
 
 - **The compatibility submodules are bound on the package namespace.**
   gffutils binds `attributes`, `bins`, `constants`, `create` and `version` on

@@ -201,6 +201,16 @@ def _describe_module(mod_name: str) -> dict[str, Any]:
         # Skip re-exported modules; each is inventoried in its own right.
         if inspect.ismodule(obj):
             continue
+        # Skip `None` placeholders. `gffutils.contrib.plotting` does
+        # `from pybedtools.contrib.plotting import Track`, and pybedtools sets
+        # `Track = None` when matplotlib is absent -- so the name exists but
+        # the object does not. Recording it made the inventory depend on a
+        # THIRD-PARTY optional dependency rather than on gffutils' API, and
+        # `--check` failed on any machine whose matplotlib differed from the
+        # one that generated the manifest. A name bound to None is not a
+        # symbol anyone can call.
+        if obj is None:
+            continue
         # Skip symbols merely imported from elsewhere -- they belong to the
         # module that defines them. `gffutils.__init__` is the exception: its
         # re-exports *are* its public surface.
@@ -372,6 +382,32 @@ def main() -> int:
         # interpreter, neither of which is a property of the API surface.
         if committed.get("modules") != manifest["modules"]:
             print("parity manifest is out of date; re-run without --check", file=sys.stderr)
+            # Say WHAT differs. "Out of date" alone sends the reader to
+            # regenerate a file that may be correct, and hides the common
+            # cause: an inventory that varies by interpreter version rather
+            # than by gffutils.
+            cm, fm = committed.get("modules") or {}, manifest["modules"]
+            for mod in sorted(set(cm) | set(fm)):
+                if cm.get(mod) == fm.get(mod):
+                    continue
+                cs = (cm.get(mod) or {}).get("symbols", {})
+                fs = (fm.get(mod) or {}).get("symbols", {})
+                if set(cs) != set(fs):
+                    print(
+                        f"  {mod}: committed-only={sorted(set(cs) - set(fs))} "
+                        f"generated-only={sorted(set(fs) - set(cs))}",
+                        file=sys.stderr,
+                    )
+                for name in sorted(set(cs) & set(fs)):
+                    if cs[name] == fs[name]:
+                        continue
+                    c_mem = set(cs[name].get("members") or {})
+                    f_mem = set(fs[name].get("members") or {})
+                    print(
+                        f"  {mod}.{name}: committed-only={sorted(c_mem - f_mem)} "
+                        f"generated-only={sorted(f_mem - c_mem)}",
+                        file=sys.stderr,
+                    )
             return 1
         print(f"parity manifest is up to date ({current_shape} oracle)")
         return 0

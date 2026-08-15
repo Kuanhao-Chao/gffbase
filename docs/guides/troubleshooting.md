@@ -1,8 +1,11 @@
 ---
-title: Troubleshooting & FAQ
+title: Troubleshooting
 ---
 
-# Troubleshooting & FAQ
+# Troubleshooting
+
+Organised by the error you are looking at. For "how does this work" questions,
+see the [FAQ](../faq.md).
 
 ---
 

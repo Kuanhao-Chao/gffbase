@@ -315,3 +315,49 @@ def test_region_batched_query_idx_matches_input_order_when_all_valid(db):
 def test_region_batched_rejects_an_unknown_on_invalid(db):
     with pytest.raises(ValueError, match="on_invalid"):
         db.region_batched([("chr1", 1, 2)], on_invalid="ignore")
+
+
+# ---------------------------------------------------------------------------
+# `to_table`: the whole database as one columnar result
+# ---------------------------------------------------------------------------
+
+
+def test_to_table_returns_every_feature(db):
+    table = db.to_table()
+    assert table.num_rows == db.count_features_of_type()
+    assert "id" in table.schema.names and "featuretype" in table.schema.names
+
+
+def test_to_table_filters_by_featuretype(db):
+    exons = db.to_table("exon")
+    assert exons.num_rows == db.count_features_of_type("exon")
+    assert set(exons.column("featuretype").to_pylist()) == {"exon"}
+
+
+def test_to_table_accepts_several_featuretypes(db):
+    both = db.to_table(["exon", "mRNA"])
+    assert set(both.column("featuretype").to_pylist()) == {"exon", "mRNA"}
+
+
+def test_to_table_honours_a_region_limit(db):
+    everything = db.to_table().num_rows
+    limited = db.to_table(limit=("chr1", 100, 200)).num_rows
+    assert 0 < limited < everything
+
+
+def test_to_table_matches_the_row_by_row_api(db):
+    """The columnar path and the object path must agree on the answer."""
+    rows = sorted(f.id for f in db.all_features(featuretype="exon"))
+    table = sorted(db.to_table("exon").column("id").to_pylist())
+    assert table == rows
+
+
+def test_to_table_rejects_an_unknown_format(db):
+    with pytest.raises(ValueError):
+        db.to_table(format="parquet")
+
+
+def test_to_table_rejects_an_order_by_outside_the_whitelist(db):
+    """`order_by` is a whitelist everywhere, including here."""
+    with pytest.raises(ValueError):
+        db.to_table(order_by="start; DROP TABLE features")

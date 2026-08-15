@@ -114,6 +114,39 @@ gffbase sanitize messy.gff3 --in-place
 
 ## gffbase-only commands
 
+### `stats`
+
+A summary of what is actually in a database: how many features, broken down by
+type, across how many sequences, plus how the database was built.
+
+```bash
+gffbase stats annotations.duckdb
+```
+
+<!-- docs-test: skip reason="console output, not Python" -->
+```text
+database    chess.duckdb
+format      gff3
+mode        compat (validation=gffutils, on_error=raise)
+schema      v2
+index       R-tree
+
+features    2,761,061
+
+by featuretype
+  exon         1,423,321   51.5%
+  CDS          1,105,534   40.0%
+  transcript     168,451    6.1%
+  gene            63,755    2.3%
+
+sequences   316
+  chr1, chr10, chr10_GL383545v1_alt, chr10_KI270824v1_alt, chr11, ...
+```
+
+A corpus holding discontinuous features reports those too — several input
+lines sharing one `ID`, fused under `mode="strict"`. See
+[Compatibility & strict modes](guides/modes.md).
+
 ### `validate`
 
 Runs the post-ingest invariants against an existing database. Each is a single

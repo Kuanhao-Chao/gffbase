@@ -82,6 +82,7 @@ def test_every_command_is_registered():
         "search",
         "rmdups",
         "sanitize",
+        "stats",
         "validate",
         "migrate",
     }
@@ -506,3 +507,51 @@ def test_python_dash_m_reports_usage_for_no_arguments():
     )
     assert proc.returncode != 0
     assert "usage" in (proc.stdout + proc.stderr).lower()
+
+
+# ---------------------------------------------------------------------------
+# `gffbase stats`
+# ---------------------------------------------------------------------------
+
+
+def test_stats_reports_the_shape_of_the_database(tmp_path, capsys):
+    """The first question anyone asks of an unfamiliar annotation."""
+    src = tmp_path / "s.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrc\tgene\t100\t900\t.\t+\t.\tID=g1\n"
+        "chr1\tsrc\tmRNA\t100\t900\t.\t+\t.\tID=t1;Parent=g1\n"
+        "chr1\tsrc\texon\t100\t200\t.\t+\t.\tID=e1;Parent=t1\n"
+        "chr2\tsrc\texon\t100\t200\t.\t+\t.\tID=e2;Parent=t1\n"
+    )
+    out = str(tmp_path / "s.duckdb")
+    create_db(str(src), out, force=True).close()
+
+    assert main(["stats", out]) == 0
+    captured = capsys.readouterr().out
+
+    assert "features    4" in captured
+    # Per-featuretype breakdown, biggest first.
+    assert "exon" in captured and "gene" in captured
+    # Both sequences, and the count.
+    assert "sequences   2" in captured
+    assert "chr1" in captured and "chr2" in captured
+    # Provenance the database records about itself.
+    assert "gff3" in captured
+    assert "compat" in captured
+
+
+def test_stats_reports_discontinuous_features(tmp_path, capsys):
+    """A multipart corpus says so; an ordinary one stays quiet about it."""
+    src = tmp_path / "m.gff3"
+    src.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrc\tgene\t100\t900\t.\t+\t.\tID=g1\n"
+        "chr1\tsrc\tCDS\t100\t200\t.\t+\t0\tID=c1;Parent=g1\n"
+        "chr1\tsrc\tCDS\t500\t600\t.\t+\t2\tID=c1;Parent=g1\n"
+    )
+    out = str(tmp_path / "m.duckdb")
+    create_db(str(src), out, force=True, mode="strict").close()
+
+    assert main(["stats", out]) == 0
+    assert "discontinuous features" in capsys.readouterr().out

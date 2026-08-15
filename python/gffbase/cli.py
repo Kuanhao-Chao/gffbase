@@ -207,6 +207,49 @@ def cmd_sanitize(args) -> int:
     return 0
 
 
+def cmd_stats(args) -> int:
+    """gffbase-only: a summary of what is actually in a database.
+
+    The first question anyone asks of an unfamiliar annotation -- how many
+    genes, which sequences, how deep does the hierarchy go -- and answering it
+    otherwise means writing the same throwaway script every time.
+    """
+    db = _open(args.db)
+
+    print(f"database    {args.db}")
+    print(f"format      {db.fmt}")
+    print(f"mode        {db.mode} (validation={db.validation}, on_error={db.on_error})")
+    print(f"schema      v{db._schema_version}")
+    print(f"index       {'R-tree' if db._rtree_built else 'B-tree'}")
+    print()
+
+    total = db.count_features_of_type()
+    print(f"features    {total:,}")
+
+    counts = [(ft, db.count_features_of_type(ft)) for ft in db.featuretypes()]
+    if counts:
+        width = max(len(ft) for ft, _ in counts)
+        print()
+        print("by featuretype")
+        for ft, n in sorted(counts, key=lambda kv: -kv[1]):
+            share = 100 * n / total if total else 0
+            print(f"  {ft:<{width}}  {n:>10,}  {share:5.1f}%")
+
+    seqids = list(db.seqids())
+    print()
+    print(f"sequences   {len(seqids):,}")
+    if seqids:
+        shown = ", ".join(seqids[:8])
+        print(f"  {shown}{' ...' if len(seqids) > 8 else ''}")
+
+    n_multipart = db._read_n_multipart(db._read_meta())
+    if n_multipart:
+        print()
+        print(f"discontinuous features  {n_multipart:,} (several input lines sharing one ID)")
+
+    return 0
+
+
 def cmd_validate(args) -> int:
     """gffbase-only: run the post-ingest invariants over an existing database."""
     from gffbase.validate import validate_db
@@ -361,6 +404,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build the database on disk rather than in memory",
     )
     p.add_argument("--in-place", action="store_true", help="Overwrite the input file")
+
+    p = add("stats", cmd_stats, "Summarize what is in a database (gffbase only).")
+    p.add_argument("db", help=_DB_HELP)
 
     p = add("validate", cmd_validate, "Check a database's invariants (gffbase only).")
     p.add_argument("db", help=_DB_HELP)
