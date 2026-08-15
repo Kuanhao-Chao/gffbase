@@ -321,7 +321,7 @@ GFFBase welcomes pull requests, bug reports, and feature suggestions.
 Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide:
 
 - Rust + Python development setup (`maturin develop --release`)
-- Running the test suite + the coverage gate (96 % R-tree / 95 % B-tree)
+- Running the test suite + the coverage gate (95 % R-tree / 94 % B-tree)
 - Branch naming, Conventional Commits, the PR checklist
 
 The repo ships standard

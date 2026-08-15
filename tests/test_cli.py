@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import gffbase
 import pytest
 from gffbase import create_db
 from gffbase.cli import build_parser, main
@@ -467,3 +468,41 @@ def test_migrate_coalesce_refuses_a_current_database(db_path, capsys):
     code, _out, err = run(capsys, "migrate", db_path, "--coalesce")
     assert code == 0
     assert "coalesced" in err
+
+
+# ---------------------------------------------------------------------------
+# `python -m gffbase`
+# ---------------------------------------------------------------------------
+
+
+def test_python_dash_m_runs_the_cli():
+    """`python -m gffbase --version` must work, not just the console script.
+
+    `__main__.py` was covered only by a CI smoke step, so it read as 0% in
+    every coverage report and a breakage would have surfaced on a runner
+    rather than here. It is three lines and a subprocess away from being
+    tested properly.
+    """
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "gffbase", "--version"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert gffbase.__version__ in (proc.stdout + proc.stderr)
+
+
+def test_python_dash_m_reports_usage_for_no_arguments():
+    """Bare `python -m gffbase` exits non-zero and says how to use it."""
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "gffbase"], capture_output=True, text=True, timeout=120
+    )
+    assert proc.returncode != 0
+    assert "usage" in (proc.stdout + proc.stderr).lower()
