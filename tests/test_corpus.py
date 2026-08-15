@@ -23,7 +23,7 @@ GENCODE v49 (GTF and GFF3), RefSeq GRCh38.p14, MANE v1.5, CHESS 3.1.3.
 
 Excluded from a normal run: several GB of downloads and minutes per corpus.
 
-    python benchmarks/download_corpora.py     # once, ~4 GB
+    python benchmarks/download_corpora.py     # once, ~257 MB
     pytest -m corpus
 
 The `corpus` marker was declared in `pyproject.toml` and used by no test at
@@ -51,6 +51,33 @@ KNOWN = [
     ("chess3.1.3.GRCh38.gff.gz", False),
 ]
 
+#: Corpora that use the split-CDS convention: several lines sharing one
+#: `ID=`, describing one discontinuous feature. `merge_strategy` defaults to
+#: `"error"` -- gffutils' default, and gffutils raises on these files too --
+#: so ingesting them at all requires saying which reading you want. That is a
+#: property of the DATA, so it is recorded here next to the data rather than
+#: worked around inside each test.
+SPLIT_CDS = {
+    "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+    "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+    # GENCODE's GFF3 edition does it too -- `ID=CDS:ENST...` repeats across the
+    # lines of a split CDS. Its GTF edition does not, because GTF carries no
+    # CDS ids at all. Three of the five canonical corpora need a duplicate-ID
+    # policy, which is worth knowing before anyone calls this an edge case.
+    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+}
+
+
+def ingest_options(name: str) -> dict:
+    """The options a corpus needs to ingest, and why.
+
+    `create_unique` is the compat reading: each duplicate line becomes its own
+    renamed feature, which is what a ported gffutils script expects to see.
+    `mode="strict"` is the other reading -- one discontinuous feature -- and
+    `test_split_cds_corpora_fuse_under_strict_mode` covers that separately.
+    """
+    return {"merge_strategy": "create_unique"} if name in SPLIT_CDS else {}
+
 
 def corpus(name: str) -> str:
     path = CORPORA / name
@@ -64,9 +91,10 @@ def gencode_gff3(tmp_path_factory):
     """One ingest shared across the module -- it takes minutes."""
     from gffbase import create_db
 
-    src = corpus("gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz")
+    name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz"
+    src = corpus(name)
     out = tmp_path_factory.mktemp("corpus") / "gencode.duckdb"
-    return create_db(src, str(out))
+    return create_db(src, str(out), **ingest_options(name))
 
 
 @pytest.mark.parametrize(("name", "is_gtf"), KNOWN, ids=[n.split(".")[0] for n, _ in KNOWN])
@@ -80,7 +108,7 @@ def test_every_corpus_ingests_and_validates(name, is_gtf, tmp_path):
     """
     from gffbase import create_db
 
-    db = create_db(corpus(name), str(tmp_path / "c.duckdb"))
+    db = create_db(corpus(name), str(tmp_path / "c.duckdb"), **ingest_options(name))
     total = db.count_features_of_type()
     assert total > 100_000, f"{name}: only {total} features, expected a whole-genome file"
 
@@ -156,3 +184,51 @@ def test_the_hierarchy_survives_a_whole_genome(gencode_gff3):
         for transcript in transcripts:
             back = [p.id for p in db.parents(transcript.id, level=1)]
             assert gene_id in back, f"{transcript.id} lost its parent {gene_id}"
+
+
+# ---------------------------------------------------------------------------
+# The split-CDS convention, on the real files that use it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(SPLIT_CDS))
+def test_split_cds_corpora_raise_by_default(name, tmp_path):
+    """The default must refuse, not guess.
+
+    RefSeq and MANE repeat one `ID=` across the lines of a split CDS. There
+    are two defensible readings -- several renamed features, or one
+    discontinuous feature -- and `merge_strategy` defaults to `"error"`
+    precisely so the caller picks. gffutils defaults the same way and raises
+    on these same files, so this is parity, not strictness for its own sake.
+
+    Pinned because the alternative failure mode is silent: a default that
+    picked for you would give a whole-genome answer nobody chose.
+    """
+    from gffbase import DuplicateIDError, create_db
+
+    with pytest.raises(DuplicateIDError):
+        create_db(corpus(name), str(tmp_path / "default.duckdb"))
+
+
+@pytest.mark.parametrize("name", sorted(SPLIT_CDS))
+def test_split_cds_corpora_fuse_under_strict_mode(name, tmp_path):
+    """`mode="strict"` reads the repeated ids as ONE discontinuous feature.
+
+    This is the reading the GFF3 specification actually describes, and the
+    one the `segments` table exists for. The fused database must hold strictly
+    fewer features than the renamed one, contain multipart features, and still
+    satisfy every invariant.
+    """
+    from gffbase import create_db
+
+    fused = create_db(corpus(name), str(tmp_path / "strict.duckdb"), mode="strict")
+    renamed = create_db(
+        corpus(name), str(tmp_path / "compat.duckdb"), merge_strategy="create_unique"
+    )
+
+    n_multipart = fused.execute("SELECT COUNT(*) FROM features WHERE n_segments > 1").fetchone()[0]
+    assert n_multipart > 0, f"{name}: strict mode fused nothing, so nothing was discontinuous"
+    assert fused.count_features_of_type() < renamed.count_features_of_type(), (
+        "fusing lines into one feature must reduce the feature count"
+    )
+    assert not fused.validate(level="full").errors

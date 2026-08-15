@@ -74,6 +74,8 @@ def create_db(
     disable_infer_genes=False,
     disable_infer_transcripts=False,
     mode="compat",
+    validation=None,
+    on_error=None,
     on_multipart_conflict="error",
     **kwargs,
 ) -> FeatureDB:
@@ -141,6 +143,16 @@ def create_db(
         new behaviour rather than gffutils behaviour, since gffutils'
         ``merge_strategy="merge"`` requires all eight non-attribute columns to
         match and so never merges a genuine split feature.
+    validation : {"gffutils", "ncbi"} | None
+        Which rule set to apply, overriding the one ``mode`` implies. ``None``
+        (default) takes the mode's. Use it to keep gffutils-compatible
+        *handling* while applying the full NCBI *rules* -- the combination
+        ``validation="ncbi", on_error="warn"`` audits a file without stopping
+        on it, leaving every violation in ``FeatureDB.warnings``.
+    on_error : {"raise", "warn"} | None
+        What a rejected line does, overriding the one ``mode`` implies.
+        ``"raise"`` stops at the first violation; ``"warn"`` records it and
+        carries on. ``None`` (default) takes the mode's.
     on_multipart_conflict : {"error", "split"}
         Under ``mode="strict"``, what to do when lines sharing an ``ID``
         disagree on seqid, source, featuretype or strand -- which GFF3 requires
@@ -183,6 +195,8 @@ def create_db(
         disable_infer_genes=disable_infer_genes,
         disable_infer_transcripts=disable_infer_transcripts,
         mode=mode,
+        validation=validation,
+        on_error=on_error,
     )
 
     # An iterable of features is a documented input: `helpers.sanitize_gff_db`
@@ -224,4 +238,9 @@ def create_db(
         sort_attribute_values=sort_attribute_values,
         text_factory=text_factory,
         pragmas=pragmas,
+        # `con` was opened by the ingest above and nobody else holds it, so
+        # the returned handle owns it. Without this, `with create_db(...) as
+        # db:` would exit without releasing the connection it created --
+        # exactly the leak the context manager exists to prevent.
+        _own_conn=True,
     )

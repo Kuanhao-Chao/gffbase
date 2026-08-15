@@ -324,6 +324,58 @@ def test_delete_empty_iterable_is_noop(hier_db):
     assert "g1" in hier_db
 
 
+def test_delete_of_a_middle_node_leaves_no_orphaned_closure_rows(hier_db):
+    """Deleting a transcript must take its exons out of the gene's descendants.
+
+    `delete()` used to remove only the closure rows that NAMED the deleted id
+    as ancestor or descendant. A depth-2 row like `g1 -> e1` names neither --
+    it merely routed *through* the transcript -- so it survived, and
+    `children(g1, level=None)` kept returning exons of a transcript that no
+    longer existed. The closure is rebuilt from `edges` now, which is what
+    `update()` already did.
+    """
+    # t1's own children, which reach g1 only THROUGH t1. (t2's exon e3 is a
+    # sibling branch and must survive -- deleting t1 says nothing about it.)
+    orphaned_by_the_delete = {f.id for f in hier_db.children("t1", level=None)}
+    assert orphaned_by_the_delete == {"e1", "e2", "c1", "c2"}, "precondition"
+
+    before = {f.id for f in hier_db.children("g1", level=None)}
+    assert {"t1"} | orphaned_by_the_delete <= before, "precondition: g1 reaches them all"
+
+    hier_db.delete("t1")
+
+    after = {f.id for f in hier_db.children("g1", level=None)}
+    assert "t1" not in after
+    still_reachable = after & orphaned_by_the_delete
+    assert not still_reachable, (
+        f"{sorted(still_reachable)} reached g1 only through the deleted t1, but are "
+        "still reachable -- the depth-2 closure rows that routed through t1 survived"
+    )
+    assert "e3" in after, "t2's exon is a sibling branch and must be untouched"
+
+    # And the stored closure must match a closure derived from scratch.
+    stale = hier_db.execute(
+        "SELECT COUNT(*) FROM closure c "
+        "WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = c.ancestor) "
+        "   OR NOT EXISTS (SELECT 1 FROM features f WHERE f.id = c.descendant)"
+    ).fetchone()[0]
+    assert stale == 0, f"{stale} closure rows reference a deleted feature"
+
+
+def test_mutation_refreshes_the_depth_the_dispatcher_routes_on(hier_db):
+    """`_closure_max_depth` is read once at open and the dispatcher trusts it.
+
+    A mutation can change the corpus's real depth, so every mutator has to
+    re-read it -- and persist it, so a handle opened later agrees. Neither
+    `update()` nor `delete()` did.
+    """
+    hier_db.delete("t1")
+    live = hier_db.execute("SELECT COALESCE(MAX(depth), 0) FROM closure").fetchone()[0]
+    assert hier_db._closure_max_depth == live
+    persisted = hier_db.execute("SELECT value FROM meta WHERE key = 'closure_max_depth'").fetchone()
+    assert persisted is not None and int(persisted[0]) == live
+
+
 def test_add_relation_creates_edge_and_closure(hier_db):
     # Insert a synthetic feature first.
     hier_db.conn.execute(

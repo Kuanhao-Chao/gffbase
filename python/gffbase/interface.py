@@ -33,12 +33,19 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+import os
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Union
 
 import duckdb
 
 from gffbase._dbutil import scalar, scalar_or
-from gffbase.exceptions import FeatureNotFoundError, SchemaVersionError
+from gffbase.exceptions import (
+    ClosedDatabaseError,
+    FeatureNotFoundError,
+    ReadOnlyError,
+    SchemaVersionError,
+)
 from gffbase.feature import Feature, db_row_projection, feature_from_row
 from gffbase.modes import (
     MODE_COMPAT,
@@ -64,6 +71,13 @@ _log = logging.getLogger("gffbase.interface")
 # Selection clause for FeatureDB -> Feature reconstruction. Derived from
 # `feature._DB_ROW_FIELDS` rather than restated, so the projection and the
 # positional unpacking in `feature_from_row` cannot drift apart.
+#: What the query APIs accept as a genomic window: `"seqid:start-end"`, a
+#: `(seqid, start, end)` tuple, or a `Feature` whose own coordinates are used.
+RegionLike = Union[str, tuple, "Feature"]
+
+#: A feature, or the id of one.
+FeatureLike = Union[str, "Feature"]
+
 _SELECT_FEATURE = db_row_projection()
 
 
@@ -254,9 +268,28 @@ class FeatureDB:
         sort_attribute_values: bool = False,
         text_factory=str,
         upgrade: str = "auto",
+        read_only: bool = False,
+        _own_conn: bool | None = None,
     ):
+        # These four come FIRST, before anything that can raise. `__del__`
+        # runs on a half-constructed object too, and reading an attribute that
+        # was never assigned would raise a second exception during garbage
+        # collection, masking the first.
+        self._closed = False
+        self._owns_conn = False
+        self._seg_cursor: duckdb.DuckDBPyConnection | None = None
+        self._read_only = bool(read_only)
+
         if upgrade not in ("auto", "never", "error"):
             raise ValueError(f"upgrade must be 'auto', 'never' or 'error'; got {upgrade!r}")
+        # A read-only handle cannot migrate: the upgrade is DDL. Coerce rather
+        # than relying on DuckDB to refuse the write -- `_try_migrate` catches
+        # `duckdb.Error` and falls through to v1 compatibility mode, so the
+        # attempt would only produce a confusing log line on the way to the
+        # same place. `upgrade="error"` is left alone: the caller asked to be
+        # told about a v1 database, and they still are.
+        if self._read_only and upgrade == "auto":
+            upgrade = "never"
         self._upgrade = upgrade
         self.default_encoding = default_encoding
         #: Specification violations tolerated while building this database.
@@ -267,13 +300,19 @@ class FeatureDB:
         self.sort_attribute_values = sort_attribute_values
         self.text_factory = text_factory
         self._analyzed_flag = False
-        # Created on demand; see `_segment_cursor`.
-        self._seg_cursor: duckdb.DuckDBPyConnection | None = None
 
         # Resolve dbfn → connection.
+        #
+        # Ownership decides what `close()` is allowed to close. gffbase must
+        # never close a connection the caller opened and still holds a
+        # reference to -- but it MUST close one it opened itself, or
+        # `with create_db(...) as db:` would leak the handle it was written to
+        # release. `_own_conn` lets `create_db` transfer ownership explicitly
+        # rather than making the rule depend on which branch ran.
         if isinstance(dbfn, duckdb.DuckDBPyConnection):
             self.conn = dbfn
             self.dbfn = ":existing-connection:"
+            self._owns_conn = bool(_own_conn)
         elif (
             isinstance(dbfn, tuple)
             and len(dbfn) == 2
@@ -283,9 +322,42 @@ class FeatureDB:
             self.conn = dbfn[0]
             self.dbfn = ":existing-connection:"
             self.warnings = list(getattr(dbfn[1], "warnings", []) or [])
-        elif isinstance(dbfn, str):
-            self.dbfn = dbfn
-            self.conn = duckdb.connect(dbfn, read_only=False)
+            self._owns_conn = True if _own_conn is None else bool(_own_conn)
+        elif isinstance(dbfn, (str, os.PathLike)):
+            # `os.PathLike`, not just `str`: the error below says "dbfn must be
+            # a path" and this branch used to reject an actual `pathlib.Path`,
+            # which is what a caller reaches for first. `create_db` already
+            # accepted one, so the two entry points disagreed about their own
+            # documented type.
+            self.dbfn = os.fspath(dbfn)
+            # Whether the file was there BEFORE we connected. DuckDB creates a
+            # database on connect, so after the call it always exists and the
+            # question can no longer be asked -- which is how a typo'd filename
+            # used to end up as an empty database plus a confusing
+            # `CatalogException` from the first query against it.
+            existed = os.path.exists(self.dbfn)
+            if self._read_only and not existed:
+                raise FileNotFoundError(
+                    f"no such database: {self.dbfn}. read_only=True cannot create one; "
+                    "build it with create_db() first."
+                )
+            self.conn = duckdb.connect(self.dbfn, read_only=self._read_only)
+            self._owns_conn = True if _own_conn is None else bool(_own_conn)
+            if not existed:
+                # Undo the file DuckDB just made, so a mistyped path does not
+                # litter the working directory with empty databases.
+                self.conn.close()
+                self._closed = True
+                for path in (self.dbfn, self.dbfn + ".wal"):
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+                raise FileNotFoundError(
+                    f"no such database: {self.dbfn}. To create one, use "
+                    f"create_db(source, {self.dbfn!r}); FeatureDB() only opens "
+                    "databases that already exist."
+                )
         else:
             raise TypeError(
                 f"dbfn must be a path, DuckDB connection, or (con, stats) tuple; got {type(dbfn)!r}"
@@ -325,7 +397,7 @@ class FeatureDB:
                 except duckdb.Error:
                     self._rtree_built = False
 
-        # Phase 7 — closure-cache vs dynamic-CTE dispatcher. Read the corpus's
+        # Closure-cache vs dynamic-CTE dispatcher. Read the corpus's
         # true hierarchy depth once at open; fall back to a live MAX(depth)
         # query if older DBs don't carry the meta row.
         cmd_meta = meta.get("closure_max_depth")
@@ -338,7 +410,7 @@ class FeatureDB:
             except duckdb.Error:
                 self._closure_max_depth = 0
 
-        # Phase 7 — load the seqid → y-band map so `_region_sql_rtree` can
+        # Load the seqid → y-band map so `_region_sql_rtree` can
         # produce a tightly-bounded ST_MakeEnvelope at query time. Empty when
         # no R-tree was built (we fall back to the B-tree path anyway).
         self._seqid_y_map: dict = {}
@@ -394,6 +466,14 @@ class FeatureDB:
         raw = meta.get("schema_version")
         self._v1_shim = False
 
+        if raw is None and not self._has_gffbase_tables():
+            raise SchemaVersionError(
+                f"{self.dbfn} is not a gffbase database: it has none of the expected "
+                "tables. If you meant to create one, use create_db(source, dbfn); if "
+                "this is a gffutils SQLite database, gffbase cannot open it directly "
+                "(build a new one from the same GFF/GTF source)."
+            )
+
         if raw is None and self._looks_unfinished():
             raise SchemaVersionError(
                 f"{self.dbfn} has gffbase tables but no metadata at all, so it is an "
@@ -434,6 +514,24 @@ class FeatureDB:
 
         self._schema_version = int(SCHEMA_VERSION)
         self._n_multipart = self._read_n_multipart(meta)
+
+    def _has_gffbase_tables(self) -> bool:
+        """Does this database have the gffbase schema at all?
+
+        Opening something that is not a gffbase database used to fail with
+        `CatalogException: Table with name directives does not exist!` from
+        whichever query ran first -- an internal error naming an internal
+        table, for the very ordinary mistakes of mistyping a filename or
+        pointing at a gffutils SQLite file.
+        """
+        try:
+            rows = self.conn.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name IN ('features', 'meta')"
+            ).fetchall()
+        except duckdb.Error:
+            return False
+        return len(rows) >= 1
 
     def _looks_unfinished(self) -> bool:
         """True for a database whose tables exist but whose `meta` is empty.
@@ -524,6 +622,7 @@ class FeatureDB:
         write it that way. Exposing it as a property meant the documented call
         raised `TypeError: 'str' object is not callable`.
         """
+        self._require_open("schema")
         rows = self.conn.execute("""
             SELECT sql FROM duckdb_tables() WHERE database_name = current_database()
             UNION ALL
@@ -534,6 +633,84 @@ class FeatureDB:
     @property
     def _analyzed(self) -> bool:
         return self._analyzed_flag
+
+    @property
+    def read_only(self) -> bool:
+        """True if this handle refuses writes."""
+        return self._read_only
+
+    @property
+    def closed(self) -> bool:
+        """True once `close()` has run."""
+        return self._closed
+
+    # ------------------------------------------------------------------
+    # Connection lifecycle
+    # ------------------------------------------------------------------
+    #
+    # DuckDB takes an EXCLUSIVE lock on the database file for the life of a
+    # writable connection, and gffbase had no way to release it: no `close`,
+    # no `__enter__`/`__exit__`, no `__del__`. So the file could not be
+    # replaced while a handle existed (fatal on Windows), and a pool of worker
+    # processes could not read one annotation database at all -- which is the
+    # shape of every PyTorch `DataLoader` job this library is built for.
+
+    def _require_open(self, op: str) -> None:
+        if self._closed:
+            raise ClosedDatabaseError(
+                f"{op}() on a closed FeatureDB: the connection was released by close(). "
+                "Open a new FeatureDB, or use `with FeatureDB(path) as db:` to scope it."
+            )
+
+    def _require_writable(self, op: str) -> None:
+        self._require_open(op)
+        if self._read_only:
+            raise ReadOnlyError(
+                f"{op}() writes, but this FeatureDB was opened with read_only=True. "
+                "Reopen it without read_only to modify the database."
+            )
+
+    def close(self) -> None:
+        """Release the DuckDB connection. Idempotent.
+
+        The lazily-created segment cursor is closed whether or not the
+        connection is owned -- gffbase created it via `conn.cursor()`, so
+        gffbase closes it. The connection itself is closed only when this
+        handle opened it: a caller who passed their own connection in still
+        holds it afterwards.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        if self._seg_cursor is not None:
+            try:
+                self._seg_cursor.close()
+            except duckdb.Error:  # pragma: no cover - already dead
+                pass
+            self._seg_cursor = None
+        if self._owns_conn:
+            try:
+                self.conn.close()
+            except duckdb.Error:  # pragma: no cover - already dead
+                pass
+
+    def __enter__(self) -> FeatureDB:
+        self._require_open("__enter__")
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        # Returns None, so an exception raised inside the block propagates.
+        self.close()
+
+    def __del__(self) -> None:
+        # `getattr` with a True default: on a FeatureDB whose `__init__`
+        # raised before `_closed` was set, this must be a no-op rather than a
+        # second exception during collection.
+        try:
+            if not getattr(self, "_closed", True):
+                self.close()
+        except Exception:  # pragma: no cover - interpreter teardown
+            pass
 
     # ------------------------------------------------------------------
     # Dunders
@@ -568,6 +745,7 @@ class FeatureDB:
         )
 
     def __getitem__(self, key) -> Feature:
+        self._require_open("query")
         target_id = _require_feature_id(key)
         # Project `n_segments` only where a multipart feature can exist, so a
         # v1 shim database -- which has no such column -- still answers, and so
@@ -590,6 +768,7 @@ class FeatureDB:
         return self._build_feature(row, segments)
 
     def __contains__(self, key) -> bool:
+        self._require_open("query")
         target_id = key.id if isinstance(key, Feature) else key
         row = self.conn.execute(
             "SELECT 1 FROM features WHERE id = ? LIMIT 1", [target_id]
@@ -601,6 +780,23 @@ class FeatureDB:
     # ------------------------------------------------------------------
 
     def count_features_of_type(self, featuretype: str | None = None) -> int:
+        """Count features, optionally of one type.
+
+        Args:
+            featuretype: Restrict the count to this GFF column-3 value
+                (`"gene"`, `"exon"`, …). `None` counts every feature.
+
+        Returns:
+            The number of matching features. A discontinuous feature counts
+            once, however many input lines it was built from.
+
+        Example:
+            ```python
+            db.count_features_of_type()          # 6
+            db.count_features_of_type("exon")    # 3
+            ```
+        """
+        self._require_open("count_features_of_type")
         if featuretype is None:
             return scalar(self.conn, "SELECT COUNT(*) FROM features")
         return scalar(
@@ -608,12 +804,34 @@ class FeatureDB:
         )
 
     def featuretypes(self) -> Iterator[str]:
+        """Yield every distinct featuretype in the database, alphabetically.
+
+        Yields:
+            Each distinct GFF column-3 value, once.
+
+        Example:
+            ```python
+            sorted(db.featuretypes())   # ['CDS', 'exon', 'gene', 'mRNA']
+            ```
+        """
+        self._require_open("featuretypes")
         for (ft,) in self.conn.execute(
             "SELECT DISTINCT featuretype FROM features ORDER BY featuretype"
         ).fetchall():
             yield ft
 
     def seqids(self) -> Iterator[str]:
+        """Yield every distinct sequence id in the database, alphabetically.
+
+        Useful for checking naming convention before a `region()` query --
+        `chr1`, `1` and `NC_000001.11` are three different sequences as far as
+        the database is concerned, and GENCODE, Ensembl and RefSeq each pick a
+        different one.
+
+        Yields:
+            Each distinct GFF column-1 value, once.
+        """
+        self._require_open("seqids")
         for (s,) in self.conn.execute(
             "SELECT DISTINCT seqid FROM features ORDER BY seqid"
         ).fetchall():
@@ -625,13 +843,40 @@ class FeatureDB:
 
     def all_features(
         self,
-        limit=None,
+        limit: RegionLike | None = None,
         strand: str | None = None,
         featuretype: str | list[str] | None = None,
-        order_by=None,
+        order_by: str | None = None,
         reverse: bool = False,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
+        """Iterate over every feature in the database.
+
+        Args:
+            limit: Restrict to a genomic region, as `"seqid:start-end"` or a
+                `(seqid, start, end)` tuple. `None` scans everything.
+            strand: Restrict to `"+"`, `"-"` or `"."`.
+            featuretype: One featuretype, or a list of them.
+            order_by: Column to sort by. One of `id`, `seqid`, `source`,
+                `featuretype`, `start`, `end`, `score`, `strand`, `frame`,
+                `attributes`, `extra`, `file_order`, `length`. Anything else
+                raises `ValueError` -- this is a whitelist, not a SQL fragment.
+            reverse: Sort descending.
+            completely_within: With `limit`, return only features contained
+                entirely inside the region rather than merely overlapping it.
+
+        Yields:
+            `Feature` objects in `file_order` unless `order_by` says otherwise.
+
+        Raises:
+            ValueError: `order_by` names something outside the whitelist.
+
+        Example:
+            ```python
+            for feature in db.all_features(featuretype="exon", order_by="start"):
+                print(feature.id, feature.start)
+            ```
+        """
         sql, params = self._build_scan_sql(
             base_where=[],
             base_params=[],
@@ -647,12 +892,35 @@ class FeatureDB:
     def features_of_type(
         self,
         featuretype: str | list[str],
-        limit=None,
+        limit: RegionLike | None = None,
         strand: str | None = None,
-        order_by=None,
+        order_by: str | None = None,
         reverse: bool = False,
         completely_within: bool = False,
     ) -> Iterator[Feature]:
+        """Iterate over every feature of one type (or several).
+
+        Equivalent to `all_features(featuretype=...)`; both exist because
+        gffutils has both.
+
+        Args:
+            featuretype: One featuretype (`"exon"`), or a list of them.
+            limit: Restrict to a genomic region -- see `all_features`.
+            strand: Restrict to `"+"`, `"-"` or `"."`.
+            order_by: Column to sort by -- see `all_features` for the
+                permitted names.
+            reverse: Sort descending.
+            completely_within: With `limit`, require full containment.
+
+        Yields:
+            Matching `Feature` objects.
+
+        Example:
+            ```python
+            genes = list(db.features_of_type("gene"))
+            both = list(db.features_of_type(["exon", "CDS"]))
+            ```
+        """
         yield from self.all_features(
             limit=limit,
             strand=strand,
@@ -814,7 +1082,7 @@ class FeatureDB:
         yield from self._yield_features(sql, params)
 
     def _region_sql_rtree(self, seqid, start, end, strand, featuretype, completely_within):
-        # Phase 7: each seqid lives in its own y-band, so the R-tree query
+        # Each seqid lives in its own y-band, so the R-tree query
         # envelope is tight on both axes — no cross-chromosome candidates.
         seqid_y = self._seqid_y_map.get(seqid)
         if seqid_y is None:
@@ -826,10 +1094,6 @@ class FeatureDB:
         if completely_within:
             where.append('start >= ? AND "end" <= ?')
             params.extend([start, end])
-        else:
-            seg_where, seg_params = self._segment_overlap(start, end)
-            where.extend(seg_where)
-            params.extend(seg_params)
         if strand is not None:
             where.append("strand = ?")
             params.append(strand)
@@ -841,8 +1105,38 @@ class FeatureDB:
             else:
                 where.append("featuretype = ?")
                 params.append(featuretype)
-        sql = f"SELECT {_SELECT_FEATURE} FROM features WHERE {' AND '.join(where)} ORDER BY start"
-        return sql, params
+
+        seg_where, seg_params = (
+            ([], []) if completely_within else self._segment_overlap(start, end, qualifier="f")
+        )
+        if not seg_where:
+            sql = (
+                f"SELECT {_SELECT_FEATURE} FROM features WHERE {' AND '.join(where)} ORDER BY start"
+            )
+            return sql, params
+
+        # The multipart recheck cannot sit in the SAME WHERE clause as
+        # `ST_Intersects`. DuckDB's R-tree scan optimizer builds a projection
+        # map for the index scan, and any subquery sharing that clause throws
+        # its column numbering out -- the planner then aborts with
+        # `INTERNAL Error: Failed to bind column reference "file_order"`,
+        # taking down every region query against a database that holds a
+        # discontinuous feature. It is not about how the correlation is
+        # written: qualified, unqualified and rewritten-as-a-semi-join all
+        # fail identically, and the B-tree path is unaffected.
+        #
+        # Wrapping the spatial scan in a derived table and applying the
+        # recheck outside keeps the two apart. `EXPLAIN` confirms the plan
+        # still contains `RTREE_INDEX_SCAN (Index: features_rtree)`, so the
+        # index is doing the same work -- the recheck just filters its output
+        # instead of being fused into it.
+        inner_cols = f"{_SELECT_FEATURE}, n_segments"
+        sql = (
+            f"SELECT {_SELECT_FEATURE} FROM ("
+            f"SELECT {inner_cols} FROM features WHERE {' AND '.join(where)}"
+            f") AS f WHERE {' AND '.join(seg_where)} ORDER BY f.start"
+        )
+        return sql, params + seg_params
 
     def _region_sql_btree(self, seqid, start, end, strand, featuretype, completely_within):
         where = []
@@ -916,7 +1210,7 @@ class FeatureDB:
         raise TypeError(f"unsupported region type: {type(region)!r}")
 
     # ------------------------------------------------------------------
-    # Phase 12 — Vectorized batched spatial API.
+    # Vectorized batched spatial API.
     # ------------------------------------------------------------------
 
     def region_batched(
@@ -926,11 +1220,16 @@ class FeatureDB:
         completely_within: bool = False,
         format: str = "arrow",
         explode_segments: bool = False,
+        on_invalid: str = "raise",
     ):
         """Bulk overlap query. Performs a SINGLE spatial JOIN between every
         input region and the features table, returning a column-oriented
         result that maps each query (`query_idx`) back to its overlapping
         features.
+
+        `query_idx` indexes `regions` as you passed it. That is the whole
+        contract of the column -- it is how a caller reassembles per-query
+        groups without re-issuing N queries.
 
         Parameters
         ----------
@@ -944,6 +1243,12 @@ class FeatureDB:
             (default False — overlap is sufficient).
         format : "arrow" | "df" | "polars"
             Return shape (default `"arrow"`).
+        on_invalid : {"raise", "skip"}
+            What to do with an item that does not normalize to a region.
+            ``"raise"`` (default) raises `ValueError` naming the offending
+            position and value. ``"skip"`` drops it while leaving every other
+            item's `query_idx` at its position in `regions`, so the gap is
+            visible rather than silently closed up.
 
         explode_segments : bool
             Emit one row per physical INPUT LINE rather than one per logical
@@ -961,15 +1266,32 @@ class FeatureDB:
         query_end, id, seqid, source, featuretype, start, end, score,
         strand, frame, file_order -- plus seg_idx when `explode_segments`.
         """
+        self._require_open("region_batched")
+        if on_invalid not in {"raise", "skip"}:
+            raise ValueError(f"on_invalid must be 'raise' or 'skip'; got {on_invalid!r}")
+
+        # `query_idx` carries the item's position in `regions`, NOT its
+        # position among the ones that survived normalization. Those two used
+        # to be the same expression -- `range(len(rows))` over the filtered
+        # list -- so a single unparseable region silently shifted every later
+        # query's index by one, and the caller mapped whole result groups onto
+        # the wrong input. Nothing raised, and the answer stayed plausible.
         rows = []
-        for r in regions:
+        for idx, r in enumerate(regions):
             if isinstance(r, tuple) and len(r) == 3 and all(v is not None for v in r):
                 seqid, rs, re_ = r[0], int(r[1]), int(r[2])
             else:
                 seqid, rs, re_ = self._normalize_region_args(r, None, None, None)
             if seqid is None or rs is None or re_ is None:
+                if on_invalid == "raise":
+                    raise ValueError(
+                        f"regions[{idx}] = {r!r} does not describe a region "
+                        "(need a 'seqid:start-end' string, a (seqid, start, end) "
+                        "tuple, or a Feature). Pass on_invalid='skip' to drop it "
+                        "and keep the remaining query_idx values aligned to the input."
+                    )
                 continue
-            rows.append((seqid, int(rs), int(re_)))
+            rows.append((idx, seqid, int(rs), int(re_)))
         if not rows:
             return self._empty_region_batched(format, explode_segments)
 
@@ -977,16 +1299,16 @@ class FeatureDB:
 
         regions_table = pa.table(
             {
-                "query_idx": list(range(len(rows))),
-                "query_seqid": [r[0] for r in rows],
-                "query_start": [r[1] for r in rows],
-                "query_end": [r[2] for r in rows],
+                "query_idx": [r[0] for r in rows],
+                "query_seqid": [r[1] for r in rows],
+                "query_start": [r[2] for r in rows],
+                "query_end": [r[3] for r in rows],
             }
         )
         self.conn.register("__staging_regions", regions_table)
         try:
             # The R-tree path uses the seqid_y-encoded envelope so that
-            # DuckDB's spatial index segregates chromosomes (Phase 7).
+            # DuckDB's spatial index segregates chromosomes.
             # B-tree fallback is identical SQL minus the ST_Intersects
             # predicate.
             ft_where, ft_params = self._featuretype_filter(featuretype, qualifier="f")
@@ -1216,11 +1538,11 @@ class FeatureDB:
         )
 
     # ------------------------------------------------------------------
-    # Phase 12 — Vectorized batched API.
+    # Vectorized batched API.
     #
     # The row-by-row `children()` / `parents()` / `region()` generators
     # carry per-row Python overhead that dominates wall time on small
-    # GENCODE-scale queries (Phase 11 §4.2). The methods below replace the
+    # GENCODE-scale queries. The methods below replace the
     # per-id loop with a single bulk SQL query and return the result as a
     # zero-copy PyArrow `Table` (or pandas / polars DataFrame), letting
     # downstream ML pipelines consume the data column-wise without ever
@@ -1298,6 +1620,7 @@ class FeatureDB:
         format: str,
         explode_segments: bool = False,
     ):
+        self._require_open("query")
         ids = self._coerce_id_list(feature_ids)
         if not ids:
             return self._empty_batched_result(
@@ -1306,11 +1629,20 @@ class FeatureDB:
                 explode_segments,
             )
 
-        # Decide cache vs dynamic the same way the row-by-row dispatcher
-        # does — it's a one-time decision per call here, not per-row.
-        use_dynamic = (level is not None and level > self._max_depth) or (
-            level is None and self._closure_max_depth == 0
-        )
+        # Decide cache vs dynamic through the SAME dispatcher the row-by-row
+        # path uses, passing the whole anchor list so "does any anchor
+        # overflow?" is one query rather than one per anchor.
+        #
+        # This used to be a local re-implementation that dropped the
+        # `_has_overflow` arm entirely, so for `level=None` on a hierarchy
+        # deeper than `max_depth` it chose the closure cache where
+        # `_dispatch_relation` would have chosen the dynamic CTE. The cache
+        # only reaches `max_depth`, so `children_batched(ids, level=None)`
+        # silently returned a truncated set while `children(id, level=None)`
+        # returned all of it -- the two APIs disagreeing about the same
+        # question, with no error on either side. Two copies of a decision is
+        # how they drift; there is one copy now.
+        use_dynamic = self._dispatch_relation(level, ids, direction)
 
         ph = ",".join("?" * len(ids))
         ft_where, ft_params = self._featuretype_filter(featuretype, qualifier="f")
@@ -1404,6 +1736,7 @@ class FeatureDB:
         returned `pyarrow.Table` shares the same Arrow buffers DuckDB uses
         internally, with no per-row Python boundary crossings.
         """
+        self._require_open("query")
         cur = self.conn.execute(sql, params)
         fmt = format.lower()
         if fmt == "arrow":
@@ -1488,7 +1821,11 @@ class FeatureDB:
         completely_within: bool,
         direction: str,
     ):
-        # Phase 7 — smart cache-vs-dynamic dispatcher.
+        # Guarded here rather than only in `_yield_features`: the dispatcher
+        # queries the database to decide which path to take, so it reaches the
+        # connection before any row is yielded.
+        self._require_open("query")
+        # Smart cache-vs-dynamic dispatcher.
         use_dynamic = self._dispatch_relation(level, target_id, direction)
         if use_dynamic:
             sql, params = self._relation_sql_dynamic(
@@ -1514,10 +1851,16 @@ class FeatureDB:
             )
         yield from self._yield_features(sql, params)
 
-    def _dispatch_relation(self, level: int | None, target_id: str, direction: str) -> bool:
+    def _dispatch_relation(
+        self, level: int | None, target_id: str | Sequence[str], direction: str
+    ) -> bool:
         """Return True iff the caller should be served by the dynamic CTE.
 
-        Decision matrix (Phase 7, revised):
+        `target_id` is one id for the row-by-row APIs and the whole anchor
+        list for the batched ones; both go through here so the two can never
+        answer the same question differently.
+
+        Decision matrix:
 
         +-------+------------------+-------------------+--------------+
         | level | closure_max_depth| has_overflow?     | path         |
@@ -1529,12 +1872,9 @@ class FeatureDB:
         | int   | >  max_depth     | n/a               | dynamic CTE  |
         +-------+------------------+-------------------+--------------+
 
-        Phase 7 measurement on GENCODE v45 (depth 2, 2000 genes / 274k descs):
-        forced cache  = 18.35 s
-        forced dynamic = 66.82 s
-        Cache wins by 3.85× when the corpus's hierarchy fits in the cache.
-        Phase 6's earlier finding (cache marginally slower) was an OS-cache
-        artifact that disappeared on a clean run with the new R-tree encoding.
+        Measured on GENCODE (depth 2, 2000 genes / 274k descendants): forced
+        cache 18.35 s vs forced dynamic 66.82 s -- the cache wins by 3.85×
+        when the corpus's hierarchy fits inside it.
 
         Cache is preferred whenever it can serve the request; dynamic is the
         correctness fallback for traversals that extend past `max_depth`.
@@ -1547,25 +1887,37 @@ class FeatureDB:
         # Cache covers most of the tree; check for overflow past the boundary.
         return self._has_overflow(target_id, direction)
 
-    def _has_overflow(self, target_id: str, direction: str) -> bool:
-        """Are there descendants/ancestors past max_depth?"""
+    def _has_overflow(self, target_id: str | Sequence[str], direction: str) -> bool:
+        """Are there descendants/ancestors past max_depth?
+
+        `target_id` may be one id or many. For a batch the question is "does
+        ANY anchor overflow", because the whole batch is served by one query
+        and the cached path would truncate every anchor that does -- so one
+        overflowing anchor sends the batch down the dynamic CTE. Asking it as
+        a single `IN` query keeps the batched dispatcher at one round trip
+        rather than one per anchor.
+        """
+        ids = [target_id] if isinstance(target_id, str) else list(target_id)
+        if not ids:
+            return False
+        ph = ",".join("?" * len(ids))
         if direction == "children":
-            sql = """
+            sql = f"""
                 SELECT EXISTS (
                     SELECT 1 FROM edges e
                     JOIN closure c ON c.descendant = e.parent
-                    WHERE c.ancestor = ? AND c.depth = ?
+                    WHERE c.ancestor IN ({ph}) AND c.depth = ?
                 )
             """
         else:
-            sql = """
+            sql = f"""
                 SELECT EXISTS (
                     SELECT 1 FROM edges e
                     JOIN closure c ON c.ancestor = e.child
-                    WHERE c.descendant = ? AND c.depth = ?
+                    WHERE c.descendant IN ({ph}) AND c.depth = ?
                 )
             """
-        return bool(scalar_or(self.conn, sql, False, [target_id, self._max_depth]))
+        return bool(scalar_or(self.conn, sql, False, [*ids, self._max_depth]))
 
     def _relation_sql_cached(
         self,
@@ -1704,7 +2056,34 @@ class FeatureDB:
     # Mutation
     # ------------------------------------------------------------------
 
-    def delete(self, features, make_backup: bool = True, **kwargs) -> FeatureDB:
+    def delete(
+        self, features: FeatureLike | Iterable[FeatureLike], make_backup: bool = True, **kwargs
+    ) -> FeatureDB:
+        """Delete features, and everything that referenced them.
+
+        Removes the rows from `features`, `attributes`, `segments` and `edges`,
+        then rebuilds the transitive closure so no path through a deleted node
+        survives -- deleting a transcript really does remove its exons from its
+        gene's descendants.
+
+        Args:
+            features: A feature id, a `Feature`, or an iterable of either.
+            make_backup: Accepted for gffutils compatibility and currently
+                ignored; no `.bak` is written.
+
+        Returns:
+            `self`, so calls can be chained.
+
+        Raises:
+            ReadOnlyError: The database was opened with `read_only=True`.
+
+        Example:
+            ```python
+            db.delete("transcript_1")
+            db.delete([f.id for f in db.features_of_type("CDS")])
+            ```
+        """
+        self._require_writable("delete")
         ids = self._coerce_ids(features)
         if not ids:
             return self
@@ -1720,19 +2099,91 @@ class FeatureDB:
             f"DELETE FROM edges WHERE parent IN ({placeholders}) OR child IN ({placeholders})",
             ids + ids,
         )
-        self.conn.execute(
-            f"DELETE FROM closure WHERE ancestor IN ({placeholders}) OR descendant IN ({placeholders})",
-            ids + ids,
-        )
+        # Rebuild the closure rather than deleting the rows that mention these
+        # ids. Deleting only those rows leaves behind every *transitive* row
+        # that merely ROUTED THROUGH a deleted node: remove the mRNA from
+        # gene -> mRNA -> exon and the depth-2 `gene -> exon` row survives,
+        # because it names neither the mRNA as ancestor nor as descendant. So
+        # `children(gene, level=None)` kept yielding exons of a transcript
+        # that no longer existed. `update()` already rebuilds for the same
+        # reason; deletion needs it at least as much.
+        self._rebuild_closure()
+        self._refresh_depth_meta()
         return self
 
-    def update(self, data, make_backup: bool = True, **kwargs) -> FeatureDB:
-        # Phase 5 minimal update: accept iterable of Feature objects and
+    def _rebuild_closure(self) -> None:
+        """Recompute the transitive closure from `edges`.
+
+        The single place that knows how; `update()`, `delete()` and
+        `add_relations()` all route through it so none of them can rebuild it
+        slightly differently.
+        """
+        from gffbase.schema import CLOSURE_RECURSIVE_CTE
+
+        self.conn.execute("DELETE FROM closure")
+        self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
+
+    def _refresh_depth_meta(self) -> None:
+        """Re-read the corpus statistics the dispatcher decides on.
+
+        `_closure_max_depth` and `_n_multipart` are read once when the handle
+        opens, and the dispatcher trusts them for the handle's whole lifetime.
+        Any mutation can invalidate both, so every mutator has to say so --
+        otherwise `children(level=None)` keeps routing on the shape the
+        database had before the write. The `meta` rows are updated too, so a
+        handle opened later agrees with this one.
+        """
+        row = self.conn.execute("SELECT MAX(depth) FROM closure").fetchone()
+        self._closure_max_depth = int(row[0]) if row and row[0] is not None else 0
+        updates = [("closure_max_depth", str(self._closure_max_depth))]
+
+        # A v1 database has no `n_segments` column, and shim mode pins
+        # `_n_multipart` to 0 on purpose so every query builder emits v1 SQL.
+        # Recomputing it here would raise on the missing column, and writing
+        # a v2 meta key into a v1 file would make it lie about its own shape.
+        if not self._v1_shim:
+            self._n_multipart = int(
+                scalar_or(self.conn, "SELECT COUNT(*) FROM features WHERE n_segments > 1", 0)
+            )
+            updates.append(("n_multipart", str(self._n_multipart)))
+
+        for key, value in updates:
+            self.conn.execute("DELETE FROM meta WHERE key = ?", [key])
+            self.conn.execute("INSERT INTO meta (key, value) VALUES (?, ?)", [key, value])
+
+    def update(self, data: Iterable, make_backup: bool = True, **kwargs) -> FeatureDB:
+        """Add features to an existing database.
+
+        Appends to `features`, `attributes` and `edges`, then rebuilds the
+        transitive closure and re-reads the corpus statistics the relational
+        dispatcher routes on.
+
+        Args:
+            data: An iterable of `Feature` or `ParsedFeature` objects, or
+                another `FeatureDB` whose features are copied in.
+            make_backup: Accepted for gffutils compatibility and currently
+                ignored; no `.bak` is written.
+
+        Returns:
+            `self`, so calls can be chained.
+
+        Raises:
+            ReadOnlyError: The database was opened with `read_only=True`.
+            TypeError: An item is neither a `Feature` nor a `ParsedFeature`.
+
+        Example:
+            ```python
+            introns = list(db.create_introns())
+            db.update(introns)
+            ```
+        """
+        self._require_writable("update")
+        # Minimal update: accept an iterable of Feature objects and
         # append them to features + attributes + edges, then refresh closure.
         from gffbase.feature import ParsedFeature
         from gffbase.ingest import _ArrowBatchBuilder
 
-        # Phase 19: the builder needs the seqid_to_y dict so it can stamp
+        # The builder needs the seqid_to_y dict so it can stamp
         # seqid_y (and bbox, when the R-tree is live) inline. Reuse the map
         # the FeatureDB already loaded from `seqid_map`.
         builder = _ArrowBatchBuilder(
@@ -1776,11 +2227,12 @@ class FeatureDB:
                 raise TypeError(f"update() does not accept {type(feat)!r}")
             builder.append(fid, pf, order)
         builder.flush_into(self.conn)
-        # Refresh closure: rebuild from edges (cheap on small updates).
-        self.conn.execute("DELETE FROM closure")
-        from gffbase.schema import CLOSURE_RECURSIVE_CTE
-
-        self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
+        # Rebuild from edges (cheap on small updates), then re-read the
+        # statistics the dispatcher routes on -- an update can deepen the
+        # hierarchy or introduce the first multipart feature, and both were
+        # previously left at whatever they were when the handle opened.
+        self._rebuild_closure()
+        self._refresh_depth_meta()
         return self
 
     def add_relation(
@@ -1811,6 +2263,7 @@ class FeatureDB:
         component of every merged feature and is the caller that made this
         necessary.
         """
+        self._require_writable("add_relations")
         pairs = list(pairs)
         if not pairs:
             return self
@@ -1834,10 +2287,8 @@ class FeatureDB:
         for feature in touched.values():
             self._write_back(feature)
 
-        from gffbase.schema import CLOSURE_RECURSIVE_CTE
-
-        self.conn.execute("DELETE FROM closure")
-        self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
+        self._rebuild_closure()
+        self._refresh_depth_meta()
         return self
 
     def _insert(self, feature: Feature) -> FeatureDB:
@@ -2269,12 +2720,35 @@ class FeatureDB:
 
     def children_bp(
         self,
-        feature,
+        feature: FeatureLike,
         child_featuretype: str = "exon",
         merge: bool = False,
-        merge_criteria=None,
+        merge_criteria: Sequence | None = None,
         **kwargs,
     ) -> int:
+        """Total base pairs covered by a feature's children.
+
+        Args:
+            feature: The parent, as an id or a `Feature`.
+            child_featuretype: Which children to measure.
+            merge: Merge overlapping children first, so shared bases are
+                counted once. Without it, overlapping children double-count.
+            merge_criteria: Predicates controlling what may merge; see
+                `gffbase.merge_criteria`. Defaults to same seqid, strand and
+                featuretype with inclusive overlap.
+
+        Returns:
+            The summed length in base pairs.
+
+        Raises:
+            ValueError: The removed `ignore_strand` argument was passed.
+            TypeError: Any other unexpected keyword argument.
+
+        Example:
+            ```python
+            db.children_bp("transcript_1", child_featuretype="exon", merge=True)
+            ```
+        """
         if kwargs:
             # Accepting and ignoring these was worse than refusing them:
             # `ignore_strand` was removed upstream precisely because it gave
@@ -2299,13 +2773,38 @@ class FeatureDB:
 
     def bed12(
         self,
-        feature,
-        block_featuretype=("exon",),
-        thick_featuretype=("CDS",),
-        thin_featuretype=None,
+        feature: FeatureLike,
+        block_featuretype: Sequence[str] = ("exon",),
+        thick_featuretype: Sequence[str] = ("CDS",),
+        thin_featuretype: Sequence[str] | None = None,
         name_field: str = "ID",
-        color=None,
+        color: str | None = None,
     ) -> str:
+        """Render a feature and its children as one BED12 line.
+
+        Args:
+            feature: The parent, as an id or a `Feature`.
+            block_featuretype: Child types that become BED blocks (exons).
+            thick_featuretype: Child types that define the thick region
+                (coding sequence).
+            thin_featuretype: Child types that define the thin region. When
+                given, it is honoured rather than inferred.
+            name_field: Attribute used for BED column 4. Falls back to the
+                feature id when absent.
+            color: RGB string for column 9, e.g. `"255,0,0"`.
+
+        Returns:
+            A tab-separated BED12 line, without a trailing newline.
+
+        Note:
+            A feature with no thick children is emitted as entirely thick.
+            `blockSizes` and `blockStarts` carry no trailing comma.
+
+        Example:
+            ```python
+            print(db.bed12("transcript_1"))
+            ```
+        """
         if thick_featuretype and thin_featuretype:
             raise ValueError("Can only specify one of `thick_featuretype` or `thin_featuretype`")
         if isinstance(feature, str):
@@ -2391,10 +2890,29 @@ class FeatureDB:
         self,
         featuretype: str = "gene",
         level: int | None = None,
-        order_by=None,
+        order_by: str | None = None,
         reverse: bool = False,
         completely_within: bool = False,
     ) -> Iterator[list[Feature]]:
+        """Group the database by parent, yielding one list per parent.
+
+        Args:
+            featuretype: The parent featuretype to group by.
+            level: How deep to collect children. `None` takes the whole
+                subtree; `1` takes direct children only.
+            order_by: Column to sort parents by -- see `all_features`.
+            reverse: Sort parents descending.
+            completely_within: Passed through to the child query.
+
+        Yields:
+            A list per parent, the parent first followed by its children.
+
+        Example:
+            ```python
+            for group in db.iter_by_parent_childs("gene"):
+                gene, children = group[0], group[1:]
+            ```
+        """
         for parent in self.features_of_type(featuretype, order_by=order_by, reverse=reverse):
             kids = list(
                 self.children(
@@ -2450,10 +2968,27 @@ class FeatureDB:
     def execute(self, query: str):
         """Execute arbitrary SQL. Returns DuckDB's relation cursor.
         SQLite-style queries against ``features_compat`` and ``relations_compat``
-        views are supported; see ``compat_views.sql``."""
+        views are supported; see ``compat_views.sql``.
+
+        Deliberately NOT guarded against ``read_only``: this is the escape
+        hatch, the SQL is the caller's, and DuckDB's own refusal names the
+        statement it rejected, which is more use here than a generic message
+        from us.
+        """
+        self._require_open("execute")
         return self.conn.execute(query.rstrip(";"))
 
     def analyze(self) -> None:
+        """Refresh DuckDB's planner statistics for this database.
+
+        Worth running once after a large `update()`; the planner otherwise
+        keeps costing queries against the shape the database had at ingest.
+
+        Raises:
+            ReadOnlyError: The database was opened with `read_only=True`.
+        """
+        # ANALYZE writes statistics into the database, so it is a mutation.
+        self._require_writable("analyze")
         self.conn.execute("ANALYZE")
         self._analyzed_flag = True
 
@@ -2512,6 +3047,9 @@ class FeatureDB:
         nothing raised. `cursor()` gives an independent connection to the same
         database, so the two queries no longer interfere.
         """
+        # Guarded so a post-close call fails with a name and a remedy rather
+        # than resurrecting a cursor on a connection that is already gone.
+        self._require_open("query")
         if self._seg_cursor is None:
             self._seg_cursor = self.conn.cursor()
         return self._seg_cursor
@@ -2544,6 +3082,7 @@ class FeatureDB:
         return out
 
     def _yield_features(self, sql: str, params: list) -> Iterator[Feature]:
+        self._require_open("query")
         cur = self.conn.execute(sql, params)
         # `_n_multipart` is read once at open. At zero -- every GTF corpus, all
         # of GENCODE, every database migrated from v1 -- this whole path costs

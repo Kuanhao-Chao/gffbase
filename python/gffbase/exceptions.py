@@ -31,7 +31,7 @@ class GFFFormatError(ValueError):
     structured fields ``line_no``, ``kind``, and ``message`` that point
     callers straight to the offender in the input.
 
-    Phase 16: when the Rust extension is loaded, the canonical class is
+    When the Rust extension is loaded, the canonical class is
     ``gffbase._native.GFFFormatError`` (a PyO3 ``create_exception!``
     type). At import time, ``gffbase.__init__`` rebinds the public name
     to whichever class is actually live so ``isinstance`` and
@@ -106,4 +106,28 @@ class MultipartConstraintError(ValueError):
     GFF3 requires the segments of a discontinuous feature to agree on seqid,
     source, featuretype and strand. Raised in ``mode="strict"`` when they do
     not; pass ``on_multipart_conflict="split"`` to partition them instead.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Connection lifecycle. Both subclass `ValueError` for the same reason the
+# block above does: existing `except ValueError` handlers keep working, and a
+# caller who wants to distinguish these can.
+#
+# Neither has a gffutils counterpart, because gffutils has no lifecycle to get
+# wrong -- SQLite hands out shared read connections and never locks a reader
+# out. DuckDB takes an exclusive lock for the life of a write handle, so
+# releasing it and opening read-only are operations that had to exist here.
+# ---------------------------------------------------------------------------
+
+
+class ReadOnlyError(ValueError):
+    """A write was attempted on a database opened with ``read_only=True``."""
+
+
+class ClosedDatabaseError(ValueError):
+    """A `FeatureDB` was used after ``close()``.
+
+    Raised in place of DuckDB's own ``ConnectionException``, which reports
+    that a connection is closed without saying which object or which call.
     """

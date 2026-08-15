@@ -219,3 +219,63 @@ def test_parents_full_walk_through_dynamic(deep_db_max2):
     dynamic CTE, and the result must include every ancestor."""
     ancestors = sorted(f.id for f in deep_db_max2.parents("leaf", level=None))
     assert ancestors == ["g", "t1", "t2", "t3", "t4", "t5"]
+
+
+# ---------------------------------------------------------------------------
+# 5. The batched API must reach the SAME dispatcher decision as the row API
+# ---------------------------------------------------------------------------
+
+
+def test_batched_level_none_matches_row_api_on_an_overflowing_hierarchy(deep_db_max2):
+    """`children_batched(level=None)` truncated silently past `max_depth`.
+
+    `_batched_relation` carried its own copy of the dispatch rule, and that
+    copy was missing the `_has_overflow` arm: for `level=None` it asked only
+    whether the closure was *empty*, never whether the hierarchy ran deeper
+    than the cache. So on this 6-deep chain with `max_depth=2` it chose the
+    closure cache, which knows two levels, and returned `{t1, t2}` -- while
+    `children(level=None)` walked the dynamic CTE and returned all six.
+
+    Two APIs answering the same question differently, neither raising. This
+    pins them together.
+    """
+    row_api = {f.id for f in deep_db_max2.children("g", level=None)}
+    assert row_api == {"t1", "t2", "t3", "t4", "t5", "leaf"}, "row API precondition"
+
+    table = deep_db_max2.children_batched(["g"], level=None, format="arrow")
+    batched = set(table.column("descendant_id").to_pylist())
+    assert batched == row_api
+
+
+def test_batched_parents_level_none_matches_row_api_on_an_overflow(deep_db_max2):
+    """The upward walk has the same two implementations and the same hole.
+
+    (`parents_batched` names its result column `descendant_id` too -- the
+    batched schema is direction-independent, and the empty-result path agrees
+    with the populated one, so that is the contract rather than a slip.)
+    """
+    row_api = {f.id for f in deep_db_max2.parents("leaf", level=None)}
+    assert row_api == {"g", "t1", "t2", "t3", "t4", "t5"}, "row API precondition"
+
+    table = deep_db_max2.parents_batched(["leaf"], level=None, format="arrow")
+    assert set(table.column("descendant_id").to_pylist()) == row_api
+
+
+def test_one_overflowing_anchor_sends_the_whole_batch_dynamic(deep_db_max2):
+    """A batch is served by ONE query, so the decision is per-batch.
+
+    Mixing an anchor that overflows the cache with one that does not must
+    not truncate the overflowing one: `_has_overflow` is asked about the
+    whole anchor list, and any overflow picks the dynamic path.
+    """
+    assert (
+        deep_db_max2._dispatch_relation(level=None, target_id=["leaf", "g"], direction="children")
+        is True
+    )
+    table = deep_db_max2.children_batched(["g", "t4"], level=None, format="arrow")
+    by_anchor: dict[str, set] = {}
+    anchors = table.column("anchor").to_pylist()
+    for anchor, desc in zip(anchors, table.column("descendant_id").to_pylist(), strict=True):
+        by_anchor.setdefault(anchor, set()).add(desc)
+    assert by_anchor["g"] == {"t1", "t2", "t3", "t4", "t5", "leaf"}
+    assert by_anchor["t4"] == {"t5", "leaf"}
