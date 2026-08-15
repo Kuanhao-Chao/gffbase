@@ -4,10 +4,10 @@ build-backend = "maturin"
 
 [project]
 name = "gffbase"
-version = "0.1.0"
+version = "0.2.0"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Kuan-Hao Chao", email = "kuanhao.chao@gmail.com" },
@@ -40,11 +40,11 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering",
@@ -57,15 +57,28 @@ classifiers = [
 # Runtime dependencies. DuckDB and PyArrow are required: the storage engine
 # is DuckDB and the Rust→Python→DuckDB hand-off goes through PyArrow.
 dependencies = [
-    "duckdb>=1.0",
-    "pyarrow>=14",
+    # Floors are the oldest versions the `minimum-deps` CI job installs and
+    # runs the suite against, so they are enforced rather than asserted -- the
+    # comment here used to cite that job before it existed. Both projects
+    # dropped Python 3.9 before these releases, so a single dependency set
+    # covers the whole supported 3.10-3.14 range with no environment markers.
+    "duckdb>=1.4.1",
+    "pyarrow>=18.1",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest>=7",
-    "hypothesis>=6",
     "pytest-cov>=4",
+    # `tests/test_release_hygiene.py` parses `.github/workflows/*.yml` with a
+    # duplicate-key-strict loader, because GitHub Actions refuses a workflow
+    # that has one and PyYAML's default loader does not. That check is only a
+    # gate if the parser is guaranteed present.
+    "pyyaml>=6",
+    # `tests/parity/test_api_parity.py` reads `deviations.toml`. The stdlib
+    # `tomllib` is 3.11+, so the 3.10 floor -- which is what the Windows cells
+    # and the minimum-deps job run -- needs the backport.
+    "tomli>=2; python_version < '3.11'",
 ]
 bench = [
     "psutil>=5",
@@ -74,26 +87,71 @@ bench = [
 ]
 dev = [
     "pytest>=7",
-    "hypothesis>=6",
+    "pytest-cov>=4",
     "psutil>=5",
     "ruff>=0.4",
     "mypy>=1.8",
     "maturin>=1.5,<2.0",
 ]
+# Optional integrations. Each corresponds to a code path that must either work
+# when the extra is installed or raise a precise installation error when it is
+# not — there are no silent degradations.
+#
+# `pybedtools`, `biopython` and `plot` were named in those installation errors
+# before they existed here, so `pip install gffbase[pybedtools]` printed a
+# warning and installed nothing — an error message that sent the reader
+# somewhere useless. Advertising an extra and shipping it are the same commit
+# now; `tests/test_release_hygiene.py` checks that every extra named in a
+# source file is declared here.
+pandas = ["pandas>=1.5"]
+polars = ["polars>=0.20"]
+fasta = ["pyfaidx>=0.7"]
+# `pybedtools` is POSIX-only: it builds a C extension against `unistd.h` and
+# its `pysam` dependency declares MacOS/POSIX/Unix classifiers and ships no
+# Windows wheel. Without the marker, `pip install gffbase[all]` on Windows
+# tries to compile it from source and fails -- which it did, in every Windows
+# CI cell, on a package whose own classifiers promise Windows support.
+#
+# The marker is on the DEPENDENCY, not the extra: `gffbase[pybedtools]` still
+# resolves everywhere, and simply installs nothing on Windows, where the
+# integration could not have worked anyway.
+pybedtools = ["pybedtools>=0.9; sys_platform != 'win32'"]
+biopython = ["biopython>=1.80"]
+plot = ["pybedtools>=0.9; sys_platform != 'win32'", "matplotlib>=3.5"]
+all = [
+    "pandas>=1.5",
+    "polars>=0.20",
+    "pyfaidx>=0.7",
+    "pybedtools>=0.9; sys_platform != 'win32'",
+    "biopython>=1.80",
+    "matplotlib>=3.5",
+]
 docs = [
     # MkDocs site (themed with Material; API ref via mkdocstrings).
-    "mkdocs>=1.6",
+    #
+    # Capped below 2.0 deliberately. MkDocs 2.0 removes the plugin system and
+    # rewrites theming, with no migration path -- so every plugin below,
+    # including mkdocstrings which generates the whole API reference, stops
+    # working. An unpinned floor would have let a routine `pip install
+    # -e .[docs]` break the docs build with no change on our side.
+    "mkdocs>=1.6,<2",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
     "mkdocs-include-markdown-plugin>=6.2",
     "pymdown-extensions>=10.7",
 ]
 
+[project.scripts]
+# argparse only -- no CLI framework dependency. gffutils makes `argh` and
+# `argcomplete` hard runtime requirements of the library itself, so importing
+# it at all pulls in a CLI parser.
+gffbase = "gffbase.cli:main"
+
 [project.urls]
 Homepage      = "https://github.com/Kuanhao-Chao/gffbase"
 Source        = "https://github.com/Kuanhao-Chao/gffbase"
 Issues        = "https://github.com/Kuanhao-Chao/gffbase/issues"
-Documentation = "https://gffbase.khchao.com/"
+Documentation = "https://khchao.com/gffbase/"
 Changelog     = "https://github.com/Kuanhao-Chao/gffbase/releases"
 
 # ---------------------------------------------------------------------------
@@ -108,7 +166,7 @@ module-name    = "gffbase._native"
 python-source  = "python"
 features       = ["pyo3/extension-module"]
 strip          = true
-# Build an abi3 wheel so a single artifact works for CPython 3.9–3.13.
+# Build an abi3 wheel so a single artifact works for CPython 3.10-3.14.
 bindings       = "pyo3"
 # Maturin's sdist builder uses its own include rules (it does NOT honor
 # MANIFEST.in). Bundle the test fixtures + LICENSE so users can rebuild
@@ -116,47 +174,84 @@ bindings       = "pyo3"
 include = [
     { path = "LICENSE", format = "sdist" },
     { path = "MANIFEST.in", format = "sdist" },
+    { path = "CHANGELOG.md", format = "sdist" },
+    # The community-health files. `MANIFEST.in` referenced these and maturin
+    # does not read it, so the sdist shipped a `MANIFEST.in` naming files that
+    # were not in the tarball -- and `test_manifest_in_references_resolve_to_
+    # real_files` failed when run from an unpacked sdist, which is exactly the
+    # situation it exists to check.
+    { path = "CODE_OF_CONDUCT.md", format = "sdist" },
+    { path = "CONTRIBUTING.md", format = "sdist" },
+    { path = "SECURITY.md", format = "sdist" },
+    { path = "CITATION.cff", format = "sdist" },
+    { path = "MIGRATION.md", format = "sdist" },
+    { path = "rust/Cargo.lock", format = "sdist" },
     { path = "tests/**/*.py", format = "sdist" },
-    { path = "tests/data/*", format = "sdist" },
-    { path = "PHASE3_PARSER_SUMMARY.md", format = "sdist" },
-    { path = "PHASE4_INGESTION_SUMMARY.md", format = "sdist" },
-    { path = "PHASE5_API_SUMMARY.md", format = "sdist" },
-    { path = "PHASE6_BENCHMARK_REPORT.md", format = "sdist" },
-    { path = "PHASE7_REMEDIATION_REPORT.md", format = "sdist" },
-    { path = "PHASE8_PACKAGING_SUMMARY.md", format = "sdist" },
+    # `tests/data/**/*`, not `tests/data/*`: `*` does not cross a `/`, so the
+    # old pattern reached only the four fixtures at the top level and missed
+    # the entire `upstream/` corpus and the `v1/` migration fixture. The
+    # neighbouring `tests/**/*.py` entry already used `**` correctly.
+    { path = "tests/data/**/*", format = "sdist" },
+    # The parity harness is data, not code, so `tests/**/*.py` never reached
+    # it -- an sdist could not run the compatibility suite at all.
+    { path = "tests/parity/*.json", format = "sdist" },
+    { path = "tests/parity/*.toml", format = "sdist" },
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is part of the standard test invocation. The 99 % gate is
-# enforced via `--cov-fail-under=99`; CI re-asserts this with the same flag
-# so a coverage drop fails the build before merge.
-addopts = """\
-    -q
-    --cov=gffbase
-    --cov-report=term-missing
-    --cov-report=xml:coverage.xml
-    --cov-report=html:htmlcov
-    --cov-fail-under=99
-"""
+# Deliberately NO coverage flags here. Putting `--cov`/`--cov-fail-under` in
+# the default addopts made a bare `pytest` hard-require pytest-cov (which the
+# `dev` extra did not even install) and made every local run fail on coverage
+# rather than on tests. Coverage is a CI gate, applied explicitly:
+#
+#     pytest --cov=gffbase --cov-report=term-missing --cov-fail-under=<N>
+#
+# See .github/workflows/ci.yml for the enforced thresholds.
+addopts = "-q"
+# pytest keeps the last THREE runs of every `tmp_path` directory by default.
+# That was harmless when tests built in-memory databases; it is not now. An
+# on-disk DuckDB file is pre-allocated at ~6 MB whatever it contains, and
+# `test_ingest_atomicity`, `test_migrate` and `test_schema_version_gate` each
+# build several per test — so a day's iteration filled /tmp completely and left
+# the machine unable to run anything at all, this suite included.
+#
+# Keeping only the directories of FAILED tests preserves the entire debugging
+# value of the retention (a passing test's scratch directory is never looked
+# at) while making the footprint proportional to failures rather than to runs.
+tmp_path_retention_policy = "failed"
 filterwarnings = [
     "ignore::DeprecationWarning:duckdb.*",
 ]
+markers = [
+    "slow: long-running; excluded from the default PR run",
+    "parity: differential comparison against an installed gffutils oracle",
+    "corpus: needs a downloaded multi-GB annotation corpus (tests/test_corpus.py)",
+]
+# `native` and `rtree` were declared here and carried by no test. Both
+# conditions are handled better where they arise -- the `engine` fixture in
+# tests/conftest.py skips the Rust cells when the extension is absent, and the
+# R-tree tests read GFFBASE_TEST_DISABLE_RTREE directly, because that is a
+# per-run environment axis rather than a property of a test. A marker nothing
+# carries is indistinguishable from one that was deleted, so they are.
 
 [tool.coverage.run]
 branch = true
 source = ["gffbase"]
-omit = [
-    # Pure-Python correctness oracle — its job is to mirror the Rust parser
-    # exactly, and the Rust path is the production path. Most of its lines
-    # are exercised indirectly via differential tests, but full branch
-    # coverage there is redundant work.
-    "*/_pyfallback/*",
-    # The legacy SQLite export path emits one-shot SQL; the schema is
-    # smoke-tested by test_featuredb_export but column-by-column branch
-    # coverage isn't useful.
-    "*/_bins.py",
-]
+# `python -m gffbase` runs in a SUBPROCESS, which this process's tracer does
+# not follow, so `__main__.py` reads 0% however well it is tested -- and it is
+# tested, by `tests/test_cli.py::test_python_dash_m_runs_the_cli`, which is the
+# only way to exercise it honestly. Measuring it here would require
+# `coverage run --parallel` plumbing for three lines that delegate to
+# `cli.main`. Excluded, with the test that covers it named.
+#
+# `*/_pyfallback/*` is deliberately NOT here: it was exempted once with a note
+# saying the exemption would be removed in 0.2.0, and that removal stands. The
+# fallback parser is the oracle the Rust engine is diffed against AND the only
+# parser on a wheel-less install, so exempting it hid the coverage of the code
+# most likely to be running when something goes wrong. An omit list is where
+# uncovered code goes to stop being counted, so it holds exactly one entry.
+omit = ["*/gffbase/__main__.py"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -181,10 +276,61 @@ skip_covered = false
 show_missing = true
 precision = 1
 
+[tool.mypy]
+python_version = "3.10"
+files = ["python/gffbase"]
+mypy_path = "python"
+namespace_packages = true
+explicit_package_bases = true
+# Start honest rather than aspirational: these are the checks the code passes
+# today and that CI enforces. The strictness dial is turned up per-module as
+# annotations land, rather than being declared globally and then silenced with
+# a wall of per-error ignores.
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The compiled extension has no stubs; `native_available()` guards every use.
+module = ["gffbase._native"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Optional integrations, imported lazily inside try/except ImportError.
+# `pybedtools` and `Bio` are installed in some environments but ship no
+# `py.typed`, so they need the same treatment as the ones that may be absent.
+module = [
+    "polars.*",
+    "pandas.*",
+    "pyfaidx.*",
+    "duckdb.*",
+    "pyarrow.*",
+    "pybedtools.*",
+    "Bio.*",
+]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# The benchmark scripts are standalone entry points meant to be run straight
+# out of a checkout (`python benchmarks/01_ingest.py`). They must
+# `sys.path.insert()` the in-tree `python/` directory before importing gffbase,
+# so module-level imports genuinely cannot all sit at the top of the file.
+"benchmarks/*.py" = ["E402"]
+
+[tool.ruff.format]
+# Match the existing house style: double quotes, spaces, trailing commas on
+# multi-line collections. `ruff format --check` is a CI gate from 0.1.1 on.
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

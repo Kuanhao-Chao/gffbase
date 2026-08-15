@@ -1,0 +1,43 @@
+{
+  "n_queries": 5000,
+  "gffbase_rtree": {
+    "label": "gffbase rtree",
+    "n_queries": 5000,
+    "wall_seconds": 5.867377083020983,
+    "qps": 852.1695349134797,
+    "mean_ms": 1.172649677656591,
+    "p50_ms": 0.724603989510797,
+    "p95_ms": 2.67462499323301,
+    "max_ms": 611.904624995077,
+    "total_features_returned": 6501
+  },
+  "gffbase_btree": {
+    "label": "gffbase btree",
+    "n_queries": 5000,
+    "wall_seconds": 8.106866832997184,
+    "qps": 616.7610869896889,
+    "mean_ms": 1.6203617771156134,
+    "p50_ms": 1.2653339945245534,
+    "p95_ms": 3.052457992453128,
+    "max_ms": 103.64683301304467,
+    "total_features_returned": 6501
+  },
+  "legacy": {
+    "label": "legacy gffutils",
+    "n_queries": 5000,
+    "wall_seconds": 30.57708420799463,
+    "qps": 163.52115087195622,
+    "mean_ms": 6.114320958248573,
+    "p50_ms": 6.005500006722286,
+    "p95_ms": 11.999125010333955,
+    "max_ms": 64.59795800037682,
+    "total_features_returned": 6501
+  },
+  "comparison": {
+    "rtree_speedup_vs_legacy": 5.211371925707417,
+    "btree_speedup_vs_legacy": 3.771751138619604,
+    "rtree_speedup_vs_btree": 1.3816849877361448,
+    "feature_counts_gffbase_rtree_vs_btree_match": true,
+    "feature_counts_gffbase_vs_legacy_match": true
+  }
+}

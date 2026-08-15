@@ -19,12 +19,11 @@
 from __future__ import annotations
 
 import pytest
-
 from gffbase import parse_bytes, parse_gff
 
 
 def test_too_few_fields_raises_value_error():
-    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"   # 7 fields, missing col 9 + frame
+    bad = b"chr1\tsrc\texon\t1\t10\t.\t+\n"  # 7 fields, missing col 9 + frame
     with pytest.raises(ValueError):
         list(parse_bytes(bad))
 
@@ -45,7 +44,7 @@ def test_directive_collected():
     text = b"##gff-version 3\nchr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\n"
     it = parse_bytes(text)
     list(it)
-    assert any(d.startswith("##gff-version") for d in it.directives())
+    assert any(d.startswith("gff-version") for d in it.directives())
 
 
 def test_fasta_terminator_halts_iteration():
@@ -112,10 +111,12 @@ def test_extra_columns_past_nine_preserved():
 
 def test_force_dialect_check_full_pass():
     """With force_dialect_check=True every feature is sampled."""
-    text = b"\n".join(
-        f"chr1\tsrc\texon\t{i}\t{i+10}\t.\t+\t.\tID=x{i}".encode()
-        for i in range(1, 25)
-    ) + b"\n"
+    text = (
+        b"\n".join(
+            f"chr1\tsrc\texon\t{i}\t{i + 10}\t.\t+\t.\tID=x{i}".encode() for i in range(1, 25)
+        )
+        + b"\n"
+    )
     it = parse_bytes(text, force_dialect_check=True)
     list(it)
     assert it.dialect()["fmt"] == "gff3"
@@ -142,6 +143,7 @@ def test_engine_unknown_raises():
 
 def test_engine_rust_when_unavailable_raises(monkeypatch):
     from gffbase import parser as _p
+
     monkeypatch.setattr(_p, "_NATIVE", False)
     with pytest.raises(RuntimeError):
         parse_bytes(b"", engine="rust")
@@ -156,6 +158,7 @@ def test_parse_gff_explicit_python(tmp_path):
 
 def test_detect_dialect_smoke(tmp_path):
     from gffbase import detect_dialect
+
     p = tmp_path / "x.gff3"
     p.write_text("chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\n")
     d = detect_dialect(str(p))
@@ -164,6 +167,7 @@ def test_detect_dialect_smoke(tmp_path):
 
 def test_detect_dialect_python_engine(tmp_path):
     from gffbase import detect_dialect
+
     p = tmp_path / "x.gff3"
     p.write_text("chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\n")
     d = detect_dialect(str(p), engine="python")
@@ -172,4 +176,5 @@ def test_detect_dialect_python_engine(tmp_path):
 
 def test_native_available_returns_bool():
     from gffbase import native_available
+
     assert isinstance(native_available(), bool)

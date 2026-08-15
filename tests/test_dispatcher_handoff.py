@@ -32,12 +32,8 @@ fallback kicks in.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
-from gffbase import FeatureDB, create_db
-from gffbase import ingest
+from gffbase import FeatureDB, ingest
 
 
 def _deep_chain_lines(depth: int) -> str:
@@ -48,14 +44,10 @@ def _deep_chain_lines(depth: int) -> str:
     parent = "g"
     for i in range(1, depth):
         nid = f"t{i}"
-        lines.append(
-            f"chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID={nid};Parent={parent}\n"
-        )
+        lines.append(f"chr1\trs\tmRNA\t1\t1000\t.\t+\t.\tID={nid};Parent={parent}\n")
         parent = nid
     # Leaf
-    lines.append(
-        f"chr1\trs\texon\t100\t200\t.\t+\t.\tID=leaf;Parent={parent}\n"
-    )
+    lines.append(f"chr1\trs\texon\t100\t200\t.\t+\t.\tID=leaf;Parent={parent}\n")
     return "".join(lines)
 
 
@@ -68,7 +60,10 @@ def deep_db_max2(tmp_path):
     src.write_text(_deep_chain_lines(depth=6))
     out = tmp_path / "deep.duckdb"
     con, _stats = ingest.from_file(
-        str(src), dbfn=str(out), force=True, max_depth=2,
+        str(src),
+        dbfn=str(out),
+        force=True,
+        max_depth=2,
     )
     con.close()
     db = FeatureDB(str(out))
@@ -86,21 +81,17 @@ def deep_db_max2(tmp_path):
 def test_dispatcher_picks_cache_within_max_depth(deep_db_max2):
     """`level <= max_depth` MUST go through the materialized closure
     cache (the constant-time path)."""
-    assert deep_db_max2._dispatch_relation(
-        level=1, target_id="g", direction="children"
-    ) is False
-    assert deep_db_max2._dispatch_relation(
-        level=2, target_id="g", direction="children"
-    ) is False
+    assert deep_db_max2._dispatch_relation(level=1, target_id="g", direction="children") is False
+    assert deep_db_max2._dispatch_relation(level=2, target_id="g", direction="children") is False
 
 
 def test_dispatcher_picks_dynamic_past_max_depth(deep_db_max2):
     """`level > max_depth` MUST go through the dynamic CTE (the
     deeper-than-cache fallback)."""
     for lvl in (3, 5, 6):
-        assert deep_db_max2._dispatch_relation(
-            level=lvl, target_id="g", direction="children"
-        ) is True
+        assert (
+            deep_db_max2._dispatch_relation(level=lvl, target_id="g", direction="children") is True
+        )
 
 
 def test_dispatcher_level_none_dynamic_when_overflow(deep_db_max2):
@@ -108,9 +99,7 @@ def test_dispatcher_level_none_dynamic_when_overflow(deep_db_max2):
     actual hierarchy depth exceeds the materialized cache."""
     # The chain runs 6 deep; the cache only knows 2 levels; the
     # dispatcher must detect the overflow and fall through.
-    assert deep_db_max2._dispatch_relation(
-        level=None, target_id="g", direction="children"
-    ) is True
+    assert deep_db_max2._dispatch_relation(level=None, target_id="g", direction="children") is True
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +116,8 @@ def test_cache_and_dynamic_return_same_descendants_at_level_2(deep_db_max2):
     feature at depth 2 below g, which is `t2`."""
     cache_ids = sorted(f.id for f in deep_db_max2.children("g", level=2))
     # Flip the dispatcher to dynamic for this same query.
-    deep_db_max2._closure_max_depth = 0   # forces use_dynamic for level=None
-    deep_db_max2._max_depth = 0           # forces use_dynamic for level >= 1
+    deep_db_max2._closure_max_depth = 0  # forces use_dynamic for level=None
+    deep_db_max2._max_depth = 0  # forces use_dynamic for level >= 1
     dynamic_ids = sorted(f.id for f in deep_db_max2.children("g", level=2))
     assert cache_ids == dynamic_ids
     assert cache_ids == ["t2"]
@@ -146,11 +135,17 @@ def test_cache_and_dynamic_return_same_full_descendants(tmp_path):
     src_b.write_text(chain)
 
     con_a, _ = ingest.from_file(
-        str(src_a), dbfn=str(tmp_path / "a.duckdb"), force=True, max_depth=8,
+        str(src_a),
+        dbfn=str(tmp_path / "a.duckdb"),
+        force=True,
+        max_depth=8,
     )
     con_a.close()
     con_b, _ = ingest.from_file(
-        str(src_b), dbfn=str(tmp_path / "b.duckdb"), force=True, max_depth=2,
+        str(src_b),
+        dbfn=str(tmp_path / "b.duckdb"),
+        force=True,
+        max_depth=2,
     )
     con_b.close()
 
@@ -224,3 +219,63 @@ def test_parents_full_walk_through_dynamic(deep_db_max2):
     dynamic CTE, and the result must include every ancestor."""
     ancestors = sorted(f.id for f in deep_db_max2.parents("leaf", level=None))
     assert ancestors == ["g", "t1", "t2", "t3", "t4", "t5"]
+
+
+# ---------------------------------------------------------------------------
+# 5. The batched API must reach the SAME dispatcher decision as the row API
+# ---------------------------------------------------------------------------
+
+
+def test_batched_level_none_matches_row_api_on_an_overflowing_hierarchy(deep_db_max2):
+    """`children_batched(level=None)` truncated silently past `max_depth`.
+
+    `_batched_relation` carried its own copy of the dispatch rule, and that
+    copy was missing the `_has_overflow` arm: for `level=None` it asked only
+    whether the closure was *empty*, never whether the hierarchy ran deeper
+    than the cache. So on this 6-deep chain with `max_depth=2` it chose the
+    closure cache, which knows two levels, and returned `{t1, t2}` -- while
+    `children(level=None)` walked the dynamic CTE and returned all six.
+
+    Two APIs answering the same question differently, neither raising. This
+    pins them together.
+    """
+    row_api = {f.id for f in deep_db_max2.children("g", level=None)}
+    assert row_api == {"t1", "t2", "t3", "t4", "t5", "leaf"}, "row API precondition"
+
+    table = deep_db_max2.children_batched(["g"], level=None, format="arrow")
+    batched = set(table.column("descendant_id").to_pylist())
+    assert batched == row_api
+
+
+def test_batched_parents_level_none_matches_row_api_on_an_overflow(deep_db_max2):
+    """The upward walk has the same two implementations and the same hole.
+
+    (`parents_batched` names its result column `descendant_id` too -- the
+    batched schema is direction-independent, and the empty-result path agrees
+    with the populated one, so that is the contract rather than a slip.)
+    """
+    row_api = {f.id for f in deep_db_max2.parents("leaf", level=None)}
+    assert row_api == {"g", "t1", "t2", "t3", "t4", "t5"}, "row API precondition"
+
+    table = deep_db_max2.parents_batched(["leaf"], level=None, format="arrow")
+    assert set(table.column("descendant_id").to_pylist()) == row_api
+
+
+def test_one_overflowing_anchor_sends_the_whole_batch_dynamic(deep_db_max2):
+    """A batch is served by ONE query, so the decision is per-batch.
+
+    Mixing an anchor that overflows the cache with one that does not must
+    not truncate the overflowing one: `_has_overflow` is asked about the
+    whole anchor list, and any overflow picks the dynamic path.
+    """
+    assert (
+        deep_db_max2._dispatch_relation(level=None, target_id=["leaf", "g"], direction="children")
+        is True
+    )
+    table = deep_db_max2.children_batched(["g", "t4"], level=None, format="arrow")
+    by_anchor: dict[str, set] = {}
+    anchors = table.column("anchor").to_pylist()
+    for anchor, desc in zip(anchors, table.column("descendant_id").to_pylist(), strict=True):
+        by_anchor.setdefault(anchor, set()).add(desc)
+    assert by_anchor["g"] == {"t1", "t2", "t3", "t4", "t5", "leaf"}
+    assert by_anchor["t4"] == {"t5", "leaf"}

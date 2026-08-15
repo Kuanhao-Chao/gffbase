@@ -21,13 +21,37 @@ are required by tests to produce identical output.
 
 from __future__ import annotations
 
-from typing import Iterator, List, Optional
-
-from gffbase.feature import ParsedFeature
 from gffbase._pyfallback import parser as _pyparser
 
+# Column-9 serialization. Defined in a leaf module so `gffbase.feature` can use
+# it without importing this one (which imports `gffbase.feature`), and
+# re-exported here under the names gffutils uses, which is where callers and
+# the upstream test suite look for them.
+from gffbase._serialize import (
+    Quoter,
+    _reconstruct,
+    _split_keyvals,
+    encode_value,
+    quoted_semicolon_patterns,
+    quoter,
+)
+from gffbase.feature import ParsedFeature
+
+__all__ = [
+    "Quoter",
+    "_reconstruct",
+    "_split_keyvals",
+    "detect_dialect",
+    "encode_value",
+    "native_available",
+    "parse_bytes",
+    "parse_gff",
+    "quoted_semicolon_patterns",
+    "quoter",
+]
+
 try:  # pragma: no cover - import availability is env-dependent
-    from gffbase import _native as _rust  # type: ignore[attr-defined]
+    from gffbase import _native as _rust
 
     _NATIVE = True
 except ImportError:
@@ -45,7 +69,7 @@ class _Iterator:
     pure-Python iterator (yielding ParsedFeature) and always yields
     ParsedFeature.
 
-    Phase 16: also exposes ``.warnings`` — a list of structured-error
+    Also exposes ``.warnings`` — a list of structured-error
     dicts (``line_no``, ``kind``, ``message``) collected when the
     iterator was created with ``strict=False``.
     """
@@ -72,7 +96,7 @@ class _Iterator:
         return list(self._inner.directives())
 
     @property
-    def warnings(self) -> List[dict]:
+    def warnings(self) -> list[dict]:
         """Errors that were demoted to warnings during a non-strict run.
 
         Each item is a dict with keys ``line_no``, ``kind``, and
@@ -84,7 +108,7 @@ class _Iterator:
         return []
 
 
-def _resolve_engine(engine: Optional[str]) -> str:
+def _resolve_engine(engine: str | None) -> str:
     if engine is None or engine == "auto":
         return "rust" if _NATIVE else "python"
     if engine == "rust" and not _NATIVE:
@@ -103,28 +127,37 @@ def parse_gff(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
-    engine: Optional[str] = "auto",
+    validation: str = "ncbi",
+    engine: str | None = "auto",
 ) -> _Iterator:
     """Parse a GFF3/GTF file (plain text or ``.gz``).
 
     Returns an iterator of ``ParsedFeature`` plus ``.dialect()``,
-    ``.directives()``, and (Phase 16) ``.warnings`` accessors.
+    ``.directives()`` and ``.warnings`` accessors.
 
     Parameters
     ----------
+    validation : {"ncbi", "gffutils"}
+        Which rule set to apply. ``"ncbi"`` (default here) is the full GFF3
+        specification. ``"gffutils"`` is the compatibility profile used by
+        `create_db`: every rule still runs, but a violation annotates the
+        record instead of rejecting it, because real annotation files break
+        the spec routinely and gffutils reads them anyway.
     strict : bool
-        When True (default), the iterator raises ``GFFFormatError`` on
-        the first malformed line. When False, malformed lines are
-        skipped silently and recorded in ``iterator.warnings``.
+        What a *rejection* does. True (default) raises ``GFFFormatError`` on
+        the first offending line; False skips it and records it in
+        ``iterator.warnings``. Under ``validation="gffutils"`` nothing is
+        rejected, so this only affects lines that cannot be parsed at all.
     """
     eng = _resolve_engine(engine)
     if eng == "rust":
-        it = _rust.parse_file(  # type: ignore[union-attr]
+        it = _rust.parse_file(
             path,
             checklines=checklines,
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
             strict=strict,
+            validation=validation,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_file(
@@ -133,6 +166,7 @@ def parse_gff(
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
         strict=strict,
+        validation=validation,
     )
     return _Iterator(it, native=False)
 
@@ -144,16 +178,18 @@ def parse_bytes(
     force_dialect_check: bool = False,
     force_gff: bool = False,
     strict: bool = True,
-    engine: Optional[str] = "auto",
+    validation: str = "ncbi",
+    engine: str | None = "auto",
 ) -> _Iterator:
     eng = _resolve_engine(engine)
     if eng == "rust":
-        it = _rust.parse_bytes(  # type: ignore[union-attr]
+        it = _rust.parse_bytes(
             data,
             checklines=checklines,
             force_dialect_check=force_dialect_check,
             force_gff=force_gff,
             strict=strict,
+            validation=validation,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_bytes(
@@ -162,14 +198,13 @@ def parse_bytes(
         force_dialect_check=force_dialect_check,
         force_gff=force_gff,
         strict=strict,
+        validation=validation,
     )
     return _Iterator(it, native=False)
 
 
-def detect_dialect(
-    path: str, *, checklines: int = 10, engine: Optional[str] = "auto"
-) -> dict:
+def detect_dialect(path: str, *, checklines: int = 10, engine: str | None = "auto") -> dict:
     eng = _resolve_engine(engine)
     if eng == "rust":
-        return _rust.detect_dialect(path, checklines=checklines)  # type: ignore[union-attr]
+        return _rust.detect_dialect(path, checklines=checklines)
     return _pyparser.detect_dialect(path, checklines=checklines)

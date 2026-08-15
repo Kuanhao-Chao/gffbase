@@ -1,0 +1,9 @@
+closure_max_depth = 2
+max_depth         = 8
+rtree_built       = True
+gene sample size  = 500
+auto   : wall=20.219s, qps=25, descs=66993
+cache  : wall=20.300s, qps=25, descs=66993
+dynamic: wall=75.181s, qps=7, descs=66993
+
+auto vs forced-cache speedup: 1.00×

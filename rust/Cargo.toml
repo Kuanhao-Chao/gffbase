@@ -1,11 +1,16 @@
 [package]
 name = "gffbase-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-# Minimum rustc — kept loose because our `Cargo.lock` pins compatible
-# transitive versions for older toolchains. PyO3 0.22.x recommends 1.71+
-# for unpinned deps, but we ship a working `Cargo.lock` for 1.69 too.
-rust-version = "1.69"
+# Minimum supported rustc. This is the toolchain the `lint` CI job compiles
+# the whole crate with (`cargo clippy --locked --all-targets`), so the claim is
+# enforced rather than asserted.
+#
+# It was previously "1.69", justified by a `Cargo.lock` that was in fact
+# gitignored and absent. With the lock now committed, the resolved graph
+# includes flate2 1.1.x, which does not build on 1.69. Rather than leave an
+# unverifiable floor in place, this declares the version we actually test.
+rust-version = "1.83"
 description = "Rust core for GFFBase: high-performance GFF3/GTF parser exposed to Python via PyO3."
 readme = "../README.md"
 license = "Apache-2.0"
@@ -22,9 +27,19 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
-pyo3   = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+# `extension-module` is deliberately NOT listed here. maturin already passes
+# it (`features = ["pyo3/extension-module"]` in pyproject.toml), and enabling
+# it unconditionally tells the linker not to link libpython -- which is right
+# for the wheel and fatal for `cargo test`, whose test binary is an executable
+# that must. On macOS that surfaced as a wall of "symbol(s) not found for
+# architecture arm64" from any `cargo test`, so the Rust unit tests could not
+# be run locally at all on the platform CONTRIBUTING tells you to run them on.
+pyo3   = { version = "0.29", features = ["abi3-py310"] }
 memchr = "2.7"
-memmap2 = "0.9"
+# No memmap2. It was declared and never used -- `parser.rs` reads plain input
+# with `read_to_end` and streams gzip through flate2, and there is no `Mmap`
+# anywhere in the crate. An unused dependency is still compiled, still locked,
+# and still part of the supply chain of every published wheel.
 flate2 = "1.0"
 
 [profile.release]

@@ -80,6 +80,6 @@ exception are usually what we need. -->
 
 ## Additional context
 
-<!-- Anything else: have you tried 0.0.1 vs. 0.1.0? Does it reproduce
+<!-- Anything else: does it reproduce on a different gffbase version? Does it reproduce
 on a different OS? Did it appear after a specific commit? Are there
 related open issues? -->
