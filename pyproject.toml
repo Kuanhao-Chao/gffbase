@@ -151,6 +151,16 @@ include = [
     { path = "LICENSE", format = "sdist" },
     { path = "MANIFEST.in", format = "sdist" },
     { path = "CHANGELOG.md", format = "sdist" },
+    # The community-health files. `MANIFEST.in` referenced these and maturin
+    # does not read it, so the sdist shipped a `MANIFEST.in` naming files that
+    # were not in the tarball -- and `test_manifest_in_references_resolve_to_
+    # real_files` failed when run from an unpacked sdist, which is exactly the
+    # situation it exists to check.
+    { path = "CODE_OF_CONDUCT.md", format = "sdist" },
+    { path = "CONTRIBUTING.md", format = "sdist" },
+    { path = "SECURITY.md", format = "sdist" },
+    { path = "CITATION.cff", format = "sdist" },
+    { path = "MIGRATION.md", format = "sdist" },
     { path = "rust/Cargo.lock", format = "sdist" },
     { path = "tests/**/*.py", format = "sdist" },
     # `tests/data/**/*`, not `tests/data/*`: `*` does not cross a `/`, so the

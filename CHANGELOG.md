@@ -351,6 +351,13 @@ nobody can install would only mislead. Everything below is the delta from
 
 ### Fixed
 
+- **The sdist shipped a `MANIFEST.in` naming five files it did not contain.**
+  maturin does not read `MANIFEST.in` — `pyproject.toml` says so — so
+  `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CITATION.cff` and
+  `MIGRATION.md` were referenced and absent. Found by unpacking a real sdist
+  and running the suite from it, where the two hygiene tests that exist to
+  check exactly this failed. The full suite now passes from an unpacked
+  sdist, so "users can rebuild from sdist and run the suite" is true.
 - The `corpus` pytest marker was declared and carried by **no test**, so
   `pytest -m corpus` selected nothing and reported success. It now has the
   harness it was declared for (`tests/test_corpus.py`): ingest-and-validate
