@@ -1,0 +1,27 @@
+[1/4] gffbase ingest …
+    wall = 225.78s, peak RSS = 1.45 GB, n_features = 2182889
+[2/4] Spatial routing — 10000 regions …
+    rtree=11.107s (900 qps), btree=15.448s (647 qps), speedup=1.39×
+[3/4] Relational routing — 2000 genes …
+KeyboardInterrupt
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/benchmark.py", line 516, in <module>
+    main()
+    ~~~~^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/benchmark.py", line 478, in main
+    dyn = bench_children(db, gene_ids, force_dynamic=True, level=None)
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/bench/benchmark.py", line 293, in bench_children
+    for _ in db.children(fid, level=level):
+             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/python/gffbase/interface.py", line 457, in children
+    yield from self._relation_query(
+    ...<2 lines>...
+    )
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/python/gffbase/interface.py", line 501, in _relation_query
+    yield from self._yield_features(sql, params)
+  File "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/python/gffbase/interface.py", line 1030, in _yield_features
+    cur = self.conn.execute(sql, params)
+RuntimeError: Query interrupted
