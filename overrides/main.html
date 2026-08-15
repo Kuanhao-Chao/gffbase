@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{#
+  Material has no built-in apple-touch-icon setting, and `theme.favicon` only
+  emits the SVG. Without this link the committed `apple-touch-icon.png` was a
+  file nobody ever requested; iOS falls back to a screenshot of the page when
+  someone adds the docs to their home screen.
+
+  `favicon.png` is the raster fallback for the handful of browsers that ignore
+  an SVG favicon. Material emits the SVG one itself, and a second `icon` link
+  is additive rather than a replacement.
+#}
+{% block extrahead %}
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ 'assets/apple-touch-icon.png' | url }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ 'assets/favicon.png' | url }}">
+{% endblock %}

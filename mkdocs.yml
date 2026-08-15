@@ -17,6 +17,9 @@ docs_dir: docs
 
 theme:
   name: material
+  # Only to add the apple-touch-icon and the raster favicon fallback, which
+  # Material has no settings for. See `overrides/main.html`.
+  custom_dir: overrides
   # The wordmark, in the house style of the author's other tools. Material
   # swaps `logo` for `logo_dark` automatically in dark mode via CSS, so the
   # white twin is referenced from `extra.css` rather than here.

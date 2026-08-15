@@ -17,16 +17,22 @@
   edit `logo.svg` and re-derive rather than editing this by hand.
 
   Geometry: cap height 200 (y 40..240), baseline y=240, x-height letters sit
-  on the same baseline. Gene model occupies y 286..326.
+  on the same baseline. Gene model occupies y 300..340.
+
+  The `g` descender stops at y=280: 40 units, or 0.20x cap height, which is
+  the typographic norm for a grotesque. It used to reach y=342 (0.51x, about
+  twice the norm) and ran straight through the first exon block, so at the
+  36px the site renders the logo at, the tail and the exon merged into one
+  black mass. The two tiers now clear each other by 20 units.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 350" role="img"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 365" role="img"
      aria-label="gffbase">
   <title>gffbase</title>
   <g fill="#FFFFFF">
     <!-- g : bowl + descender -->
-    <path d="M150 108c-46 0-80 32-80 76 0 43 33 74 78 74 20 0 36-6 47-18v13
-             c0 29-19 46-50 46-22 0-40-7-54-19l-24 36c21 17 48 26 79 26
-             57 0 92-32 92-86V112h-46v16c-12-13-26-20-42-20zm9 41
+    <path d="M150 108c-46 0-80 32-80 76 0 43 33 74 78 74 20 0 36-6 47-18v5
+             c0 11-19 18-50 18-22 0-40-3-54-7l-24 14c21 6 48 10 79 10
+             57 0 92-13 92-34V112h-46v16c-12-13-26-20-42-20zm9 41
              c26 0 44 16 44 37s-18 37-44 37-44-16-44-37 18-37 44-37z"/>
 
     <!-- f -->
@@ -73,8 +79,8 @@
   <!-- Gene model: two exons on an intron line. Splam's vocabulary, reused
        deliberately, because this is the thing being stored. -->
   <g fill="#FFFFFF">
-    <rect x="40" y="301" width="1210" height="10" rx="5"/>
-    <rect x="150" y="286" width="380" height="40" rx="4"/>
-    <rect x="800" y="286" width="390" height="40" rx="4"/>
+    <rect x="40" y="315" width="1210" height="10" rx="5"/>
+    <rect x="150" y="300" width="380" height="40" rx="4"/>
+    <rect x="800" y="300" width="390" height="40" rx="4"/>
   </g>
 </svg>
