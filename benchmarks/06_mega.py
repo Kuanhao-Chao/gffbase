@@ -117,12 +117,30 @@ t0 = time.perf_counter()
 # CHESS / MANE / RefSeq are all GFF3; GENCODE is GTF. The hardened
 # parser auto-detects but `force_gff=True` prevents quoted-attr lines
 # from being mis-classified as GTF in edge cases.
+#
+# `merge_strategy` is NOT optional here, for two independent reasons:
+#
+# 1. Correctness of the run. It defaults to "error", and RefSeq
+#    GRCh38.p14 legitimately repeats `ID=cds-*` across its discontinuous
+#    CDS records. Without this the RefSeq ingest raises DuplicateIDError,
+#    which the driver catches and files as an `{{"error": ...}}` row --
+#    so the corpus silently drops out of the table instead of failing
+#    the run. Two of five corpora were affected.
+# 2. Fairness of the comparison. `legacy_ingest_script` below passes
+#    `merge_strategy="create_unique"`. Timing gffbase under "error"
+#    against gffutils under "create_unique" compares two different
+#    workloads on the exact axis -- duplicate-ID handling -- that
+#    decides whether the run completes at all.
 db = create_db({str(input_path)!r}, {str(dbfn)!r}, force=True,
+               merge_strategy="create_unique",
                force_gff={"False" if fmt == "gtf" else "True"})
 elapsed = time.perf_counter() - t0
 print(json.dumps({{
     "wall_seconds": elapsed,
     "n_features":   db.count_features_of_type(),
+    # Reported so the driver can refuse to publish a "spatial qps" number
+    # that was actually measured on the B-tree fallback. `INSTALL spatial`
+    # needs network egress, and on a firewalled node it fails silently.
     "rtree_built":  db._rtree_built,
     "fmt":          db.fmt,
 }}))
