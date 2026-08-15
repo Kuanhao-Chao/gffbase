@@ -12,12 +12,12 @@ docstrings via
 | [`create_db`](create_db.md) | The ingestion entrypoint. |
 | [`DataIterator` & `GFFWriter`](io.md) | Streaming I/O. |
 | [`merge_criteria`](merge_criteria.md) | Predicates consumed by `FeatureDB.merge`. |
-| [`Exceptions`](exceptions.md) | `GFFFormatError`, `FeatureNotFoundError`, `DuplicateIDError`, `AttributeStringError`, `EmptyInputError`, `SchemaVersionError`, `MultipartConstraintError`. |
+| [`Exceptions`](exceptions.md) | `GFFFormatError`, `FeatureNotFoundError`, `DuplicateIDError`, `AttributeStringError`, `EmptyInputError`, `SchemaVersionError`, `MultipartConstraintError`, `ReadOnlyError`, `ClosedDatabaseError`. |
 | [Multipart features](multipart.md) | `MultipartFeature`, `FeatureSegment` — several GFF3 lines sharing one `ID` as a single logical feature. |
-| [`validate`](validate.md) | 15 post-ingest invariants; `db.validate()` and `gffbase validate`. |
+| [`validate`](validate.md) | 14 post-ingest invariants; `db.validate()` and `gffbase validate`. |
 | [`migrate`](migrate.md) | Schema v1 → v2 upgrade, and the opt-in multipart coalesce. |
 | [Compatibility modules](compat.md) | `bins`, `helpers`, `constants`, `attributes`, `convert`, `create`, `inspect`, `version`, and the optional integrations. |
 
 If a method name is missing here it lives in the source under
-`python/gffbase/`; cross-reference `MIGRATION.md` for the
-legacy-equivalence table.
+`python/gffbase/`; cross-reference the
+[Migration guide](../migration.md) for the legacy-equivalence table.

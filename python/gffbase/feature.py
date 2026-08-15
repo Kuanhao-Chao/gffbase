@@ -51,7 +51,7 @@ class ParsedFeature:
     score: str
     strand: str
     frame: str
-    # Raw col-9 bytes preserved for byte-faithful round-trip in Phase 4.
+    # Raw col-9 bytes preserved for a byte-faithful round-trip.
     attributes_blob: bytes
     # Long-form (key, value, multivalue_index) triples. `idx` preserves
     # the order of multi-valued attributes (e.g., Parent=a,b,c becomes
@@ -62,10 +62,12 @@ class ParsedFeature:
 
     @property
     def chrom(self) -> str:
+        """Alias for `seqid`, the name gffutils uses."""
         return self.seqid
 
     @property
     def stop(self) -> int | None:
+        """Alias for `end`, the name gffutils uses."""
         return self.end
 
     def attributes_dict(self) -> dict:
@@ -155,7 +157,7 @@ class _LazyAttributes(MutableMapping):
     """Dict-like attribute store. Values are always lists.
 
     If constructed with a raw col-9 ``blob``, parsing is deferred until first
-    access. This honors the Phase 2 §3.3 invariant: attributes never decoded
+    access. This honors the storage invariant: attributes are never decoded
     unless someone reads them.
     """
 
@@ -379,6 +381,10 @@ class Feature:
 
     @property
     def chrom(self) -> str:
+        """Alias for `seqid` (GFF column 1), the name gffutils uses.
+
+        Reading and writing either name affects the same underlying value.
+        """
         return self.seqid
 
     @chrom.setter
@@ -387,6 +393,11 @@ class Feature:
 
     @property
     def stop(self) -> int | None:
+        """Alias for `end` (GFF column 5), the name gffutils uses.
+
+        `None` when the source line carried `.` -- such a feature has no
+        coordinates and is skipped by `region()`.
+        """
         return self.end
 
     @stop.setter
@@ -567,7 +578,15 @@ class Feature:
             self.bin if self.bin is not None else self.calc_bin(),
         )
 
-    def calc_bin(self, _bin=None) -> int | None:
+    def calc_bin(self, _bin: int | None = None) -> int | None:
+        """Compute and store this feature's UCSC bin.
+
+        Args:
+            _bin: Set the bin directly instead of deriving it.
+
+        Returns:
+            The bin, or `None` when the feature has no coordinates.
+        """
         if _bin is not None:
             self.bin = _bin
             return _bin

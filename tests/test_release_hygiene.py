@@ -358,6 +358,221 @@ def test_the_documented_table_count_is_right():
     assert f"{views} compatibility" in readme, f"schema.py defines {views} views"
 
 
+def test_published_benchmark_tables_match_the_committed_measurements():
+    """A published number must be derivable from a checked-in measurement.
+
+    The performance table used to be hand-transcribed into five files at once,
+    with nothing comparing them to each other or to the harness output. They
+    drifted: one row paired a GENCODE v49 ingest time with GENCODE *v45*
+    spatial and batched figures, and the results file named as the provenance
+    for all five corpora contained one.
+
+    `tools/gen_benchmark_tables.py` renders every table from
+    `benchmarks/results/06_mega.json`, and this runs its `--check` mode. If a
+    table is edited by hand, or the measurements are refreshed without
+    regenerating, this fails.
+    """
+    import subprocess
+
+    script = REPO_ROOT / "tools" / "gen_benchmark_tables.py"
+    results = REPO_ROOT / "benchmarks" / "results" / "06_mega.json"
+    if not script.is_file() or not results.is_file():
+        pytest.skip("benchmark results not present (running outside a full checkout)")
+
+    proc = subprocess.run(
+        [sys.executable, str(script), "--check"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert proc.returncode == 0, (
+        "published benchmark tables are out of date.\n"
+        f"{proc.stdout}\n{proc.stderr}\n"
+        "Run: python tools/gen_benchmark_tables.py --write"
+    )
+
+
+def test_no_benchmark_corpus_row_lives_outside_a_generated_block():
+    """Catch a hand-written table that the generator would never look at.
+
+    `--check` only compares blocks it owns. A corpus row pasted somewhere
+    without the marker pair would be invisible to it -- which is exactly how
+    the five hand-maintained copies came to exist.
+    """
+    import re
+
+    # A corpus row is a markdown table row naming one of the corpora AND
+    # carrying a speedup cell, which is what makes it a results table rather
+    # than prose that happens to mention GENCODE.
+    row = re.compile(r"^\|.*(GENCODE|RefSeq|MANE|CHESS).*\|.*[0-9]\s*×.*\|", re.M)
+    begin = re.compile(r"<!-- BEGIN GENERATED: [\w-]+ -->")
+    end = re.compile(r"<!-- END GENERATED: [\w-]+ -->")
+
+    offenders = []
+    for rel in ("README.md", "MIGRATION.md", "docs/index.md", "docs/performance.md"):
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        # Blank out every generated block, then look for survivors.
+        spans = []
+        for b in begin.finditer(text):
+            e = end.search(text, b.end())
+            if e:
+                spans.append((b.start(), e.end()))
+        outside = text
+        for start, stop in reversed(spans):
+            outside = outside[:start] + outside[stop:]
+        if row.search(outside):
+            offenders.append(rel)
+    assert not offenders, (
+        f"hand-written benchmark rows outside a generated block in: {offenders}. "
+        "Wrap them in <!-- BEGIN GENERATED: corpus-table --> markers so "
+        "tools/gen_benchmark_tables.py owns them."
+    )
+
+
+def test_the_documentation_url_is_canonical_everywhere():
+    """One documentation URL, and it is the one the site is served from.
+
+    The site moved from the `gffbase.khchao.com` subdomain to a path under
+    the user site, `https://khchao.com/gffbase/` -- which is where GitHub
+    Pages serves a project repo when the user site owns the apex domain, and
+    where this author's other projects already live. The old host is retired,
+    so a surviving reference is a dead link rather than a redirect.
+
+    `docs/CNAME` in particular must stay deleted: mkdocs copies it into the
+    published site, and its presence is what makes GitHub redirect
+    `khchao.com/gffbase/` back to the subdomain.
+    """
+    assert not (REPO_ROOT / "docs" / "CNAME").exists(), (
+        "docs/CNAME republishes the retired subdomain and redirects the canonical URL away"
+    )
+
+    canonical = "https://khchao.com/gffbase/"
+    assert f"site_url: {canonical}" in _read("mkdocs.yml")
+
+    # A LINK to the retired host, not a mention of it. The changelog entry that
+    # records the move necessarily names the old subdomain, and that is correct
+    # prose; what must not survive is anything a reader could click.
+    dead_link = re.compile(r"https?://gffbase\.khchao\.com")
+    offenders = []
+    for path in REPO_ROOT.rglob("*"):
+        if not path.is_file() or path.suffix not in {".md", ".yml", ".yaml", ".toml", ".cff"}:
+            continue
+        rel = path.relative_to(REPO_ROOT)
+        if rel.parts[0] in {".git", "site", "htmlcov", "plans", "benchmarks"}:
+            continue
+        if dead_link.search(path.read_text(encoding="utf-8", errors="replace")):
+            offenders.append(str(rel))
+    assert not offenders, f"links to the retired docs domain remain in: {sorted(offenders)}"
+
+
+def test_every_workflow_is_free_of_duplicate_keys():
+    """A duplicate mapping key stops a workflow loading at all.
+
+    `testpypi-release.yml` declared `name:` and `runs-on:` twice in its
+    `verify` job. PyYAML's `safe_load` tolerates that -- last one wins -- so
+    every naive parse of the file looked fine. GitHub Actions does not: it
+    rejects duplicate keys outright, so the RC dress rehearsal could never
+    have run, and nothing would have found out until a tag was pushed.
+
+    This loads each workflow with a mapping constructor that refuses a
+    repeated key, which is the rule the real parser applies.
+    """
+    yaml = pytest.importorskip("yaml")
+
+    class NoDuplicates(yaml.SafeLoader):
+        pass
+
+    def _no_duplicate_mapping(loader, node, deep=False):
+        seen: dict = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise AssertionError(
+                    f"duplicate key {key!r} at line {key_node.start_mark.line + 1}"
+                )
+            seen[key] = loader.construct_object(value_node, deep=deep)
+        return seen
+
+    NoDuplicates.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicate_mapping
+    )
+
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    if not workflows:
+        pytest.skip("no workflows present (not a checkout)")
+
+    failures = []
+    for path in workflows:
+        try:
+            yaml.load(path.read_text(encoding="utf-8"), NoDuplicates)
+        except AssertionError as exc:
+            failures.append(f"{path.name}: {exc}")
+    assert not failures, "GitHub Actions would refuse to load: " + "; ".join(failures)
+
+
+def test_the_documented_parity_percentage_is_derivable():
+    """`docs/api/compat.md` quotes a parity figure; derive it, do not trust it.
+
+    It is computable: the oracle manifest lists every symbol, and
+    `deviations.toml` records the ones gffbase deliberately does not provide
+    (`status = "excluded"`). Everything else is present, whether or not it
+    behaves identically. A hand-maintained percentage in prose is exactly the
+    claim a reader will check and a maintainer will forget.
+    """
+    import json
+
+    manifest_path = REPO_ROOT / "tests" / "parity" / "gffutils_manifest.json"
+    deviations_path = REPO_ROOT / "tests" / "parity" / "deviations.toml"
+    page = REPO_ROOT / "docs" / "api" / "compat.md"
+    for path in (manifest_path, deviations_path, page):
+        if not path.is_file():
+            pytest.skip(f"{path.name} not present")
+
+    manifest = json.loads(manifest_path.read_text())
+    total = sum(
+        len(mod.get("symbols", {}))
+        for mod in manifest.get("modules", {}).values()
+        if isinstance(mod, dict)
+    )
+    excluded = len(re.findall(r'status = "excluded"', deviations_path.read_text()))
+    provided = total - excluded
+    pct = round(100 * provided / total)
+
+    text = page.read_text(encoding="utf-8")
+    expected = f"{provided} of {total} symbols ({pct}%)"
+    assert expected in text, (
+        f"docs/api/compat.md should say {expected!r}; "
+        f"derived from the manifest ({total} symbols) minus "
+        f"{excluded} excluded deviations"
+    )
+
+
+def test_the_documented_invariant_count_is_right():
+    """The validator's size is quoted in four places; keep them honest.
+
+    All four said 15 while the registry held 14. A count in prose is exactly
+    the kind of claim that goes stale silently, so it is derived from the
+    registry here rather than trusted.
+    """
+    from gffbase.validate import _CHECKS
+
+    n = len(_CHECKS)
+    wrong = []
+    for rel in ("README.md", "docs/api/index.md", "docs/usage_gallery.md", "docs/cli.md"):
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        # Any "<number> invariant(s)" claim must state the real number.
+        for found in re.finditer(r"(\d+)\s+invariants?\b", text):
+            if int(found.group(1)) != n:
+                wrong.append(f"{rel}: says {found.group(1)}, registry has {n}")
+    assert not wrong, "stale invariant counts: " + "; ".join(wrong)
+
+
 def test_every_cli_command_is_documented():
     """A shipped command with no documentation is invisible."""
     from gffbase.cli import build_parser

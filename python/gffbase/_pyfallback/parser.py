@@ -18,7 +18,7 @@
 serve as a correctness oracle and as a fallback when the native extension is
 unavailable.
 
-Phase 16: same NCBI GFF3 validation rules as the Rust parser, with the same
+Applies the same NCBI GFF3 validation rules as the Rust parser, with the same
 `strict=True` raise / `strict=False` warning-collect semantics.
 """
 
@@ -383,7 +383,7 @@ class _FallbackIterator:
     """Mirrors the Rust iterator's surface: __iter__/__next__, dialect(),
     directives(). Backwards-compat callers expect both forms.
 
-    Phase 16: also exposes ``warnings`` (a list of dicts populated when
+    Also exposes ``warnings`` (a list of dicts populated when
     ``strict=False``).
     """
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""Dialect template. Mirrors `gffutils.constants.dialect` so Phase 4's API
+"""Dialect template. Mirrors `gffutils.constants.dialect` so this API
 layer can pass these dicts straight to backwards-compat consumers.
 """
 

@@ -5,14 +5,14 @@ site_name: GFFBase
 # is a warning in a log nobody reads.
 strict: true
 site_description: Rust + DuckDB GFF3/GTF engine — up to 32× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
-site_url: https://gffbase.khchao.com/
+site_url: https://khchao.com/gffbase/
 repo_url: https://github.com/Kuanhao-Chao/gffbase
 repo_name: Kuanhao-Chao/gffbase
 edit_uri: edit/main/docs/
 
-# `docs/` is the Markdown source root. Files outside that tree (README,
-# PERFORMANCE_COMPARISON, MIGRATION) are pulled in via the
-# include-markdown plugin so they live in one place on disk.
+# `docs/` is the Markdown source root. Files outside that tree (MIGRATION,
+# CHANGELOG, CONTRIBUTING, SECURITY) are pulled in via the include-markdown
+# plugin so they live in one place on disk.
 docs_dir: docs
 
 theme:
@@ -77,6 +77,8 @@ plugins:
 markdown_extensions:
   - admonition
   - attr_list
+  # Required by Material's `grid cards` blocks on the landing page.
+  - md_in_html
   - def_list
   - footnotes
   - tables
@@ -103,16 +105,25 @@ extra:
 
 nav:
   - Home: index.md
-  - Usage Gallery: usage_gallery.md
-  - Performance: performance.md
-  - Migration from gffutils: migration.md
-  - Command line: cli.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Compatibility & strict modes: guides/modes.md
+  - Guides:
+      - Usage Gallery: usage_gallery.md
+      - Connections & concurrency: guides/connections.md
+      - Command line: cli.md
+      - Migration from gffutils: migration.md
+      - Troubleshooting & FAQ: guides/troubleshooting.md
   - Cookbooks:
       - cookbooks/index.md
       - GENCODE / Ensembl: cookbooks/gencode_ensembl.md
       - NCBI RefSeq: cookbooks/refseq.md
       - MANE: cookbooks/mane.md
       - Machine Learning Workflows: cookbooks/machine_learning_workflows.md
+  - Performance:
+      - Benchmarks: performance.md
+      - Methodology: performance/methodology.md
   - API Reference:
       - api/index.md
       - FeatureDB: api/featuredb.md
@@ -127,5 +138,8 @@ nav:
       - Compatibility modules: api/compat.md
   - Design:
       - Schema v2: design/schema-v2.md
-  - Security:
-      - SQL injection (0.1.0): security/2026-sql-injection.md
+  - Project:
+      - Changelog: changelog.md
+      - Contributing: contributing.md
+      - Security policy: security-policy.md
+      - "Advisory: SQL injection (0.1.0)": security/2026-sql-injection.md

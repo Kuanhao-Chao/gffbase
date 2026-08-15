@@ -197,7 +197,7 @@ jobs:
       # ------------------------------------------------------------------
       # Mirror the same artifacts onto the GitHub Release.
       # Matches the existing Draft Release (created from
-      # RELEASE_NOTES_v0.1.0.md in the GitHub UI) by tag_name. `draft: true`
+      # the release notes in the GitHub UI) by tag_name. `draft: true`
       # keeps it as a draft after the upload so the maintainer eyeballs the
       # attached binaries before clicking "Publish release" themselves.
       # ------------------------------------------------------------------

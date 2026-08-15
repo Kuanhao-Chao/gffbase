@@ -134,7 +134,7 @@ warnings too, which is the form to use in CI.
 ok      INV-1 (unique_ids)
 ok      INV-2 (no_orphan_segments)
 ...
-15 invariants checked, 0 error(s), 0 warning(s)
+14 invariants checked, 0 error(s), 0 warning(s)
 ```
 
 ### `migrate`

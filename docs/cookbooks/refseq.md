@@ -19,6 +19,7 @@ that come up most often.
 
 ## 1. Ingest a RefSeq genome annotation
 
+<!-- docs-test: skip reason="needs the RefSeq GRCh38.p14 corpus" -->
 ```python
 from gffbase import create_db
 

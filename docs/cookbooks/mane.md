@@ -15,6 +15,7 @@ GFFBase's normalized attribute index.
 
 ## 1. Ingest GENCODE/Ensembl, then filter
 
+<!-- docs-test: skip reason="illustrative: names gencode.v49, which the reader supplies" -->
 ```python
 from gffbase import create_db
 
@@ -54,6 +55,7 @@ print(f"{len(mane_any):,} MANE-tagged transcripts")
 
 ## 3. Pull the MANE transcript for a specific gene
 
+<!-- docs-test: skip reason="illustrative: uses a real accession id, not in the test fixtures" -->
 ```python
 gene_id = "ENSG00000139618"  # BRCA2
 row = db.execute("""

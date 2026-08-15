@@ -69,7 +69,7 @@ class _Iterator:
     pure-Python iterator (yielding ParsedFeature) and always yields
     ParsedFeature.
 
-    Phase 16: also exposes ``.warnings`` — a list of structured-error
+    Also exposes ``.warnings`` — a list of structured-error
     dicts (``line_no``, ``kind``, ``message``) collected when the
     iterator was created with ``strict=False``.
     """

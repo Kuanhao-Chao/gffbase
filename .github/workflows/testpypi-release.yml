@@ -2,7 +2,7 @@ name: TestPyPI release (release-candidate dress rehearsal)
 
 # Mirrors the production release.yml job topology exactly so a green
 # run here proves the same build + OIDC publish mechanism will work
-# unchanged when we tag the stable v0.1.0. Diffs from production:
+# unchanged when we tag the stable release. Diffs from production:
 #   - Trigger only on v*-rc.* tags (release.yml excludes them).
 #   - Different concurrency group + GitHub environment.
 #   - publish step adds repository-url to redirect uploads to TestPyPI.
@@ -26,8 +26,6 @@ jobs:
   # A release candidate gets the same gate as a release: `ci.yml` does not run
   # on tags, so without this a red tree could be tagged `-rc.N` and published.
   verify:
-    name: Verify the tagged commit
-    runs-on: ubuntu-latest
     name: Verify the tagged commit
     runs-on: ubuntu-latest
     steps:

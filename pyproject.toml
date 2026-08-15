@@ -70,6 +70,11 @@ dependencies = [
 test = [
     "pytest>=7",
     "pytest-cov>=4",
+    # `tests/test_release_hygiene.py` parses `.github/workflows/*.yml` with a
+    # duplicate-key-strict loader, because GitHub Actions refuses a workflow
+    # that has one and PyYAML's default loader does not. That check is only a
+    # gate if the parser is guaranteed present.
+    "pyyaml>=6",
 ]
 bench = [
     "psutil>=5",
@@ -110,7 +115,13 @@ all = [
 ]
 docs = [
     # MkDocs site (themed with Material; API ref via mkdocstrings).
-    "mkdocs>=1.6",
+    #
+    # Capped below 2.0 deliberately. MkDocs 2.0 removes the plugin system and
+    # rewrites theming, with no migration path -- so every plugin below,
+    # including mkdocstrings which generates the whole API reference, stops
+    # working. An unpinned floor would have let a routine `pip install
+    # -e .[docs]` break the docs build with no change on our side.
+    "mkdocs>=1.6,<2",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
     "mkdocs-include-markdown-plugin>=6.2",
@@ -127,7 +138,7 @@ gffbase = "gffbase.cli:main"
 Homepage      = "https://github.com/Kuanhao-Chao/gffbase"
 Source        = "https://github.com/Kuanhao-Chao/gffbase"
 Issues        = "https://github.com/Kuanhao-Chao/gffbase/issues"
-Documentation = "https://gffbase.khchao.com/"
+Documentation = "https://khchao.com/gffbase/"
 Changelog     = "https://github.com/Kuanhao-Chao/gffbase/releases"
 
 # ---------------------------------------------------------------------------
@@ -291,11 +302,10 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-# The benchmark and bench scripts are standalone entry points meant to be run
-# straight out of a checkout (`python benchmarks/01_ingest.py`). They must
+# The benchmark scripts are standalone entry points meant to be run straight
+# out of a checkout (`python benchmarks/01_ingest.py`). They must
 # `sys.path.insert()` the in-tree `python/` directory before importing gffbase,
 # so module-level imports genuinely cannot all sit at the top of the file.
-"bench/*.py" = ["E402"]
 "benchmarks/*.py" = ["E402"]
 
 [tool.ruff.format]

@@ -39,9 +39,9 @@ jobs:
       # `benchmarks/` is included here. It was omitted before, so 70 errors in
       # it were invisible to CI while CONTRIBUTING told contributors to lint it.
       - name: ruff check
-        run: ruff check python/gffbase tests bench benchmarks tools
+        run: ruff check python/gffbase tests benchmarks tools
       - name: ruff format --check
-        run: ruff format --check python/gffbase tests bench benchmarks tools
+        run: ruff format --check python/gffbase tests benchmarks tools
 
       # `Typing :: Typed` is a promise to downstream type checkers; this is
       # what keeps it true. The package ships py.typed and mypy runs clean.
@@ -59,6 +59,20 @@ jobs:
       # clippy was installed by CI but never actually invoked.
       - name: cargo clippy
         run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
+
+      # `CONTRIBUTING.md` and the PR template both told contributors that
+      # `mkdocs build --strict` is "what CI runs". It was not: the only mkdocs
+      # invocation was `gh-deploy`, on `main`, after merge -- so a broken link
+      # or a page missing from the nav was found by the deploy rather than by
+      # the PR that introduced it. Now the claim is true.
+      #
+      # After the Rust toolchain on purpose: `pip install -e .` goes through
+      # maturin, which needs cargo, and mkdocstrings imports the package to
+      # read its docstrings.
+      - name: mkdocs build --strict
+        run: |
+          pip install -e ".[docs]"
+          mkdocs build --strict
 
   # ------------------------------------------------------------------------
   # Test matrix — exhaustive over the *routing* axis (rtree vs btree).

@@ -229,7 +229,7 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False
         dirs = con.execute("SELECT directive FROM directives ORDER BY seq").fetchall()
         sqlite_con.executemany("INSERT INTO directives VALUES (?)", dirs)
 
-        # Autoincrements (typically empty in Phase 5).
+        # Autoincrements (typically empty).
         try:
             ai = con.execute("SELECT base, n FROM autoincrements").fetchall()
             if ai:

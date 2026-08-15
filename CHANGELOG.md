@@ -88,7 +88,167 @@ nobody can install would only mislead. Everything below is the delta from
   records it as skipped, which the test read as a failure. The skip is the
   designed behaviour, so it is now what the test asserts.
 
+### Documentation
+
+- **Documentation code is now executed by the test suite.**
+  `tests/test_docs_snippets.py` extracts every fenced `python` block from
+  `docs/`, `README.md` and `MIGRATION.md` and runs it against the vendored
+  fixtures, with each page treated as a notebook so its examples build on each
+  other the way a reader experiences them. Skipping is opt-out and must state
+  a reason, and the exemption count is a ratchet that may fall but never rise.
+
+  `docs/cookbooks/index.md` claimed every snippet had been validated while its
+  own opening example opened two `FeatureDB` handles and closed neither --
+  teaching a lock leak. Nothing caught it because nothing ran it. Running them
+  immediately found four more defects, listed below.
+
+- **`create_db()` did not accept `validation=` or `on_error=`.** Both axes are
+  documented, both are supported by `resolve_mode()` and carried by
+  `IngestOptions`, and the public entry point simply never forwarded them --
+  so the documented `validation="ncbi", on_error="warn"` audit combination
+  raised `TypeError: unhandled kwarg`. They are now parameters, and documented.
+
+- **`docs/usage_gallery.md` documented `Feature.attributes_dict()`**, which
+  does not exist on `Feature` (only on `ParsedFeature`, and not in gffutils at
+  all). Replaced with `dict(feature.attributes)`.
+
+- **A troubleshooting snippet was not valid Python** -- an `except` clause with
+  no `try`. It is now a complete, executed example.
+
+- **Four pages stated the wrong number of validator invariants** (15; there
+  are 14). `tests/test_release_hygiene.py` now derives the number from the
+  registry, so prose cannot drift from it again.
+
+- **`MIGRATION.md` linked `docs/cli.md`**, which 404s on the rendered site,
+  and quoted an unsourced "5-550x query speedups". It also never mentioned
+  connection lifecycle, despite being the first page a porting user reads and
+  despite DuckDB's exclusive lock being the one operational difference from
+  SQLite that will surprise them. It now opens with it.
+
+- **Public API docstrings.** mkdocstrings publishes docstrings verbatim, so
+  they *are* the API reference. `count_features_of_type`, `featuretypes`,
+  `seqids`, `all_features`, `features_of_type`, `delete`, `update`,
+  `children_bp`, `bed12`, `iter_by_parent_childs`, `analyze`, the `Feature`
+  aliases and every `GFFWriter` method rendered as a bare signature with no
+  description at all. All now document what they do, their parameters, what
+  they return and what they raise, with examples on the high-traffic ones --
+  and carry the type annotations that `Typing :: Typed` promises.
+
+- **The site moved to <https://khchao.com/gffbase/>.** `docs/CNAME` is deleted,
+  which is what was making GitHub Pages redirect the canonical path back to the
+  retired `gffbase.khchao.com` subdomain. A release-hygiene test fails if the
+  old host reappears anywhere.
+
+- **New pages for everything a first-time reader needed and could not find:**
+  [Installation](https://khchao.com/gffbase/getting-started/installation/),
+  a linear [Quickstart](https://khchao.com/gffbase/getting-started/quickstart/)
+  (every snippet executed before publishing),
+  [Compatibility & strict modes](https://khchao.com/gffbase/guides/modes/) —
+  a core concept previously explained only in passing —
+  [Connections & concurrency](https://khchao.com/gffbase/guides/connections/),
+  [Troubleshooting & FAQ](https://khchao.com/gffbase/guides/troubleshooting/),
+  and [Benchmark methodology](https://khchao.com/gffbase/performance/methodology/).
+  The changelog, contributing guide and security policy are now on the site
+  rather than GitHub-only.
+
+- **The performance page no longer contradicts itself.** It opened with a
+  preamble telling the reader that the numbers below it were stale, and then
+  printed them. It is rewritten around generated tables, and the 35 KB
+  `PERFORMANCE_COMPARISON.md` — whose §7 still asserted that legacy won on GFF3
+  ingest, which the same document's headline table denied — is retired.
+
+- **The landing page stopped being a copy of the README.** It duplicated it
+  nearly verbatim, including the benchmark table, so the two drifted
+  independently.
+
+- **`mkdocs build --strict` runs in CI.** `CONTRIBUTING.md` and the PR template
+  both claimed it did. It did not: the only mkdocs invocation was `gh-deploy`,
+  on `main`, after merge — so a broken link was found by the deploy rather than
+  by the PR that introduced it.
+
+- Corrected counts that had gone stale: the test total, the coverage gate
+  (96 % / 95 %, not 99 %), the schema table count in `CONTRIBUTING.md`, the
+  corpus download size, and a test-tool list naming a dependency the project
+  does not use. `docs/usage_gallery.md` taught the deprecated
+  `GFFUTILS2_THREADS` environment variable as the primary name.
+
+- `mkdocs` is capped below 2.0. It removes the plugin system with no migration
+  path, so an unpinned floor would let a routine `pip install -e .[docs]` break
+  the documentation build with no change on our side.
+
+### Benchmarks and published numbers
+
+The performance claims could not be reproduced from anything in the repository.
+This release rebuilds the harness so that they can be, and re-measures
+everything from scratch.
+
+- **The results file no longer destroys itself.** `06_mega.py` built a payload
+  containing only the corpora named by `--only` and wrote the whole file, so
+  each targeted re-run silently deleted the others. `benchmarks/out/06_mega.json`
+  ended up holding **one of five corpora** while the performance document named
+  it as the provenance for all five, and four published rows had no surviving
+  measurement. Results now merge by corpus key, and are written after every
+  corpus rather than once at the end.
+
+- **No number is extrapolated any more.** A legacy run that exceeded the safety
+  valve had `wall_seconds = timeout × 2.0` written into it — a factor with no
+  measurement behind it, whose own comment conceded there was no way to observe
+  `gffutils`' progress. It was the sole source of the published "≥ 2 hr 30 min"
+  legacy wall and the "≥ 32×" headline. A capped run now reports
+  `wall_seconds: null` plus `wall_seconds_lower_bound`, the speedup becomes
+  `ingest_speedup_lower_bound`, and tables render `> 90 min` / `> N×`. The
+  renderer refuses outright to publish a row whose capped run still carries a
+  wall time.
+
+- **Every result carries its provenance.** CPU model, physical and logical core
+  count, RAM, OS, Python, DuckDB, PyArrow, `gffutils`, `gffbase` and `rustc`
+  versions, the git commit and whether the tree was dirty, the region-sampling
+  seed, and every run parameter. None of this was recorded before: the numbers
+  carried their environment only as hand-typed prose that said "gffbase 0.1.0"
+  throughout the 0.2.0 cycle, so nothing in the repository could have detected
+  a regression.
+
+- **Published tables are generated, not transcribed.** The corpus table lived
+  hand-copied in five files. `tools/gen_benchmark_tables.py` now renders it
+  from the committed measurements into marked blocks, and
+  `tests/test_release_hygiene.py` fails both when a table drifts from its data
+  and when a benchmark row is written outside a generated block.
+
+- **Results are committed.** `benchmarks/results/` is tracked, so a published
+  number has checked-in evidence. The 0.1.0-era artifacts are preserved under
+  `benchmarks/results/archive/0.1.0/` with a README recording exactly which of
+  them are unreliable and why.
+
+- **The harness fits on a real disk.** Five corpus pairs total ~38 GiB. Each is
+  purged (including `.wal` / `-journal` sidecars) as soon as its numbers are
+  recorded, holding the peak near 16 GiB; `--keep-db` retains one for the later
+  stages, `--no-purge` keeps everything, and `GFFBASE_BENCH_OUT` redirects to
+  another volume. Free space is checked before each corpus so a five-hour sweep
+  fails in seconds rather than at hour four.
+
+- **Stages 01–05 can run from a clean checkout.** `common.py` pointed at a
+  GENCODE **v45** file that `download_corpora.py` had stopped fetching, present
+  locally only as a symlink into the retired `bench/` tree — so those stages
+  worked on the maintainer's machine and raised `FileNotFoundError` everywhere
+  else. They now use the v49 GFF3 corpus that the mega benchmark also uses, so
+  the two harnesses can no longer report on different releases. The
+  `--reuse-cached` flag and its hardcoded literals are gone, as is the
+  cross-directory cache loader that presented old measurements as new ones.
+
 ### Changed (breaking)
+
+- **`FeatureDB.region_batched()` now raises on a region it cannot parse,
+  instead of silently dropping it.** The `query_idx` column is documented as
+  the way to map results back to the input, and it was assigned over the rows
+  that *survived* normalization — so a single unusable region renumbered every
+  later query and the caller attributed whole result groups to the wrong
+  input, with nothing raised on either side.
+
+  `query_idx` is now the item's index in `regions` as passed. The new
+  `on_invalid=` argument selects the policy: `"raise"` (default) reports the
+  offending position and value; `"skip"` restores the old dropping behaviour
+  but leaves the surviving indices anchored to the input, so a gap is visible
+  rather than closed up.
 
 - **Minimum Python is now 3.10** (was 3.9), and 3.14 is supported. The wheel
   tag moves from `abi3-py39` to `abi3-py310`. This removes the split
@@ -153,6 +313,45 @@ nobody can install would only mislead. Everything below is the delta from
   to 3.10.
 
 ### Added
+
+- **`FeatureDB` connection lifecycle: `close()`, context-manager support, and
+  `read_only=True`.** DuckDB holds an exclusive lock on the database file for
+  the life of a writable connection, and there was no way to release it — no
+  `close`, no `__enter__`/`__exit__`, no `__del__`. Two things were therefore
+  impossible: replacing or deleting a database file while any handle existed
+  (fatal on Windows), and reading one annotation database from several worker
+  processes at once — which is the shape of every PyTorch `DataLoader` job.
+
+  ```python
+  with create_db("gencode.gtf.gz", "gencode.duckdb") as db:
+      ...                                    # lock released at block exit
+
+  db = FeatureDB("gencode.duckdb", read_only=True)   # N workers may share it
+  ```
+
+  `close()` is idempotent, and closes the connection only when this handle
+  opened it: a caller who passes their own `duckdb` connection still owns it
+  afterwards. `create_db()` transfers ownership explicitly, so the handle it
+  returns does close the connection it created. The lazily-created segment
+  cursor is always closed, because gffbase created it either way.
+
+  Under `read_only=True` every mutator (`update`, `delete`, `add_relation`,
+  `add_relations`, `analyze`) raises `ReadOnlyError`, and `upgrade="auto"` is
+  coerced to `"never"` so a v1 database cannot be migrated by a handle that
+  promised not to write. `set_pragmas()` stays allowed: `SET` is session
+  state, not a write to the file, and legacy callers pass
+  `constants.default_pragmas` routinely. `execute()` is deliberately
+  unguarded — it is the escape hatch, and DuckDB's own refusal names the
+  statement it rejected.
+
+  Using a closed handle raises `ClosedDatabaseError` naming the call and the
+  remedy, rather than DuckDB's bare `ConnectionException`. Both new exceptions
+  subclass `ValueError`, so existing `except ValueError` handlers keep working.
+
+- **`FeatureDB` accepts `pathlib.Path`.** The constructor took `str` only and
+  rejected everything else with `TypeError: dbfn must be a path` — while
+  refusing an actual `Path`. `create_db` already accepted one, so the two
+  entry points disagreed about their own documented type.
 
 - **A `gffbase` command-line interface**, registered as a console script and
   runnable as `python -m gffbase`. Ten commands: `create`, `fetch`,
@@ -350,6 +549,79 @@ nobody can install would only mislead. Everything below is the delta from
 - `native`, `rtree`, and `slow` pytest markers.
 
 ### Fixed
+
+- **`region()` crashed on every database containing a discontinuous feature.**
+  DuckDB's R-tree scan optimizer builds a projection map for the index scan,
+  and any subquery sharing that `WHERE` clause throws its column numbering
+  out — so pairing `ST_Intersects` with the multipart recheck aborted the
+  planner with `INTERNAL Error: Failed to bind column reference "file_order"`.
+  Every region query against a RefSeq- or MANE-shaped corpus failed, on both
+  `region()` and the `_batched` path.
+
+  It is not about how the correlation is written: qualified, unqualified and
+  rewritten-as-a-semi-join all fail identically, and the B-tree path is
+  unaffected. The spatial scan is now wrapped in a derived table and the
+  recheck applied outside it, keeping the two apart. `EXPLAIN` confirms the
+  plan still contains `RTREE_INDEX_SCAN (Index: features_rtree)`, so the index
+  does the same work — the recheck filters its output rather than being fused
+  into it.
+
+- **`children_batched(level=None)` silently returned a truncated result set.**
+  `_batched_relation` carried its own copy of the cache-vs-dynamic decision,
+  and that copy was missing the overflow check: for `level=None` it asked only
+  whether the closure was *empty*, never whether the hierarchy ran deeper than
+  the cache. On a corpus deeper than `max_depth` it therefore chose the
+  closure cache, which only reaches `max_depth`.
+
+  Measured on a six-level hierarchy with `max_depth=2`: `children()` returned
+  all six descendants and `children_batched()` returned two. Two APIs
+  answering the same question differently, neither raising — in the batched
+  API the project recommends for bulk ML extraction. Both now route through
+  `_dispatch_relation`; for a batch it asks "does any anchor overflow?" as a
+  single query, so one overflowing anchor sends the whole batch to the
+  dynamic CTE. `parents_batched` had the same defect.
+
+- **`delete()` left orphaned rows in the transitive closure.** It removed only
+  the closure rows that *named* the deleted id as ancestor or descendant. A
+  depth-2 row names neither when it merely routed *through* the deleted
+  node — delete the mRNA from `gene → mRNA → exon` and `gene → exon` survives —
+  so `children(gene, level=None)` kept returning the exons of a transcript
+  that no longer existed. The closure is now rebuilt from `edges`, which is
+  what `update()` already did.
+
+- **`update()` and `add_relations()` left the dispatcher reading stale corpus
+  statistics.** `_closure_max_depth` and `_n_multipart` are read once when a
+  handle opens and trusted for its lifetime, but both mutators rebuilt the
+  closure without refreshing either the instance attributes or the `meta`
+  rows — so relational routing kept deciding on the shape the database had
+  before the write, and a handle opened later disagreed with the one that did
+  it. All three mutators now refresh and persist both.
+
+- **`DataIterator` never dispatched on its input.** The factory handed
+  everything to the file-path iterator, so a URL was opened as a filename and
+  an in-memory feature iterable raised — while `_UrlIterator` and
+  `_FeatureIterator` sat unreachable beneath it, their docstrings describing a
+  dispatch that did not exist. `gffutils.DataIterator` accepts all of these.
+  The dispatch now exists; `_UrlIterator` also unlinks its download (it used
+  `NamedTemporaryFile(delete=False)` and never removed it, leaking a full copy
+  of the annotation per call) and gained `close()` plus context-manager
+  support. `_FeatureIterator.__iter__` returned the underlying list's own
+  iterator, bypassing `__next__` and silently dropping `transform`.
+
+- **`cargo test` could not link on macOS.** `extension-module` was enabled
+  unconditionally in `rust/Cargo.toml` *and* passed by maturin
+  (`features = ["pyo3/extension-module"]`). Enabling it tells the linker not
+  to link libpython, which is right for the wheel and fatal for a test binary,
+  so every `cargo test` died in a wall of "symbol(s) not found for architecture
+  arm64" — on the platform `CONTRIBUTING.md` tells contributors to run it.
+  maturin still supplies the feature for the wheel.
+
+- **`.github/workflows/testpypi-release.yml` could not be loaded by GitHub
+  Actions.** Its `verify` job declared `name:` and `runs-on:` twice. PyYAML's
+  `safe_load` tolerates duplicate keys — last one wins — so a naive parse
+  looked fine; the real parser rejects them, which means the release-candidate
+  dress rehearsal had never been able to run. `tests/test_release_hygiene.py`
+  now parses every workflow with a duplicate-key-strict loader.
 
 - **The sdist shipped a `MANIFEST.in` naming five files it did not contain.**
   maturin does not read `MANIFEST.in` — `pyproject.toml` says so — so
@@ -664,6 +936,23 @@ nobody can install would only mislead. Everything below is the delta from
 - Six `PHASE*.md` entries from `pyproject.toml` and `MANIFEST.in` referring to
   files deleted in `44268ce`, plus a `recursive-include python/gffbase *.pyi`
   matching no files.
+
+- **The `memmap2` Rust dependency**, which was declared and never used — no
+  `Mmap` appears anywhere in the crate. An unused dependency is still
+  compiled, still locked, and still part of the supply chain of every
+  published wheel.
+
+- **The `bench/` directory.** It was the predecessor of `benchmarks/`, and
+  `benchmarks/common.py` reached into it for cached legacy timings, which is
+  how measurements from an older corpus ended up presented as current ones.
+  Its small result files are preserved under
+  `benchmarks/results/archive/0.1.0/`.
+
+- **Thirty-three internal "Phase N" references** from docstrings and comments
+  across ten modules. These rendered on the public mkdocstrings API reference
+  — `gffbase.__init__`'s module docstring opened "Phase 5: full drop-in public
+  API surface … on top of the Phase 4 DuckDB ingestion engine" — and named a
+  development schedule no reader has access to.
 
 ### Intentional deviations
 

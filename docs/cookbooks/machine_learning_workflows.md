@@ -6,9 +6,9 @@ ML pipelines with **zero Python `Feature` object construction** and
 **zero per-row boundary crossings** between DuckDB and the consuming
 ML framework.
 
-The benchmark numbers behind every claim here are documented in
-`PERFORMANCE_COMPARISON.md` §4b: 50 000 transcripts in **1.16 s**
-(36.7× faster than legacy gffutils, 553× faster than gffbase row-by-row).
+The measurements behind every claim on this page are on the
+[Performance](../performance.md) page, generated from a committed results file
+rather than transcribed by hand.
 
 ---
 
@@ -17,6 +17,7 @@ The benchmark numbers behind every claim here are documented in
 The "obvious" Pythonic loop is the slow path. It instantiates one
 `Feature` object per row × N anchors:
 
+<!-- docs-test: skip reason="illustrative: the id list stands for a real corpus" -->
 ```python
 # DON'T — this hits OLAP point-query overhead AND pays per-row Feature
 # construction. At 50 000 genes it takes 10+ minutes.
@@ -32,6 +33,7 @@ for gene_id in fifty_thousand_gene_ids:
 One SQL query for the entire batch. One zero-copy Arrow buffer back.
 Never materializes a `Feature`:
 
+<!-- docs-test: skip reason="needs the GENCODE v49 corpus" -->
 ```python
 import pyarrow as pa
 from gffbase import FeatureDB
@@ -74,6 +76,7 @@ view on that buffer — no copy.
 directly. The dataset shares memory with DuckDB until you write it to
 disk:
 
+<!-- docs-test: skip reason="needs the optional `datasets` package" -->
 ```python
 from datasets import Dataset
 
@@ -115,6 +118,7 @@ Two equivalent paths — both bypass per-row Python:
 
 ### 4a. Direct from Arrow → NumPy → tensor
 
+<!-- docs-test: skip reason="illustrative: contains an elided fragment" -->
 ```python
 import torch
 from torch.utils.data import TensorDataset, DataLoader
@@ -132,6 +136,7 @@ for batch_starts, batch_ends in loader:
 
 ### 4b. Polars `DataFrame` for ad-hoc feature engineering
 
+<!-- docs-test: skip reason="illustrative: an id list the reader supplies" -->
 ```python
 exons_df = db.children_batched(tx_ids, featuretype="exon", format="polars")
 exon_lengths = (exons_df["end"] - exons_df["start"] + 1).to_numpy()
@@ -145,6 +150,7 @@ Arrow buffers — same zero-copy property.
 `region_batched` is the spatial counterpart. Want every CDS overlapping
 a 50 000-row ATAC-seq peak BED file?
 
+<!-- docs-test: skip reason="illustrative: contains an elided fragment" -->
 ```python
 peaks = [
     ("chr1", 1_000_000, 1_000_500),
@@ -168,11 +174,12 @@ peak_overlap_counts = pc.value_counts(cds.column("query_idx"))
 | SQL | 50 000 separate `SELECT` calls | one `SELECT … WHERE id IN (?, ?, …)` |
 | Python objects | 1.6 M `Feature` instances + dialect dicts + `_LazyAttributes` | **zero** — Arrow buffers held by reference |
 | Result hand-off | per-row Python iteration | column-wise NumPy view |
-| Memory | ~800 MB (Feature graveyard + GC pressure) | ~520 MB (DuckDB query buffer pool) |
-| Wall (50 k transcripts → 1.6 M exons) | ≥ 10 minutes | **1.16 s** |
+| Memory | Feature graveyard + GC pressure | DuckDB query buffer pool |
+| Wall | dominated by object construction | dominated by the query itself |
 
-The benchmark script at `benchmarks/05_vectorized.py` reproduces these
-numbers head-to-head against legacy `gffutils`.
+`benchmarks/05_vectorized.py` measures this head-to-head against legacy
+`gffutils` at 500 / 5 000 / 50 000 anchors; current numbers are on the
+[Performance](../performance.md) page.
 
 ## 7. Tips for production ML pipelines
 
