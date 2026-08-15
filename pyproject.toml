@@ -102,14 +102,23 @@ dev = [
 pandas = ["pandas>=1.5"]
 polars = ["polars>=0.20"]
 fasta = ["pyfaidx>=0.7"]
-pybedtools = ["pybedtools>=0.9"]
+# `pybedtools` is POSIX-only: it builds a C extension against `unistd.h` and
+# its `pysam` dependency declares MacOS/POSIX/Unix classifiers and ships no
+# Windows wheel. Without the marker, `pip install gffbase[all]` on Windows
+# tries to compile it from source and fails -- which it did, in every Windows
+# CI cell, on a package whose own classifiers promise Windows support.
+#
+# The marker is on the DEPENDENCY, not the extra: `gffbase[pybedtools]` still
+# resolves everywhere, and simply installs nothing on Windows, where the
+# integration could not have worked anyway.
+pybedtools = ["pybedtools>=0.9; sys_platform != 'win32'"]
 biopython = ["biopython>=1.80"]
-plot = ["pybedtools>=0.9", "matplotlib>=3.5"]
+plot = ["pybedtools>=0.9; sys_platform != 'win32'", "matplotlib>=3.5"]
 all = [
     "pandas>=1.5",
     "polars>=0.20",
     "pyfaidx>=0.7",
-    "pybedtools>=0.9",
+    "pybedtools>=0.9; sys_platform != 'win32'",
     "biopython>=1.80",
     "matplotlib>=3.5",
 ]

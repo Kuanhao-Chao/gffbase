@@ -141,10 +141,31 @@ def _describe_signature(obj: Any) -> dict[str, Any] | None:
     return {"parameters": params}
 
 
+#: Dunders CPython injects into a class body rather than the author writing
+#: them, so they appear in `vars(cls)` and look like API. They are
+#: interpreter-version-specific -- `__firstlineno__` and
+#: `__static_attributes__` are new in 3.13 -- so recording them made the
+#: manifest a description of the interpreter as much as of gffutils, and
+#: `--check` could never pass on a different Python than the one that
+#: generated it. That is not a hypothetical: it is why the parity gate was red.
+_INTERPRETER_DUNDERS = frozenset({"__firstlineno__", "__static_attributes__"})
+
+
 def _describe_class(cls: type) -> dict[str, Any]:
     members: dict[str, Any] = {}
     for name, member in inspect.getmembers(cls):
         if name.startswith("_") and not (name.startswith("__") and name.endswith("__")):
+            continue
+        if name in _INTERPRETER_DUNDERS:
+            continue
+        # Members inherited from a BUILTIN base (`Exception.add_note`,
+        # `Exception.args`, ...) are the interpreter's, not gffutils'. Their
+        # introspectability changes between CPython releases -- `add_note`
+        # reports a signature on some versions and `None` on others -- so
+        # recording them makes the manifest describe the interpreter.
+        if name not in vars(cls) and any(
+            name in vars(base) for base in cls.__mro__[1:] if base.__module__ == "builtins"
+        ):
             continue
         # Dunders matter for parity (`__len__`, `__getitem__`, `__eq__`, ...),
         # but only the ones this class actually defines rather than the ones
@@ -257,9 +278,42 @@ def _oracle_identity() -> dict[str, Any]:
         except (OSError, subprocess.SubprocessError):
             return None
 
+    # How the oracle was OBTAINED, not just which commit it is. A source
+    # checkout ships `gffutils/contrib/` and `scripts/gffutils-cli`; a
+    # `pip install` of the same commit does not, because they are not packaged.
+    # So the two produce genuinely different symbol inventories from identical
+    # source, and a manifest generated from one can never validate against the
+    # other.
+    #
+    # This is not hypothetical: the committed manifest was generated from
+    # `/ccb/salz3/kh.chao/gffutils/gffutils`, a lab-machine checkout, while CI
+    # installs the pinned commit with pip -- so `--check` reported permanent,
+    # phantom drift in `contrib.plotting` and `parser`, and the parity gate
+    # could never go green.
+    installed_as = "checkout" if (repo / ".git").exists() else "installed"
+
+    # A pip install has no git repo to interrogate, but pip records where it
+    # came from in `direct_url.json` (PEP 610) -- including the resolved commit
+    # for a VCS install. That is exactly the provenance this manifest exists to
+    # pin, so it must survive being generated from an installed oracle rather
+    # than a checkout.
+    commit = _git("rev-parse", "HEAD")
+    if commit is None:
+        try:
+            import importlib.metadata as md
+
+            raw = md.distribution("gffutils").read_text("direct_url.json")
+            if raw:
+                commit = (json.loads(raw).get("vcs_info") or {}).get("commit_id")
+        except Exception:
+            commit = None
+
     return {
+        # Recorded so a mismatch is diagnosable, but deliberately NOT compared
+        # by `--check`: it is a property of the machine, not of the API.
         "package_dir": str(pkg_dir),
-        "commit": _git("rev-parse", "HEAD"),
+        "installed_as": installed_as,
+        "commit": commit,
         "describe": _git("describe", "--tags"),
         # Recorded for information only. `gffutils.version` reads installed
         # distribution metadata first, so from a source checkout this can be
@@ -295,13 +349,31 @@ def main() -> int:
         if not args.output.is_file():
             print(f"{args.output} does not exist", file=sys.stderr)
             return 1
-        current = args.output.read_text(encoding="utf-8")
+        committed = json.loads(args.output.read_text(encoding="utf-8"))
+
+        # Compare like with like. A checkout exposes modules a pip install
+        # cannot, so a shape mismatch is a property of THIS environment, not
+        # evidence that the manifest drifted -- and reporting it as drift sends
+        # the reader off to regenerate a file that was already correct.
+        committed_shape = (committed.get("oracle") or {}).get("installed_as")
+        current_shape = manifest["oracle"]["installed_as"]
+        if committed_shape is not None and committed_shape != current_shape:
+            print(
+                f"cannot check: the manifest was generated from a {committed_shape} "
+                f"oracle and this environment has an {current_shape} one. A source "
+                "checkout ships gffutils/contrib/ and scripts/gffutils-cli, which pip "
+                "does not package, so the two inventories legitimately differ.\n"
+                f"Install the oracle the same way ({committed_shape}), or regenerate.",
+                file=sys.stderr,
+            )
+            return 1
+
         # The oracle block records absolute paths and the generating
         # interpreter, neither of which is a property of the API surface.
-        if json.loads(current).get("modules") != manifest["modules"]:
+        if committed.get("modules") != manifest["modules"]:
             print("parity manifest is out of date; re-run without --check", file=sys.stderr)
             return 1
-        print("parity manifest is up to date")
+        print(f"parity manifest is up to date ({current_shape} oracle)")
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

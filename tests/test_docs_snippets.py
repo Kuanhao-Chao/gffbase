@@ -237,6 +237,25 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
 
     try:
         exec(compile(snippet.code, snippet.id, "exec"), namespace)  # noqa: S102
+    except ModuleNotFoundError as exc:
+        # A snippet may legitimately import something this environment does not
+        # have: `torch` in the ML cookbook, `gffutils` for the export example,
+        # `datasets` for the Hugging Face path. None is a gffbase dependency
+        # and CI installs none of them, so requiring them would make the docs
+        # gate a function of the runner's package set rather than of whether
+        # the documentation is correct.
+        #
+        # Skipped rather than passed, so a developer with the full environment
+        # still runs it -- and so `-rs` shows exactly what went unchecked.
+        pytest.skip(f"{snippet.id} needs the optional package {exc.name!r}")
+    except NotImplementedError as exc:
+        # `pybedtools` imports fine and then raises this from a method when the
+        # `bedtools` BINARY is absent, which is the state of every CI runner.
+        # An installed library whose external tool is missing is the same
+        # situation as a missing library.
+        if "does not appear to be installed" not in str(exc):
+            raise
+        pytest.skip(f"{snippet.id} needs an external binary: {exc}")
     except Exception as exc:
         raise AssertionError(
             f"documentation snippet at {snippet.id} raised "
