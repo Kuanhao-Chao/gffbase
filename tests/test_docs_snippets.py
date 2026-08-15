@@ -79,7 +79,7 @@ DOC_ROOTS = ["docs", "README.md", "MIGRATION.md"]
 
 _FENCE = re.compile(
     r"(?P<directives>(?:^[ \t]*<!--[ \t]*docs-test:[^\n]*-->[ \t]*\n)*)"
-    r"^```python\n(?P<body>.*?)^```",
+    r"^```(?P<lang>python|text)\n(?P<body>.*?)^```",
     re.M | re.S,
 )
 _DIRECTIVE = re.compile(r"<!--\s*docs-test:\s*(?P<verb>\w+)(?P<rest>[^>]*?)-->")
@@ -89,14 +89,26 @@ _REASON = re.compile(r'reason\s*=\s*"(?P<reason>[^"]*)"')
 class Snippet:
     """One fenced ``python`` block, with its file, line and directives."""
 
-    __slots__ = ("path", "line", "code", "verb", "reason")
+    __slots__ = ("path", "line", "code", "verb", "reason", "lang", "expected_output")
 
-    def __init__(self, path: Path, line: int, code: str, verb: str, reason: str):
+    def __init__(
+        self,
+        path: Path,
+        line: int,
+        code: str,
+        verb: str,
+        reason: str,
+        lang: str = "python",
+    ):
         self.path = path
         self.line = line
         self.code = code
         self.verb = verb
         self.reason = reason
+        self.lang = lang
+        #: A ```text block immediately following this one, when it is labelled
+        #: as this snippet's console output. Verified, not decorative.
+        self.expected_output: str | None = None
 
     @property
     def id(self) -> str:
@@ -127,8 +139,26 @@ def _parse(path: Path) -> list[Snippet]:
             found = _REASON.search(directive.group("rest") or "")
             reason = found.group("reason") if found else ""
         line = text.count("\n", 0, match.start("body")) + 1
-        out.append(Snippet(path, line, match.group("body"), verb, reason))
-    return out
+        out.append(Snippet(path, line, match.group("body"), verb, reason, match.group("lang")))
+
+    # Pair `console output` text blocks with the python block above them.
+    # Writing the output by hand is exactly as rot-prone as the benchmark
+    # tables were -- the first draft of `docs/gallery.md` already had one
+    # transcribed wrong -- so a block that claims to be output gets checked
+    # against the output.
+    paired: list[Snippet] = []
+    for snippet in out:
+        if (
+            snippet.lang == "text"
+            and snippet.verb == "skip"
+            and "console output" in snippet.reason
+            and paired
+            and paired[-1].lang == "python"
+        ):
+            paired[-1].expected_output = snippet.code
+            continue
+        paired.append(snippet)
+    return paired
 
 
 def _all_snippets() -> list[Snippet]:
@@ -136,7 +166,7 @@ def _all_snippets() -> list[Snippet]:
 
 
 ALL_SNIPPETS = _all_snippets()
-RUNNABLE = [s for s in ALL_SNIPPETS if s.verb in {"run", "isolated"}]
+RUNNABLE = [s for s in ALL_SNIPPETS if s.lang == "python" and s.verb in {"run", "isolated"}]
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +265,13 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
             namespace = _namespace(cwd)
             _PAGE_STATE[snippet.path] = namespace
 
+    import contextlib
+    import io
+
+    captured = io.StringIO()
     try:
-        exec(compile(snippet.code, snippet.id, "exec"), namespace)  # noqa: S102
+        with contextlib.redirect_stdout(captured):
+            exec(compile(snippet.code, snippet.id, "exec"), namespace)  # noqa: S102
     except ModuleNotFoundError as exc:
         # A snippet may legitimately import something this environment does not
         # have: `torch` in the ML cookbook, `gffutils` for the export example,
@@ -273,6 +308,15 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
     finally:
         if snippet.verb == "isolated":
             _close_quietly(namespace)
+
+    if snippet.expected_output is not None:
+        actual = captured.getvalue().strip()
+        expected = snippet.expected_output.strip()
+        assert actual == expected, (
+            f"the console output shown under {snippet.id} is not what the "
+            f"snippet prints.\n\nshown in the docs:\n{expected}\n\n"
+            f"actually printed:\n{actual}"
+        )
 
 
 def test_every_skip_states_a_reason():
@@ -328,7 +372,10 @@ def test_the_skip_list_does_not_grow():
     Without a ratchet the easiest way to fix a failing snippet is to skip it,
     and the executable-documentation guarantee erodes one commit at a time.
     """
-    skipped = [s for s in ALL_SNIPPETS if s.verb == "skip"]
+    # Python blocks only. A ```text block is never runnable Python -- it is
+    # console output or a file listing -- so counting one would inflate the
+    # scoreboard without anything having been exempted.
+    skipped = [s for s in ALL_SNIPPETS if s.lang == "python" and s.verb == "skip"]
     assert len(skipped) <= MAX_SKIPPED, (
         f"{len(skipped)} snippets are skipped, up from {MAX_SKIPPED}. "
         "Make the new one runnable, or justify raising MAX_SKIPPED in the "
