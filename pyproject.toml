@@ -75,6 +75,10 @@ test = [
     # that has one and PyYAML's default loader does not. That check is only a
     # gate if the parser is guaranteed present.
     "pyyaml>=6",
+    # `tests/parity/test_api_parity.py` reads `deviations.toml`. The stdlib
+    # `tomllib` is 3.11+, so the 3.10 floor -- which is what the Windows cells
+    # and the minimum-deps job run -- needs the backport.
+    "tomli>=2; python_version < '3.11'",
 ]
 bench = [
     "psutil>=5",
@@ -234,13 +238,20 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["gffbase"]
-# No omissions. `*/_pyfallback/*` was exempted here with a note saying the
-# exemption would be removed in 0.2.0 — this is that removal. The fallback
-# parser is the oracle the Rust engine is diffed against AND the only parser
-# on a wheel-less install, so exempting it hid the coverage of the code most
-# likely to be running when something goes wrong. An omit list is where
-# uncovered code goes to stop being counted.
-omit = []
+# `python -m gffbase` runs in a SUBPROCESS, which this process's tracer does
+# not follow, so `__main__.py` reads 0% however well it is tested -- and it is
+# tested, by `tests/test_cli.py::test_python_dash_m_runs_the_cli`, which is the
+# only way to exercise it honestly. Measuring it here would require
+# `coverage run --parallel` plumbing for three lines that delegate to
+# `cli.main`. Excluded, with the test that covers it named.
+#
+# `*/_pyfallback/*` is deliberately NOT here: it was exempted once with a note
+# saying the exemption would be removed in 0.2.0, and that removal stands. The
+# fallback parser is the oracle the Rust engine is diffed against AND the only
+# parser on a wheel-less install, so exempting it hid the coverage of the code
+# most likely to be running when something goes wrong. An omit list is where
+# uncovered code goes to stop being counted, so it holds exactly one entry.
+omit = ["*/gffbase/__main__.py"]
 
 [tool.coverage.report]
 exclude_lines = [
