@@ -681,3 +681,126 @@ def test_the_citation_version_tracks_the_package_version():
     assert cited.group(1).strip('"') == version, (
         f"CITATION.cff cites {cited.group(1)} but the package is {version}"
     )
+
+
+def _svg_path_points(d: str) -> list[tuple[float, float]]:
+    """Sample an SVG path, flattening cubics, so its extent can be measured.
+
+    Small enough to keep here: the alternative is adding a dependency on an
+    SVG library purely to assert one geometric fact about one committed file.
+    """
+    import re
+
+    tokens = re.findall(r"[MmCcSsLlHhVvZz]|-?\d*\.?\d+", d)
+    i, cur, start, points, cmd, prev_c2 = 0, (0.0, 0.0), (0.0, 0.0), [], None, None
+
+    def cubic(p0, p1, p2, p3):
+        for step in range(41):
+            t = step / 40
+            u = 1 - t
+            points.append(
+                (
+                    u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0],
+                    u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1],
+                )
+            )
+
+    while i < len(tokens):
+        tok = tokens[i]
+        if re.match(r"[A-Za-z]", tok):
+            cmd = tok
+            i += 1
+            continue
+        num = lambda k: float(tokens[k])  # noqa: E731
+        if cmd in "Mm":
+            x, y = num(i), num(i + 1)
+            i += 2
+            cur = (cur[0] + x, cur[1] + y) if cmd == "m" else (x, y)
+            start = cur
+            points.append(cur)
+            cmd = "l" if cmd == "m" else "L"
+        elif cmd in "Cc":
+            a = [num(i + k) for k in range(6)]
+            i += 6
+            rel = cmd == "c"
+            p1 = (cur[0] + a[0], cur[1] + a[1]) if rel else (a[0], a[1])
+            p2 = (cur[0] + a[2], cur[1] + a[3]) if rel else (a[2], a[3])
+            p3 = (cur[0] + a[4], cur[1] + a[5]) if rel else (a[4], a[5])
+            cubic(cur, p1, p2, p3)
+            prev_c2, cur = p2, p3
+        elif cmd in "Ss":
+            a = [num(i + k) for k in range(4)]
+            i += 4
+            rel = cmd == "s"
+            p2 = (cur[0] + a[0], cur[1] + a[1]) if rel else (a[0], a[1])
+            p3 = (cur[0] + a[2], cur[1] + a[3]) if rel else (a[2], a[3])
+            p1 = (2 * cur[0] - prev_c2[0], 2 * cur[1] - prev_c2[1]) if prev_c2 else cur
+            cubic(cur, p1, p2, p3)
+            prev_c2, cur = p2, p3
+        elif cmd in "Ll":
+            x, y = num(i), num(i + 1)
+            i += 2
+            cur = (cur[0] + x, cur[1] + y) if cmd == "l" else (x, y)
+            points.append(cur)
+        elif cmd in "Hh":
+            x = num(i)
+            i += 1
+            cur = (cur[0] + x, cur[1]) if cmd == "h" else (x, cur[1])
+            points.append(cur)
+        elif cmd in "Vv":
+            y = num(i)
+            i += 1
+            cur = (cur[0], cur[1] + y) if cmd == "v" else (cur[0], y)
+            points.append(cur)
+        elif cmd in "Zz":
+            cur = start
+            points.append(cur)
+        else:
+            i += 1
+    return points
+
+
+@pytest.mark.parametrize("svg_name", ["logo.svg", "logo-white.svg"])
+def test_the_g_descender_clears_the_exon_block(svg_name):
+    """The wordmark's two tiers must not collide.
+
+    The `g` descender used to reach y=342 while the first exon block spans
+    y300-340, so at the 36px the site renders the logo at, the tail and the
+    exon merged into a single black mass. It was also 0.51x cap height, about
+    twice the typographic norm for a grotesque -- too long independent of the
+    overlap.
+
+    Asserted on the geometry rather than on a rendering, so it needs no SVG
+    toolchain and fails with a number rather than "the logo looks wrong".
+    """
+    import re
+
+    svg = (REPO_ROOT / "docs" / "assets" / svg_name).read_text()
+
+    exons = [
+        (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+        for m in re.finditer(
+            r'<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)" rx="4"/>', svg
+        )
+    ]
+    assert exons, f"{svg_name}: no exon rectangles found"
+
+    match = re.search(r"<!-- g : bowl \+ descender -->\s*<path d=\"([^\"]+)\"", svg)
+    assert match, f"{svg_name}: the g glyph is not where this test expects it"
+    points = _svg_path_points(match.group(1))
+
+    lowest = max(y for _, y in points)
+    for ex, ey, ew, eh in exons:
+        intruding = [p for p in points if p[1] > ey and ex <= p[0] <= ex + ew]
+        assert not intruding, (
+            f"{svg_name}: the g descender reaches y={lowest:.0f} and enters the "
+            f"exon block at x{ex}-{ex + ew} y{ey}-{ey + eh} "
+            f"({len(intruding)} sampled points). The two tiers must clear each other."
+        )
+
+    baseline = 240
+    depth = (lowest - baseline) / 200  # 200 = cap height
+    assert 0.15 <= depth <= 0.30, (
+        f"{svg_name}: descender depth is {depth:.2f}x cap height; a grotesque "
+        "g sits at roughly 0.20-0.25x"
+    )
