@@ -118,6 +118,7 @@ nav:
       - Quickstart: getting-started/quickstart.md
       - Compatibility & strict modes: guides/modes.md
   - Guides:
+      - Analysis gallery: gallery.md
       - Usage Gallery: usage_gallery.md
       - Connections & concurrency: guides/connections.md
       - Command line: cli.md
