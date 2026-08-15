@@ -247,3 +247,71 @@ def test_anchor_column_lets_caller_groupby_without_reissuing(db):
     assert counts["gA"] == 8
     assert counts["tA1"] == 3
     assert counts["tA2"] == 3
+
+
+# ---------------------------------------------------------------------------
+# `query_idx` indexes the INPUT, not the survivors
+# ---------------------------------------------------------------------------
+
+
+def test_region_batched_raises_on_an_unparseable_region(db):
+    """An item that is not a region is an error, not something to drop.
+
+    Silently skipping it is how a bulk API returns a confidently wrong
+    answer: the caller passed N regions, got groups back for N-1, and had no
+    way to notice.
+    """
+    regions = [("chr1", 100, 200), "not-a-region", ("chr1", 500, 600)]
+    with pytest.raises(ValueError, match=r"regions\[1\]"):
+        db.region_batched(regions, format="arrow")
+
+
+def test_region_batched_skip_preserves_input_indices(db):
+    """With `on_invalid="skip"`, `query_idx` still indexes the input list.
+
+    `query_idx` used to be `range(len(surviving_rows))`, so dropping item 1
+    renumbered items 2..N down by one and every later group was attributed to
+    the wrong query. The gap at index 1 is the correct, visible outcome.
+    """
+    regions = [("chr1", 100, 200), "not-a-region", ("chr1", 500, 600)]
+    table = db.region_batched(regions, format="arrow", on_invalid="skip")
+
+    seen = set(table.column("query_idx").to_pylist())
+    assert 1 not in seen, "the dropped region's index must not be reused"
+    assert seen <= {0, 2}
+
+    # And each surviving index must carry ITS OWN region's coordinates.
+    by_idx = {}
+    for idx, qs, qe in zip(
+        table.column("query_idx").to_pylist(),
+        table.column("query_start").to_pylist(),
+        table.column("query_end").to_pylist(),
+        strict=True,
+    ):
+        by_idx[idx] = (qs, qe)
+    if 0 in by_idx:
+        assert by_idx[0] == (100, 200)
+    if 2 in by_idx:
+        assert by_idx[2] == (500, 600)
+
+
+def test_region_batched_query_idx_matches_input_order_when_all_valid(db):
+    """The ordinary case: every index present, each mapped to its own input."""
+    regions = [("chr1", 100, 200), ("chr1", 300, 400), ("chr1", 500, 600)]
+    table = db.region_batched(regions, format="arrow")
+    pairs = {
+        (idx, qs, qe)
+        for idx, qs, qe in zip(
+            table.column("query_idx").to_pylist(),
+            table.column("query_start").to_pylist(),
+            table.column("query_end").to_pylist(),
+            strict=True,
+        )
+    }
+    for idx, (_seqid, start, end) in enumerate(regions):
+        assert all(qs == start and qe == end for i, qs, qe in pairs if i == idx)
+
+
+def test_region_batched_rejects_an_unknown_on_invalid(db):
+    with pytest.raises(ValueError, match="on_invalid"):
+        db.region_batched([("chr1", 1, 2)], on_invalid="ignore")

@@ -240,17 +240,27 @@ def test_region_batched_empty_input(gtf_db):
     assert out.num_rows == 0
 
 
-def test_region_batched_skips_invalid_regions(gtf_db):
-    # Mix valid + invalid (seqid-only string, no coords) — invalid ones drop out.
-    out = gtf_db.region_batched(
-        [
-            ("chr1", 100, 600),
-            "chr2",  # seqid-only → no coords → filtered
-        ],
-        featuretype="exon",
-    )
-    # Only chr1 query produces results.
+def test_region_batched_skips_invalid_regions_only_when_asked(gtf_db):
+    """Dropping an unusable region is opt-in, because it cannot be undone.
+
+    A seqid-only string like `"chr2"` carries no coordinates, so there is no
+    region to query. This used to be dropped silently by default -- and
+    because `query_idx` was then renumbered over the survivors, every query
+    after the dropped one was reported under the wrong index. The default is
+    now to raise; `on_invalid="skip"` keeps the old dropping behaviour but
+    leaves the indices anchored to the input.
+    """
+    regions = [
+        ("chr1", 100, 600),
+        "chr2",  # seqid-only → no coords → not a region
+    ]
+    with pytest.raises(ValueError, match=r"regions\[1\]"):
+        gtf_db.region_batched(regions, featuretype="exon")
+
+    out = gtf_db.region_batched(regions, featuretype="exon", on_invalid="skip")
+    # Only the chr1 query produces results, and it keeps its own index.
     assert set(out.column("query_seqid").to_pylist()) == {"chr1"}
+    assert set(out.column("query_idx").to_pylist()) == {0}
 
 
 def test_region_batched_df_format(gtf_db):

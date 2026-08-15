@@ -22,6 +22,7 @@ that consumes the iterator and prints features Just Works.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 
 from gffbase import parser as _parser
@@ -97,14 +98,50 @@ def DataIterator(
     from_string: bool = False,
     **kwargs,
 ) -> _DataIterator:
-    """Legacy factory. Returns an iterator yielding ``Feature``."""
-    return _DataIterator(
-        data,
-        checklines=checklines,
-        transform=transform,
-        force_dialect_check=force_dialect_check,
-        from_string=from_string,
-        **kwargs,
+    """Legacy factory. Returns an iterator yielding ``Feature``.
+
+    Dispatches on the input, the way the subclasses below have always
+    described and the way `gffutils.DataIterator` behaves:
+
+    * ``from_string=True`` -- `data` is the GFF text itself.
+    * a URL -- fetched to a temporary file first (`_UrlIterator`).
+    * any other path-like -- read from disk, gzipped or not (`_FileIterator`).
+    * an iterable of `Feature` / `ParsedFeature` -- yielded straight back
+      (`_FeatureIterator`), so a generator can be piped into `create_db` or
+      `FeatureDB.update` without being written to a file first.
+
+    The dispatch was missing: every input went to `_DataIterator`, which
+    hands whatever it gets to `parse_gff(path)`. So a URL was opened as a
+    filename and an in-memory feature list raised, while the subclasses that
+    exist to handle both sat unreachable and their docstrings described a
+    behaviour the factory did not have.
+    """
+    if from_string:
+        return _DataIterator(
+            data,
+            checklines=checklines,
+            transform=transform,
+            force_dialect_check=force_dialect_check,
+            from_string=True,
+            **kwargs,
+        )
+
+    if isinstance(data, (str, os.PathLike)):
+        cls = _UrlIterator if is_url(str(data)) else _FileIterator
+        return cls(
+            os.fspath(data) if isinstance(data, os.PathLike) else data,
+            checklines=checklines,
+            transform=transform,
+            force_dialect_check=force_dialect_check,
+            **kwargs,
+        )
+
+    if hasattr(data, "__iter__"):
+        return _FeatureIterator(data, transform=transform, **kwargs)
+
+    raise TypeError(
+        "DataIterator accepts a path, a URL, GFF text with from_string=True, "
+        f"or an iterable of features; got {type(data)!r}"
     )
 
 
@@ -189,12 +226,46 @@ class _UrlIterator(_BaseIterator):
         if not is_url(data):
             raise ValueError(f"not a URL: {data!r}")
         suffix = ".gz" if str(data).endswith(".gz") else ".gff3"
+        self._tempfile: str | None = None
         with urllib.request.urlopen(data) as response:  # noqa: S310 - scheme checked above
             tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
             tmp.write(response.read())
             tmp.close()
         self._tempfile = tmp.name
-        super().__init__(tmp.name, **kwargs)
+        try:
+            super().__init__(tmp.name, **kwargs)
+        except BaseException:
+            # The download already landed on disk; if parsing the result
+            # cannot even start, nothing else will ever remove it.
+            self.close()
+            raise
+
+    def close(self) -> None:
+        """Delete the downloaded temporary file. Idempotent.
+
+        `NamedTemporaryFile(delete=False)` is the only way to hand the parser
+        a path it can reopen, and the file was then never unlinked -- every
+        `DataIterator(url)` left a full copy of the annotation in the temp
+        directory for the life of the process.
+        """
+        path, self._tempfile = self._tempfile, None
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    def __enter__(self) -> _UrlIterator:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:  # pragma: no cover - interpreter teardown
+            pass
 
 
 class _FeatureIterator(_BaseIterator):
@@ -204,20 +275,31 @@ class _FeatureIterator(_BaseIterator):
     `create_db` or `FeatureDB.update` without first writing a file.
     """
 
-    def __init__(self, data, **kwargs):
+    def __init__(self, data, transform=None, **kwargs):
         self._features = list(data)
         self._pos = 0
+        self._transform = transform
         self._dialect = kwargs.get("dialect") or {"fmt": "gff3"}
 
     def __iter__(self):
-        return iter(self._features)
+        # NOT `iter(self._features)`. Returning the list's own iterator
+        # bypasses `__next__`, so `transform` -- which every other iterator in
+        # this module applies -- was silently dropped for in-memory features.
+        self._pos = 0
+        return self
 
     def __next__(self):
-        if self._pos >= len(self._features):
-            raise StopIteration
-        feature = self._features[self._pos]
-        self._pos += 1
-        return feature
+        while True:
+            if self._pos >= len(self._features):
+                raise StopIteration
+            feature = self._features[self._pos]
+            self._pos += 1
+            if self._transform is None:
+                return feature
+            out = self._transform(feature)
+            if out is False:
+                continue  # the transform's way of saying "drop this one"
+            return feature if out is None else out
 
     # Properties, matching `_DataIterator`. These were written as methods and
     # the resulting mypy override error was silenced with a `type: ignore`,
