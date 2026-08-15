@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Favicon: the database-`b` alone, square-cropped from the wordmark.
+
+  The wordmark is 3.7:1 and unreadable in a 16px browser tab, so the favicon
+  takes the one glyph that carries the identity. No sibling tool in this family
+  ships a favicon at all; this is the piece that scales down.
+
+  The viewBox is a square centred on the glyph's own bounds in `logo.svg`
+  coordinates, so the paths below are copied from it verbatim and need no
+  transform. Edit them there and re-derive.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="530 10 269 269"
+     role="img" aria-label="gffbase">
+  <title>gffbase</title>
+  <g fill="#000000">
+    <rect x="560" y="30" width="46" height="228" rx="5"/>
+    <path d="M606 132c0-19 36-33 82-33s82 14 82 33v94c0 19-36 33-82 33
+             s-82-14-82-33v-94zm30 12v82c0 10 23 17 52 17s52-7 52-17v-82
+             c0-10-23-17-52-17s-52 7-52 17z"/>
+    <ellipse cx="688" cy="142" rx="52" ry="16"/>
+    <path d="M636 179c0 10 23 17 52 17s52-7 52-17v16c0 10-23 17-52 17
+             s-52-7-52-17v-16z"/>
+  </g>
+</svg>

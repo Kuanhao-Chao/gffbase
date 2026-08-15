@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  gffbase wordmark.
+
+  House style, matching OpenSpliceAI / Splam / LiftOn: the logo IS the
+  wordmark, and one letter is replaced by a pictogram of what the tool does,
+  drawn on the same cap-height grid and at the same weight so the name still
+  reads at a glance.
+
+  Here the `b` of "base" keeps its stem while its bowl becomes a DATABASE
+  CYLINDER, which is the storage engine the name already refers to. A gene
+  model (two exon blocks on an intron line) runs underneath as a second tier,
+  the same vocabulary Splam uses, because a GFF3/GTF file is the thing being
+  stored. The gap between the exons sits directly under the cylinder.
+
+  The white inverse of `logo.svg`, for dark backgrounds. Generated from it;
+  edit `logo.svg` and re-derive rather than editing this by hand.
+
+  Geometry: cap height 200 (y 40..240), baseline y=240, x-height letters sit
+  on the same baseline. Gene model occupies y 286..326.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 350" role="img"
+     aria-label="gffbase">
+  <title>gffbase</title>
+  <g fill="#FFFFFF">
+    <!-- g : bowl + descender -->
+    <path d="M150 108c-46 0-80 32-80 76 0 43 33 74 78 74 20 0 36-6 47-18v13
+             c0 29-19 46-50 46-22 0-40-7-54-19l-24 36c21 17 48 26 79 26
+             57 0 92-32 92-86V112h-46v16c-12-13-26-20-42-20zm9 41
+             c26 0 44 16 44 37s-18 37-44 37-44-16-44-37 18-37 44-37z"/>
+
+    <!-- f -->
+    <path d="M300 112h-32v39h32v107h48V151h44v-39h-44V98c0-17 10-26 28-26
+             7 0 13 1 19 3l10-38c-11-4-24-6-36-6-42 0-63 24-63 65v18z"/>
+
+    <!-- f -->
+    <path d="M424 112h-32v39h32v107h48V151h44v-39h-44V98c0-17 10-26 28-26
+             7 0 13 1 19 3l10-38c-11-4-24-6-36-6-42 0-63 24-63 65v18z"/>
+
+    <!-- b as a database: the stem is the letter, the bowl is a cylinder.
+         A top disc plus a band is the universal database glyph, and it sits
+         in the b's bowl silhouette so the word still reads. -->
+    <rect x="560" y="30" width="46" height="228" rx="5"/>
+    <!-- cylinder walls + bottom cap. Sized to fill the bowl a `b` would have,
+         so the glyph still reads as a letter at 36px. -->
+    <path d="M606 132c0-19 36-33 82-33s82 14 82 33v94c0 19-36 33-82 33
+             s-82-14-82-33v-94zm30 12v82c0 10 23 17 52 17s52-7 52-17v-82
+             c0-10-23-17-52-17s-52 7-52 17z"/>
+    <!-- top disc -->
+    <ellipse cx="688" cy="142" rx="52" ry="16"/>
+    <!-- band -->
+    <path d="M636 179c0 10 23 17 52 17s52-7 52-17v16c0 10-23 17-52 17
+             s-52-7-52-17v-16z"/>
+
+    <!-- a -->
+    <path d="M882 108c-27 0-50 9-66 23l21 31c12-10 26-15 41-15 22 0 35 10 35 26v6
+             h-42c-44 0-70 20-70 52 0 31 24 52 61 52 23 0 41-8 52-21v17h46V166
+             c0-39-30-58-78-58zm31 105v10c0 17-16 28-36 28-17 0-28-8-28-20
+             0-12 10-18 29-18h35z"/>
+
+    <!-- s -->
+    <path d="M1050 108c-42 0-70 21-70 52 0 56 83 42 83 65 0 9-9 14-24 14
+             -18 0-36-7-49-18l-19 33c18 14 43 23 68 23 44 0 73-21 73-53
+             0-57-84-43-84-66 0-8 8-13 22-13 15 0 31 5 43 13l19-33
+             c-18-11-40-17-62-17z"/>
+
+    <!-- e -->
+    <path d="M1200 108c-47 0-81 33-81 79s34 79 84 79c27 0 49-9 65-24l-25-28
+             c-10 10-23 15-37 15-21 0-36-11-42-30h116c1-4 1-9 1-13
+             0-46-33-78-81-78zm-36 65c4-19 18-30 37-30s32 11 36 30h-73z"/>
+  </g>
+
+  <!-- Gene model: two exons on an intron line. Splam's vocabulary, reused
+       deliberately, because this is the thing being stored. -->
+  <g fill="#FFFFFF">
+    <rect x="40" y="301" width="1210" height="10" rx="5"/>
+    <rect x="150" y="286" width="380" height="40" rx="4"/>
+    <rect x="800" y="286" width="390" height="40" rx="4"/>
+  </g>
+</svg>

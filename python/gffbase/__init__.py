@@ -43,7 +43,22 @@ try:  # pragma: no cover — import-time branch
     from gffbase._native import GFFFormatError
 except ImportError:
     GFFFormatError = _PyGFFFormatError
-from gffbase import ingest, merge_criteria
+# The compatibility submodules are bound on the package namespace because
+# gffutils binds them, and the documented one-line migration is
+# `import gffbase as gffutils`. Without these, `gffutils.constants.
+# always_return_list = True` -- a documented gffutils idiom -- raises
+# AttributeError on a package that advertises itself as a drop-in.
+#
+# Cheap: every one of these is a small pure-Python module with no heavy
+# imports, and `interface` already pulls most of them in transitively.
+from gffbase import (
+    attributes,
+    bins,
+    constants,
+    create,
+    ingest,
+    merge_criteria,
+)
 from gffbase.create_db import create_db
 from gffbase.feature import Feature, FeatureSegment, MultipartFeature, ParsedFeature
 from gffbase.gffwriter import GFFWriter
@@ -87,7 +102,19 @@ __all__ = [
     "native_available",
     "ingest",
     "export_sqlite",
+    # Compatibility submodules, bound so `import gffbase as gffutils` gives
+    # the same attribute access the oracle does.
+    "attributes",
+    "bins",
+    "constants",
+    "create",
+    "version",
     "__version__",
 ]
 
 __version__ = "0.2.0"
+
+# Imported LAST, and deliberately: `gffbase.version` re-exports `__version__`
+# from this module, so importing it any earlier is a circular import against a
+# partially-initialized package.
+from gffbase import version  # noqa: E402  (must follow __version__)

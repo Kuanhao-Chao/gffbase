@@ -237,6 +237,20 @@ everything from scratch.
 
 ### Changed (breaking)
 
+- **`FeatureDB.bed12()` now refuses a feature its blocks do not span**, with
+  gffutils' exact message (`"End of last exon (600) does not match end of
+  feature (1000)"`). BED12's blockStarts are offsets from chromStart and the
+  last block has to reach chromEnd, so emitting a line for a transcript whose
+  exons stop short produces a record naming a range it does not cover -- and
+  sends it into a genome browser. gffutils raises here; gffbase emitted the
+  line.
+
+  Verified against real data before changing it: 5,000 of 5,000 MANE
+  transcripts span their exons exactly, so no real annotation triggers this.
+  The inputs that did were synthetic test fixtures declaring transcripts wider
+  than their children, which have been corrected.
+
+
 - **`FeatureDB.region_batched()` now raises on a region it cannot parse,
   instead of silently dropping it.** The `query_idx` column is documented as
   the way to map results back to the input, and it was assigned over the rows
@@ -313,6 +327,17 @@ everything from scratch.
   to 3.10.
 
 ### Added
+
+- **The compatibility submodules are bound on the package namespace.**
+  gffutils binds `attributes`, `bins`, `constants`, `create` and `version` on
+  its package, so `gffutils.constants.always_return_list = True` works after a
+  plain import. gffbase bound none of them, so the one-line migration its own
+  README advertises -- `import gffbase as gffutils` -- raised `AttributeError`
+  on the first line of any script using one.
+
+- **`FeatureDB.method()`**, gffutils' alias for `all_features()`. It is a plain
+  alias upstream too, and ported code calls it.
+
 
 - **`FeatureDB` connection lifecycle: `close()`, context-manager support, and
   `read_only=True`.** DuckDB holds an exclusive lock on the database file for
