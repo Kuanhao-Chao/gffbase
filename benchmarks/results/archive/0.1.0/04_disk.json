@@ -1,0 +1,96 @@
+{
+  "gffbase": {
+    "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/gencode.duckdb",
+    "total_bytes": 2932355072,
+    "tables": {
+      "attributes": {
+        "row_count": 34128026
+      },
+      "autoincrements": {
+        "row_count": 0
+      },
+      "closure": {
+        "row_count": 3877126
+      },
+      "directives": {
+        "row_count": 5
+      },
+      "duplicates": {
+        "row_count": 0
+      },
+      "edges": {
+        "row_count": 2056515
+      },
+      "features": {
+        "row_count": 2182889
+      },
+      "meta": {
+        "row_count": 6
+      },
+      "seqid_map": {
+        "row_count": 25
+      }
+    }
+  },
+  "legacy": {
+    "path": "/Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/gencode_legacy.sqlite",
+    "total_bytes": 1923682304,
+    "tables": {
+      "autoincrements": {
+        "bytes": 4874240
+      },
+      "directives": {
+        "bytes": 4096
+      },
+      "duplicates": {
+        "bytes": 19054592
+      },
+      "features": {
+        "bytes": 1160966144
+      },
+      "featuretype": {
+        "bytes": 26828800
+      },
+      "meta": {
+        "bytes": 4096
+      },
+      "relations": {
+        "bytes": 163041280
+      },
+      "relationschild": {
+        "bytes": 83140608
+      },
+      "relationsparent": {
+        "bytes": 107880448
+      },
+      "seqidstartend": {
+        "bytes": 46919680
+      },
+      "seqidstartendstrand": {
+        "bytes": 50909184
+      },
+      "sqlite_autoindex_autoincrements_1": {
+        "bytes": 5165056
+      },
+      "sqlite_autoindex_duplicates_1": {
+        "bytes": 12759040
+      },
+      "sqlite_autoindex_features_1": {
+        "bytes": 44879872
+      },
+      "sqlite_autoindex_relations_1": {
+        "bytes": 197242880
+      },
+      "sqlite_schema": {
+        "bytes": 4096
+      },
+      "sqlite_stat1": {
+        "bytes": 4096
+      }
+    }
+  },
+  "comparison": {
+    "gffbase_over_legacy": 1.5243447766310585,
+    "delta_bytes": 1008672768
+  }
+}

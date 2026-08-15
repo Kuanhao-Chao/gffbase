@@ -1,0 +1,20 @@
+
+=== GENCODE v49 (GFF3) (gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz) ===
+  feature lines: 6,066,054
+  [gffbase] ingest…
+    wall=6 min 7.0 s, RSS=2.10 GB, disk=7.03 GB
+  [legacy ] ingest (timeout 1800s)…
+    wall=11 min 22.7 s, RSS=167.08 MB, disk=6.05 GB
+  [gffbase] spatial — 5000 regions…
+    wall=3.87 s, qps=1292, features_returned=10709
+  [gffbase] batched — 5000 anchors…
+    wall=422.4 ms, anchors=5000, descendants=1932935
+
+Results → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/06_mega.json
+
+====================================================================================
+corpus                          gffbase ingest     legacy ingest     speedup
+------------------------------------------------------------------------------------
+GENCODE v49 (GFF3)                 6 min 7.0 s    11 min 22.7 s        1.86×
+====================================================================================
+* = legacy was killed at timeout; wall extrapolated 2× per directive.

@@ -29,6 +29,32 @@
 
 use std::fmt;
 
+/// Which rule set to apply.
+///
+/// `Gffutils` is the compatibility profile used by `create_db()`. It exists
+/// because real annotation files violate the GFF3 specification routinely, and
+/// gffutils reads them anyway -- validating to the spec on the drop-in path
+/// meant refusing 6 of the 23 upstream fixtures the oracle ingests, including
+/// its own canonical one. Under this profile every rule below still *runs*,
+/// but a violation is recorded as a warning and the record is kept rather than
+/// rejected, so a caller gets exactly gffutils' data plus a diagnostic
+/// gffutils never offered.
+///
+/// `Ncbi` is the full specification, used by `parse_gff()` and by
+/// `mode="strict"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidationProfile {
+    Gffutils,
+    Ncbi,
+}
+
+impl ValidationProfile {
+    /// Whether a violation should reject the record rather than annotate it.
+    pub fn rejects(&self) -> bool {
+        matches!(self, ValidationProfile::Ncbi)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     TooFewFields,
@@ -45,15 +71,15 @@ pub enum ErrorKind {
 impl ErrorKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            ErrorKind::TooFewFields       => "TooFewFields",
-            ErrorKind::EmptySeqid         => "EmptySeqid",
-            ErrorKind::EmptyFeaturetype   => "EmptyFeaturetype",
+            ErrorKind::TooFewFields => "TooFewFields",
+            ErrorKind::EmptySeqid => "EmptySeqid",
+            ErrorKind::EmptyFeaturetype => "EmptyFeaturetype",
             ErrorKind::InvalidFeaturetype => "InvalidFeaturetype",
-            ErrorKind::InvalidCoordinate  => "InvalidCoordinate",
-            ErrorKind::InvalidStrand      => "InvalidStrand",
-            ErrorKind::InvalidPhase       => "InvalidPhase",
-            ErrorKind::InvalidScore       => "InvalidScore",
-            ErrorKind::InvalidAttribute   => "InvalidAttribute",
+            ErrorKind::InvalidCoordinate => "InvalidCoordinate",
+            ErrorKind::InvalidStrand => "InvalidStrand",
+            ErrorKind::InvalidPhase => "InvalidPhase",
+            ErrorKind::InvalidScore => "InvalidScore",
+            ErrorKind::InvalidAttribute => "InvalidAttribute",
         }
     }
 }
@@ -150,10 +176,7 @@ pub fn validate_fields(
         return Err(GffError::new(
             line_no,
             ErrorKind::InvalidStrand,
-            format!(
-                "strand must be one of '+', '-', '?', '.'; got {:?}",
-                strand
-            ),
+            format!("strand must be one of '+', '-', '?', '.'; got {:?}", strand),
         ));
     }
 
@@ -208,9 +231,9 @@ pub fn validate_attributes_pairs(
     if trimmed.is_empty() || trimmed == "." {
         return Ok(());
     }
-    let has_eq    = trimmed.contains('=');
+    let has_eq = trimmed.contains('=');
     let has_quote = trimmed.contains('"');
-    let has_pair  = n_pairs > 0;
+    let has_pair = n_pairs > 0;
 
     // Accept the blob if EITHER `=` (GFF3) OR `"` (GTF) appears AND the
     // parser produced at least one pair. The dialect flag is informational
@@ -225,7 +248,11 @@ pub fn validate_attributes_pairs(
             ErrorKind::InvalidAttribute,
             format!(
                 "attribute string did not parse into any key=value pair: {:?}",
-                if trimmed.len() > 60 { &trimmed[..60] } else { trimmed }
+                if trimmed.len() > 60 {
+                    &trimmed[..60]
+                } else {
+                    trimmed
+                }
             ),
         ));
     }
@@ -234,15 +261,37 @@ pub fn validate_attributes_pairs(
 
 #[cfg(test)]
 mod tests {
+    // A GFF row is nine columns wide, so the per-column test helpers below
+    // legitimately take one argument per column.
+    #![allow(clippy::too_many_arguments)]
+
     use super::*;
 
-    fn ok(seqid: &str, ft: &str, s: Option<i64>, e: Option<i64>,
-          score: &str, strand: &str, frame: &str, attrs: &[u8]) {
+    fn ok(
+        seqid: &str,
+        ft: &str,
+        s: Option<i64>,
+        e: Option<i64>,
+        score: &str,
+        strand: &str,
+        frame: &str,
+        attrs: &[u8],
+    ) {
         validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false).unwrap();
     }
-    fn err_kind(seqid: &str, ft: &str, s: Option<i64>, e: Option<i64>,
-                score: &str, strand: &str, frame: &str, attrs: &[u8]) -> ErrorKind {
-        validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false).unwrap_err().kind
+    fn err_kind(
+        seqid: &str,
+        ft: &str,
+        s: Option<i64>,
+        e: Option<i64>,
+        score: &str,
+        strand: &str,
+        frame: &str,
+        attrs: &[u8],
+    ) -> ErrorKind {
+        validate_fields(1, seqid, ft, s, e, score, strand, frame, attrs, false)
+            .unwrap_err()
+            .kind
     }
 
     #[test]
@@ -261,7 +310,16 @@ mod tests {
     #[test]
     fn whitespace_in_featuretype() {
         assert_eq!(
-            err_kind("chr1", "exon foo", Some(1), Some(10), ".", "+", ".", b"ID=x"),
+            err_kind(
+                "chr1",
+                "exon foo",
+                Some(1),
+                Some(10),
+                ".",
+                "+",
+                ".",
+                b"ID=x"
+            ),
             ErrorKind::InvalidFeaturetype,
         );
     }

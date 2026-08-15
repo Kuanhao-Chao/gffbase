@@ -16,43 +16,67 @@
 # ---------------------------------------------------------------------------
 """gffbase — modernized successor to gffutils.
 
-Phase 5: full drop-in public API surface (FeatureDB, Feature, create_db,
-DataIterator, GFFWriter, exceptions) on top of the Phase 4 DuckDB ingestion
-engine.
+The full drop-in public API surface -- FeatureDB, Feature, create_db,
+DataIterator, GFFWriter and the exception hierarchy -- on top of a DuckDB
+ingestion engine fed by a Rust parser.
 """
 
 from gffbase.exceptions import (
     AttributeStringError,
+    ClosedDatabaseError,
     DuplicateIDError,
     EmptyInputError,
     FeatureNotFoundError,
+    MultipartConstraintError,
+    ReadOnlyError,
+    SchemaVersionError,
+)
+from gffbase.exceptions import (
     GFFFormatError as _PyGFFFormatError,
 )
 
-# Phase 16: prefer the Rust-defined exception class when the extension
+# Prefer the Rust-defined exception class when the extension
 # is loaded — that's the type Rust will actually raise. Fall back to
 # the pure-Python definition otherwise. Both inherit from `ValueError`
 # so legacy `pytest.raises(ValueError)` callers keep working.
 try:  # pragma: no cover — import-time branch
-    from gffbase._native import GFFFormatError  # type: ignore[attr-defined]
+    from gffbase._native import GFFFormatError
 except ImportError:
-    GFFFormatError = _PyGFFFormatError  # type: ignore[assignment]
-from gffbase.feature import Feature, ParsedFeature
-from gffbase.parser import parse_gff, parse_bytes, detect_dialect, native_available
-from gffbase import ingest
-from gffbase import merge_criteria
-from gffbase.helpers import example_filename
-from gffbase.gffwriter import GFFWriter
-from gffbase.iterators import DataIterator
-from gffbase.interface import FeatureDB
+    GFFFormatError = _PyGFFFormatError
+# The compatibility submodules are bound on the package namespace because
+# gffutils binds them, and the documented one-line migration is
+# `import gffbase as gffutils`. Without these, `gffutils.constants.
+# always_return_list = True` -- a documented gffutils idiom -- raises
+# AttributeError on a package that advertises itself as a drop-in.
+#
+# Cheap: every one of these is a small pure-Python module with no heavy
+# imports, and `interface` already pulls most of them in transitively.
+from gffbase import (
+    attributes,
+    bins,
+    constants,
+    create,
+    ingest,
+    merge_criteria,
+)
 from gffbase.create_db import create_db
+from gffbase.feature import Feature, FeatureSegment, MultipartFeature, ParsedFeature
+from gffbase.gffwriter import GFFWriter
+from gffbase.helpers import example_filename
+from gffbase.interface import FeatureDB
+from gffbase.iterators import DataIterator
+from gffbase.migrate import coalesce_multipart, migrate_v1_to_v2
+from gffbase.parser import detect_dialect, native_available, parse_bytes, parse_gff
 from gffbase.sqlite_export import export_sqlite
+from gffbase.validate import ValidationError, validate_db
 
 __all__ = [
     # Drop-in legacy surface
     "create_db",
     "FeatureDB",
     "Feature",
+    "FeatureSegment",
+    "MultipartFeature",
     "DataIterator",
     "GFFWriter",
     "example_filename",
@@ -61,6 +85,14 @@ __all__ = [
     "AttributeStringError",
     "EmptyInputError",
     "GFFFormatError",
+    "SchemaVersionError",
+    "MultipartConstraintError",
+    "ReadOnlyError",
+    "ClosedDatabaseError",
+    "ValidationError",
+    "validate_db",
+    "migrate_v1_to_v2",
+    "coalesce_multipart",
     "merge_criteria",
     # gffbase extras
     "ParsedFeature",
@@ -70,7 +102,19 @@ __all__ = [
     "native_available",
     "ingest",
     "export_sqlite",
+    # Compatibility submodules, bound so `import gffbase as gffutils` gives
+    # the same attribute access the oracle does.
+    "attributes",
+    "bins",
+    "constants",
+    "create",
+    "version",
     "__version__",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+
+# Imported LAST, and deliberately: `gffbase.version` re-exports `__version__`
+# from this module, so importing it any earlier is a circular import against a
+# partially-initialized package.
+from gffbase import version  # noqa: E402  (must follow __version__)

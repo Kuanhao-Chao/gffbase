@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from gffbase import FeatureDB, create_db
 from gffbase.ingest import from_file
 
@@ -67,6 +66,7 @@ def test_children_filter_by_featuretype(hier_db):
 
 def test_children_returns_generator(hier_db):
     import types
+
     assert isinstance(hier_db.children("g1"), types.GeneratorType)
     assert isinstance(hier_db.parents("e1"), types.GeneratorType)
 
@@ -92,7 +92,7 @@ def test_dynamic_cte_when_level_exceeds_max_depth():
     # so g1 -> n3 lives at depth 4.
     for nid in ("n1", "n2", "n3"):
         con.execute(
-            "INSERT INTO features (id, seqid, source, featuretype, start, \"end\", "
+            'INSERT INTO features (id, seqid, source, featuretype, start, "end", '
             "score, strand, frame, attributes_blob, extra_blob, file_order, is_synthetic) "
             "VALUES (?, 'chr1', 'test', 'leaf', 100, 200, '.', '+', '.', NULL, NULL, NULL, FALSE)",
             [nid],
@@ -119,7 +119,7 @@ def test_dynamic_cte_when_level_none_with_overflow():
     db = FeatureDB((con, stats))
     for nid in ("n1", "n2", "n3"):
         con.execute(
-            "INSERT INTO features (id, seqid, source, featuretype, start, \"end\", "
+            'INSERT INTO features (id, seqid, source, featuretype, start, "end", '
             "score, strand, frame, attributes_blob, extra_blob, file_order, is_synthetic) "
             "VALUES (?, 'chr1', 'test', 'leaf', 100, 200, '.', '+', '.', NULL, NULL, NULL, FALSE)",
             [nid],

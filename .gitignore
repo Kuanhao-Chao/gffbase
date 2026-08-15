@@ -31,9 +31,11 @@ wheels/
 
 # --- Rust ---------------------------------------------------------------
 target/
-# Cargo.lock IS committed for binary crates; we ship a cdylib so omit it
-# (regenerated deterministically per maturin build).
-Cargo.lock
+# `rust/Cargo.lock` IS committed. We ship a cdylib, but the wheel we publish is
+# a binary artifact: without a lock file, dependency resolution varies by build
+# time and platform, which is exactly what the declared MSRV is supposed to
+# rule out. `MANIFEST.in` and `rust/Cargo.toml` both already claimed it was
+# shipped; now it actually is.
 # Rust analyzer / IDE leftovers.
 **/*.rs.bk
 
@@ -71,17 +73,46 @@ Cargo.lock
 *.gtf.gz
 
 # Re-include the small curated test fixtures so they stay versioned.
+#
+# These negations must reach the WHOLE tree, not just its top level. The
+# previous form was `!tests/data/*.gff3` + `!tests/data/*.gtf`, and `*` does
+# not cross a `/` -- so every fixture under `tests/data/upstream/` and
+# `tests/data/v1/` stayed ignored. Twenty-three files the differential suite
+# depends on existed only on the machine that created them: a fresh clone or a
+# CI runner could not run the parity suite at all, and because
+# `differential.fixture()` called `pytest.skip` on a missing file rather than
+# failing, the whole compatibility gate reported green while testing almost
+# nothing.
+#
+# The corpus is 716 KB in total, so vendoring all of it costs nothing and
+# removes an entire class of "works on my machine".
 !tests/
 !tests/data/
-!tests/data/*.gff3
-!tests/data/*.gtf
+!tests/data/**
+
+# ...but not the bytecode cache, which the negation above would otherwise
+# re-include (later rules win in gitignore).
+tests/data/**/__pycache__/
 
 # --- Bench / scratch artifacts -----------------------------------------
-bench/data/
-bench/out/
+# `benchmarks/data/` holds multi-GB downloads and `benchmarks/out/` holds the
+# multi-GB databases a run builds; neither belongs in git.
 benchmarks/data/
 benchmarks/out/
 *.log
+
+# ...but `benchmarks/results/` IS committed, deliberately.
+#
+# The published performance tables have to be checkable against something. A
+# number whose only evidence is a gitignored file on the machine that produced
+# it cannot be verified by a reader, cannot be diffed across releases, and
+# cannot be regenerated into documentation by a script -- which is how the
+# 0.1.0 tables came to mix two GENCODE releases without anyone noticing. These
+# are small JSON digests plus the archived 0.1.0 record, not raw databases.
+!benchmarks/results/
+!benchmarks/results/**
+# The negations above would otherwise re-include bytecode.
+benchmarks/results/**/__pycache__/
 
 # --- Planning docs (local working notes; not pushed) -------------------
 plans/

@@ -1,0 +1,42 @@
+
+=== 01_ingest.py --reuse-cached --legacy-timeout 7200 ===
+[ingest] gffbase ingest (subprocess)…
+  wall=3 min 45.8 s, RSS=1.45 GB, disk=2.73 GB
+[ingest] legacy gffutils ingest (subprocess)…
+  wall=59 min 42.0 s, RSS=145.77 MB, disk=1.79 GB
+
+Results → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/01_ingest.json
+Speedup = 15.87× (gffbase faster)
+
+=== 02_spatial.py --n-queries 5000 ===
+[spatial] sampling 5000 random regions…
+  sampled 5000 regions
+[spatial] gffbase R-tree path…
+  wall=5.87 s, qps=852, p50=0.72ms, p95=2.67ms
+[spatial] gffbase B-tree fallback path…
+  wall=8.11 s, qps=617, p50=1.27ms, p95=3.05ms
+[spatial] legacy gffutils.region…
+  wall=30.58 s, qps=164, p50=6.01ms, p95=12.00ms
+
+Results → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/02_spatial.json
+
+=== 03_relational.py --n-genes 500 ===
+[relational] sampling 500 common gene IDs…
+  sampled 500 genes
+[relational] gffbase auto-routed (closure cache by default)…
+  wall=7.30 s, qps=68.5, descendants=14995
+[relational] gffbase forced dynamic CTE…
+  wall=6.20 s, qps=80.6, descendants=14995
+[relational] legacy gffutils.children(level=None)…
+  wall=700.3 ms, qps=714.0, descendants=14578
+
+Results → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/03_relational.json
+
+=== 04_disk.py  ===
+[disk] gffbase .duckdb = 2.73 GB
+[disk] legacy .sqlite  = 1.79 GB
+[disk] gffbase / legacy = 1.52× 
+
+Results → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/04_disk.json
+
+Aggregated → /Users/chaokuan-hao/Documents/Projects/gff/gffbase/benchmarks/out/results.json

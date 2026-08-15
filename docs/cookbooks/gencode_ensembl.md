@@ -10,6 +10,7 @@ need.
 
 ## 1. Ingest
 
+<!-- docs-test: skip reason="needs the GENCODE v49 corpus (~90 MB download)" -->
 ```python
 from gffbase import create_db
 
@@ -31,6 +32,7 @@ Bottleneck"* — for why this matters.)
 
 ## 2. Walk a single gene's hierarchy
 
+<!-- docs-test: skip reason="illustrative: uses a real accession id, not in the test fixtures" -->
 ```python
 gene = db["ENSG00000139618"]                # BRCA2
 print(gene.featuretype, gene.start, gene.end)
@@ -68,6 +70,7 @@ print(f"{len(rows):,} protein-coding genes")
 
 ## 4. BED12 export for genome-browser tracks
 
+<!-- docs-test: skip reason="writes a genome-browser track from the GENCODE corpus" -->
 ```python
 with open("gencode.bed", "w") as fout:
     for tx in db.features_of_type("transcript", limit="chr1"):
@@ -93,7 +96,7 @@ print(table.num_rows, "exons,", len(table.column_names), "columns")
 
 | Task | Wall | Source |
 |---|---|---|
-| Full ingest (6.07 M lines) | ~277 s | `PERFORMANCE_COMPARISON.md` §0 |
+| Full ingest (6.07 M lines) | see [Performance](../performance.md) | measured per release |
 | `children(g, level=1)` (single gene) | <1 ms | materialized closure cache |
-| 50 000 × `children_batched()` | 1.16 s | `PERFORMANCE_COMPARISON.md` §4b |
+| Bulk `children_batched()` | see [Performance](../performance.md) | measured per release |
 | Random `region(seqid:start-end)` | ~0.7 ms | R-tree path |

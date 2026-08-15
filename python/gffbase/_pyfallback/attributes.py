@@ -22,12 +22,11 @@ exactly: returns `(pairs, dialect_observation)` where `pairs` is a list of
 from __future__ import annotations
 
 import urllib.parse
-from typing import Dict, List, Tuple
 
 from gffbase.dialect import default_dialect
 
 
-def parse_attributes(blob: str) -> Tuple[List[Tuple[str, str, int]], Dict]:
+def parse_attributes(blob: str) -> tuple[list[tuple[str, str, int]], dict]:
     obs = default_dialect()
     if not blob:
         return [], obs
@@ -43,9 +42,9 @@ def parse_attributes(blob: str) -> Tuple[List[Tuple[str, str, int]], Dict]:
 
     segments = _split_top_level_semicolons(blob, obs)
 
-    pairs: List[Tuple[str, str, int]] = []
-    keys_seen: Dict[str, int] = {}
-    order: List[str] = []
+    pairs: list[tuple[str, str, int]] = []
+    keys_seen: dict[str, int] = {}
+    order: list[str] = []
     detected_fmt = None
 
     for seg in segments:
@@ -74,8 +73,13 @@ def parse_attributes(blob: str) -> Tuple[List[Tuple[str, str, int]], Dict]:
         if counter > 0:
             obs["repeated keys"] = True
 
+        # `constants.ignore_url_escape_characters` is read per call, not
+        # captured: it is a documented global that callers flip at runtime.
+        from gffbase import constants
+
+        decode = local_fmt == "gff3" and not constants.ignore_url_escape_characters
         for v in multi_values:
-            decoded = urllib.parse.unquote(v) if local_fmt == "gff3" else v
+            decoded = urllib.parse.unquote(v) if decode else v
             pairs.append((key, decoded, counter))
             counter += 1
         keys_seen[key] = counter
@@ -86,8 +90,8 @@ def parse_attributes(blob: str) -> Tuple[List[Tuple[str, str, int]], Dict]:
     return pairs, obs
 
 
-def _split_top_level_semicolons(blob: str, obs: Dict) -> List[str]:
-    out: List[str] = []
+def _split_top_level_semicolons(blob: str, obs: dict) -> list[str]:
+    out: list[str] = []
     start = 0
     in_quotes = False
     for i, ch in enumerate(blob):
@@ -103,7 +107,7 @@ def _split_top_level_semicolons(blob: str, obs: Dict) -> List[str]:
     return out
 
 
-def _split_keyval(seg: str) -> Tuple[str, str, str]:
+def _split_keyval(seg: str) -> tuple[str, str, str]:
     eq = seg.find("=")
     if eq != -1:
         return seg[:eq].strip(), seg[eq + 1 :].strip(), "="
@@ -114,15 +118,15 @@ def _split_keyval(seg: str) -> Tuple[str, str, str]:
     return seg.strip(), "", "="
 
 
-def _strip_quotes(s: str) -> Tuple[str, bool]:
+def _strip_quotes(s: str) -> tuple[str, bool]:
     s = s.strip()
     if len(s) >= 2 and s.startswith('"') and s.endswith('"'):
         return s[1:-1], True
     return s, False
 
 
-def _split_unquoted_commas(s: str) -> List[str]:
-    out: List[str] = []
+def _split_unquoted_commas(s: str) -> list[str]:
+    out: list[str] = []
     start = 0
     in_quotes = False
     for i, ch in enumerate(s):
