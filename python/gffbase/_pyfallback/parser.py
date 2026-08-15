@@ -83,8 +83,34 @@ def _open(path: str):
     return open(path, encoding="utf-8", newline="")
 
 
+def _decode_error(err: UnicodeDecodeError, line_no: int):
+    """Turn a raw `UnicodeDecodeError` into the parser's own error type.
+
+    The Rust engine reports invalid UTF-8 as a `GFFFormatError` naming the
+    line. Letting the fallback surface Python's own exception instead made the
+    two engines distinguishable, and cost the reader the line number -- the
+    only part of the message that helps you find the byte.
+    """
+    return _make_error(
+        f"line {line_no}: attribute column is not valid UTF-8",
+        line_no,
+        "InvalidAttribute",
+    )
+
+
 def _iter_lines(stream) -> Iterator[str]:
-    for line in stream:
+    # Every read in the fallback funnels through here, which is why the decode
+    # guard lives here rather than at each call site. Text-mode decoding is
+    # lazy, so the `UnicodeDecodeError` surfaces on iteration, not on open().
+    line_no = 0
+    while True:
+        line_no += 1
+        try:
+            line = next(stream)
+        except StopIteration:
+            return
+        except UnicodeDecodeError as err:
+            raise _decode_error(err, line_no) from err
         if line.endswith("\n"):
             line = line[:-1]
         if line.endswith("\r"):
@@ -183,18 +209,34 @@ def _validate(
     return None
 
 
+#: The range a DuckDB BIGINT can hold, which is where coordinates are stored.
+_I64_MIN = -(2**63)
+_I64_MAX = 2**63 - 1
+
+
 def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
     """Returns the int, or raises GFFFormatError with structured info."""
     if s == "." or s == "":
         return None
     try:
-        return int(s)
+        value = int(s)
     except ValueError as err:
         raise _make_error(
             f"line {line_no}: {which} coordinate is not an integer: {s!r}",
             line_no,
             "InvalidCoordinate",
         ) from err
+    # Python ints are unbounded; the column they land in is a DuckDB BIGINT.
+    # Without this the fallback accepted a 20-digit coordinate that the Rust
+    # engine rejects, and deferred the failure to INSERT time -- a confusing
+    # error, far from the line that caused it, and only on one engine.
+    if not (_I64_MIN <= value <= _I64_MAX):
+        raise _make_error(
+            f"line {line_no}: {which} coordinate is not an integer: {s!r}",
+            line_no,
+            "InvalidCoordinate",
+        )
+    return value
 
 
 def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):

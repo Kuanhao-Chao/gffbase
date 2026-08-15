@@ -332,3 +332,37 @@ def test_set_pragmas_is_allowed_read_only(dbpath):
         db.set_pragmas({"threads": 1})
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Path validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("entry", ["FeatureDB", "create_db"])
+def test_a_nul_byte_in_the_path_is_refused_before_anything_is_created(tmp_path, entry):
+    r"""Path truncation, and it wrote a file to prove it.
+
+    DuckDB is C++ and takes the path as a C string, so it stops at the first
+    NUL: ``FeatureDB("a\0b.duckdb")`` created a file called ``a`` -- a
+    different path than the caller named. The stray-file cleanup then called
+    ``os.unlink`` with the original path, which raises ``ValueError`` rather
+    than ``OSError``, so it escaped the ``except``, left the truncated file on
+    disk, and replaced the real diagnosis with a confusing one.
+
+    Anything deriving a database path from untrusted input could therefore
+    write to a location it never named.
+    """
+    src = tmp_path / "s.gff3"
+    src.write_text(SRC)
+    bad = str(tmp_path / "a\x00b.duckdb")
+
+    with pytest.raises(ValueError, match="NUL byte"):
+        if entry == "FeatureDB":
+            FeatureDB(bad)
+        else:
+            create_db(str(src), bad, force=True)
+
+    # The truncated path must not exist -- that is the actual vulnerability.
+    assert not (tmp_path / "a").exists()
+    assert list(tmp_path.glob("*.duckdb")) == []

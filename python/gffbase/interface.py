@@ -330,6 +330,21 @@ class FeatureDB:
             # accepted one, so the two entry points disagreed about their own
             # documented type.
             self.dbfn = os.fspath(dbfn)
+            # Reject an embedded NUL before ANY filesystem call. DuckDB is C++
+            # and takes the string as a C string, so it stops at the NUL:
+            # `FeatureDB("a\0b.duckdb")` created a file called `a` -- a
+            # different path than the one asked for. The stray-file cleanup
+            # below then called `os.unlink` with the original path, which
+            # raises `ValueError` rather than `OSError`, so it escaped the
+            # `except` and left the truncated file behind under a confusing
+            # error. Anything building a path from untrusted input could write
+            # to a location the caller never named.
+            if "\x00" in self.dbfn:
+                raise ValueError(
+                    f"database path contains an embedded NUL byte: {self.dbfn!r}. "
+                    "Paths are passed to DuckDB as C strings, which would "
+                    "silently truncate at the NUL and open a different file."
+                )
             # Whether the file was there BEFORE we connected. DuckDB creates a
             # database on connect, so after the call it always exists and the
             # question can no longer be asked -- which is how a typo'd filename
@@ -351,7 +366,10 @@ class FeatureDB:
                 for path in (self.dbfn, self.dbfn + ".wal"):
                     try:
                         os.unlink(path)
-                    except OSError:
+                    except (OSError, ValueError):
+                        # ValueError too: a path Python refuses to even look at
+                        # must not turn best-effort cleanup into the exception
+                        # the caller sees instead of the real diagnosis.
                         pass
                 raise FileNotFoundError(
                     f"no such database: {self.dbfn}. To create one, use "

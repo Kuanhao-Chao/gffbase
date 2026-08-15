@@ -222,7 +222,32 @@ impl RecordIter {
             if line_owned.is_empty() {
                 continue;
             }
-            let line = line_owned.as_slice();
+            // Trim the trailing \r BEFORE anything inspects the line. It used
+            // to happen further down, after directive handling had already
+            // run, so on a CRLF file every directive was stored with a
+            // trailing \r -- `##sequence-region chr1 1 1000\r` -- while the
+            // Python fallback, which reads with universal newlines, stored it
+            // clean. The two engines are supposed to be indistinguishable.
+            let line = trim_cr(line_owned.as_slice());
+            if line.is_empty() {
+                continue;
+            }
+            // Validate UTF-8 once, for the whole line, before any field is
+            // read. Doing it per-field meant each field chose its own failure
+            // mode: the attribute blob silently became "" (dropping every
+            // attribute on the line, ID included), while seqid and
+            // featuretype went through `from_utf8_lossy` and silently became
+            // U+FFFD -- a chromosome name that matches nothing, with no
+            // warning. The Python fallback decodes the whole line at read
+            // time, so a line-level check is also what makes the two engines
+            // agree.
+            if std::str::from_utf8(line).is_err() {
+                return Some(Err(GffError::new(
+                    self.line_no,
+                    ErrorKind::InvalidAttribute,
+                    "line is not valid UTF-8".to_string(),
+                )));
+            }
             // Directive / comment handling.
             if line.starts_with(b"##") {
                 let s = std::str::from_utf8(line).unwrap_or("").to_string();
@@ -247,9 +272,8 @@ impl RecordIter {
             if line.starts_with(b"#") {
                 continue;
             }
-            // Trim trailing \r (Windows files).
-            let line = trim_cr(line);
-            // Tab split.
+            // Tab split. (`line` was \r-trimmed above, before any path
+            // inspected it.)
             let mut fields = split_tabs(line);
             if fields.len() < 9 {
                 let err = GffError::new(
@@ -391,6 +415,8 @@ impl Iterator for RecordIter {
                 self.warnings.push(e);
             }
 
+            // Safe: the whole line was UTF-8 validated before any field was
+            // read, so the blob -- a slice of it -- is valid too.
             let blob_str = std::str::from_utf8(&blob).unwrap_or("");
             let (pairs, _obs) = parse_attributes(blob_str);
             // Post-parse attribute structure check (handles both GFF3 and
