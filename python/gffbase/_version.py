@@ -14,21 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ---------------------------------------------------------------------------
-"""Version, under the name gffutils exposes it.
+"""Public Python package version."""
 
-The single source of truth is `gffbase._version.__version__`. This module
-re-exports the public package value rather than restating it, so the two
-cannot drift -- `tests/test_release_hygiene.py` already pins that literal
-against `pyproject.toml` and `Cargo.toml`.
+__version__ = "0.2.0rc1"
 
-Unlike the oracle's, this does NOT consult installed distribution metadata.
-Doing so is what makes `gffutils.version.version` report some unrelated
-installed copy's version when run from a source checkout -- the reason the
-parity manifest pins its oracle by git commit rather than by version string.
-"""
-
-from __future__ import annotations
-
-from gffbase._version import __version__ as version
-
-__all__ = ["version"]
+__all__ = ["__version__"]

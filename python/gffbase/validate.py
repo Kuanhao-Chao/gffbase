@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-import duckdb
+from duckdb import Error as DuckDBError
 
 _log = logging.getLogger("gffbase.validate")
 
@@ -78,6 +78,8 @@ class ValidationReport:
 
     level: str
     checked: list[str] = field(default_factory=list)
+    #: Machine-stable invariant identifiers corresponding to ``checked``.
+    checked_ids: list[str] = field(default_factory=list)
     violations: list[Violation] = field(default_factory=list)
     #: Checks skipped because the database predates the structure they test.
     skipped: list[str] = field(default_factory=list)
@@ -131,10 +133,13 @@ class ValidationError(AssertionError):
 # ---------------------------------------------------------------------------
 
 
-def _count(con, sql: str) -> tuple[int, tuple]:
+def _count(con, sql: str, params=None) -> tuple[int, tuple]:
     """Run an offender-listing query; return how many and a few examples."""
-    rows = con.execute(sql).fetchall()
-    return len(rows), tuple(rows[:_EXAMPLE_LIMIT])
+    offender_sql = sql.strip().rstrip(";")
+    params = [] if params is None else params
+    count = con.execute(f"SELECT COUNT(*) FROM ({offender_sql}) offenders", params).fetchone()[0]
+    examples = con.execute(f"{offender_sql} LIMIT {_EXAMPLE_LIMIT}", params).fetchall()
+    return int(count), tuple(examples)
 
 
 def _inv1_unique_ids(con):
@@ -304,33 +309,105 @@ def _inv10_attribute_dedup_consistent(con):
 
 
 def _inv11_closure_sound(con):
-    """No self-ancestry, no non-positive depth, and depth 1 is exactly `edges`.
-
-    A cycle makes the recursive fallback non-terminating, and a depth-1 row
-    with no matching edge means the closure and the edges disagree about the
-    hierarchy -- which shows up as `children()` and `parents()` contradicting
-    each other.
-    """
+    """Cheap closure sanity plus exact depth-one edge/cache agreement."""
     return _count(
         con,
         """
-        SELECT ancestor, descendant, depth, reason FROM (
-            SELECT ancestor, descendant, depth, 'non-positive depth' AS reason
-            FROM closure WHERE depth < 1
-            UNION ALL
-            SELECT c.ancestor, c.descendant, c.depth, 'depth-1 row with no edge'
-            FROM closure c WHERE c.depth = 1
-              AND NOT EXISTS (SELECT 1 FROM edges e
-                              WHERE e.parent = c.ancestor AND e.child = c.descendant)
-            UNION ALL
-            -- A duplicate row means `children(x, level=n)` returns the same
-            -- feature once per path to it. GFF3 permits a DAG, so this is
-            -- reachable from ordinary data, and gffutils cannot hit it because
-            -- its relations table is keyed on exactly this triple.
-            SELECT ancestor, descendant, depth, 'duplicate closure row'
-            FROM closure GROUP BY ancestor, descendant, depth HAVING COUNT(*) > 1
+        WITH expected AS (
+            SELECT DISTINCT parent AS ancestor, child AS descendant FROM edges
+        ),
+        actual AS (
+            SELECT ancestor, descendant FROM closure WHERE depth = 1
+        ),
+        missing AS (
+            SELECT * FROM expected EXCEPT SELECT * FROM actual
+        ),
+        extra AS (
+            SELECT * FROM actual EXCEPT SELECT * FROM expected
+        ),
+        duplicate AS (
+            SELECT ancestor, descendant, depth
+            FROM closure
+            GROUP BY ancestor, descendant, depth
+            HAVING COUNT(*) > 1
+        ),
+        nonpositive AS (
+            SELECT ancestor, descendant, depth
+            FROM closure
+            WHERE depth <= 0
         )
+        SELECT ancestor, descendant, 1 AS depth, 'missing closure row' AS reason FROM missing
+        UNION ALL
+        SELECT ancestor, descendant, 1 AS depth, 'extra depth-one closure row' FROM extra
+        UNION ALL
+        SELECT ancestor, descendant, depth, 'duplicate closure row' FROM duplicate
+        UNION ALL
+        SELECT ancestor, descendant, depth, 'non-positive closure depth' FROM nonpositive
         """,
+    )
+
+
+def _inv11_exact_closure(con):
+    """The stored closure must equal a fresh traversal of ``edges``.
+
+    Checking only that stored depth-1 rows have an edge misses the more
+    dangerous direction: a deleted depth-1 row, a missing transitive row, or a
+    fabricated deeper row all leave plausible but wrong hierarchy answers.
+    Recomputing with the same depth budget and path-local cycle guard as ingest
+    catches missing, extra and wrong-depth rows without mutating the database.
+    """
+    depth_row = None
+    if _has_table(con, "meta"):
+        depth_row = con.execute("SELECT value FROM meta WHERE key = 'max_depth'").fetchone()
+    if depth_row is not None:
+        max_depth = int(depth_row[0])
+    else:
+        # Pre-metadata/v1 databases cannot tell us the configured ceiling.
+        # Recompute at least direct edges and as far as their stored cache did,
+        # avoiding claims about depths the database may never have promised.
+        row = con.execute("SELECT MAX(depth) FROM closure WHERE depth > 0").fetchone()
+        max_depth = max(1, int(row[0])) if row and row[0] is not None else 1
+
+    return _count(
+        con,
+        """
+        WITH RECURSIVE walk(ancestor, descendant, depth) AS (
+            SELECT DISTINCT parent, child, 1 FROM edges
+            UNION
+            SELECT w.ancestor, e.child, w.depth + 1
+            FROM walk w
+            JOIN edges e ON e.parent = w.descendant
+            WHERE w.depth < ? AND w.ancestor <> e.child
+        ),
+        expected AS (
+            SELECT ancestor, descendant, MIN(depth) AS depth
+            FROM walk GROUP BY ancestor, descendant
+        ),
+        actual AS (
+            SELECT ancestor, descendant, depth FROM closure
+        ),
+        missing AS (
+            SELECT * FROM expected EXCEPT SELECT * FROM actual
+        ),
+        extra AS (
+            SELECT * FROM actual EXCEPT SELECT * FROM expected
+        ),
+        duplicate AS (
+            SELECT ancestor, descendant, depth
+            FROM closure
+            GROUP BY ancestor, descendant, depth
+            HAVING COUNT(*) > 1
+        )
+        SELECT ancestor, descendant, depth, 'missing closure row' AS reason
+        FROM missing
+        UNION ALL
+        SELECT ancestor, descendant, depth, 'extra or wrong-depth closure row'
+        FROM extra
+        UNION ALL
+        SELECT ancestor, descendant, depth, 'duplicate closure row'
+        FROM duplicate
+        """,
+        [max_depth],
     )
 
 
@@ -392,6 +469,70 @@ def _inv14_file_order_is_first_segment(con):
     )
 
 
+def _inv15_no_orphan_attributes(con):
+    """Every normalized attribute row belongs to a logical feature."""
+    return _count(
+        con,
+        """
+        SELECT a.feature_id, a.key, a.value
+        FROM attributes a
+        LEFT JOIN features f ON f.id = a.feature_id
+        WHERE f.id IS NULL
+        """,
+    )
+
+
+def _inv15a_attribute_segments_resolve(con):
+    """Segment-qualified attributes point at an existing physical segment."""
+    return _count(
+        con,
+        """
+        SELECT a.feature_id, a.key, a.value, a.seg_idx
+        FROM attributes a
+        JOIN features f ON f.id = a.feature_id
+        WHERE a.seg_idx < 0
+           OR (f.n_segments = 1 AND a.seg_idx <> 0)
+           OR (f.n_segments > 1 AND NOT EXISTS (
+                  SELECT 1 FROM segments s
+                  WHERE s.feature_id = a.feature_id AND s.seg_idx = a.seg_idx
+              ))
+        """,
+    )
+
+
+def _inv16_gtf_hierarchy_coherent(con):
+    """GTF edges share a locus; inferred parents additionally enclose children."""
+    return _count(
+        con,
+        """
+        SELECT p.id, c.id, p.seqid, c.seqid, p.strand, c.strand,
+               p.start, p."end", c.start, c."end",
+               CASE
+                 WHEN NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')
+                        OR (p.featuretype = 'transcript'
+                            AND c.featuretype NOT IN ('gene', 'transcript')))
+                   THEN 'disallowed GTF edge types'
+                 WHEN p.seqid IS DISTINCT FROM c.seqid THEN 'different seqid'
+                 WHEN p.strand IS DISTINCT FROM c.strand THEN 'different strand'
+                 ELSE 'parent does not enclose child'
+               END AS reason
+        FROM edges e
+        JOIN features p ON p.id = e.parent
+        JOIN features c ON c.id = e.child
+        WHERE (((SELECT value FROM meta WHERE key = 'fmt') = 'gtf'
+                AND (NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')
+                       OR (p.featuretype = 'transcript'
+                           AND c.featuretype NOT IN ('gene', 'transcript')))
+                  OR p.seqid IS DISTINCT FROM c.seqid
+                  OR p.strand IS DISTINCT FROM c.strand))
+            OR (p.is_synthetic = TRUE
+                AND (p.start IS NULL OR p."end" IS NULL
+                  OR c.start IS NULL OR c."end" IS NULL
+                  OR p.start > c.start OR p."end" < c."end")))
+        """,
+    )
+
+
 #: (number, name, severity, function, requires_segments)
 _CHECKS = (
     ("INV-1", "unique_ids", ERROR, _inv1_unique_ids, False),
@@ -408,6 +549,21 @@ _CHECKS = (
     ("INV-11b", "closure_self_ancestry", WARNING, _inv11b_no_self_ancestry, False),
     ("INV-13", "conflicts_resolve", ERROR, _inv13_conflicts_resolve, True),
     ("INV-14", "file_order_is_first_segment", ERROR, _inv14_file_order_is_first_segment, True),
+    ("INV-15", "no_orphan_attributes", ERROR, _inv15_no_orphan_attributes, False),
+    (
+        "INV-15a",
+        "attribute_segments_resolve",
+        ERROR,
+        _inv15a_attribute_segments_resolve,
+        True,
+    ),
+    (
+        "INV-16",
+        "gtf_hierarchy_coherent",
+        ERROR,
+        _inv16_gtf_hierarchy_coherent,
+        False,
+    ),
 )
 
 _DETAILS = {
@@ -422,9 +578,16 @@ _DETAILS = {
     "seqid_map_complete": "seqid missing from seqid_map, or its band disagrees",
     "attribute_dedup_consistent": "attribute rows disagree with attrs_same_as_seg0",
     "closure_sound": "closure is mis-depthed or disagrees with edges",
+    "closure_exact": "recursive closure is not exactly the traversal of edges",
     "closure_self_ancestry": "a feature is its own ancestor",
     "conflicts_resolve": "recorded id resolution points at a missing feature",
     "file_order_is_first_segment": "file_order is not the first segment's",
+    "no_orphan_attributes": "attribute rows whose feature no longer exists",
+    "attribute_segments_resolve": "attribute rows whose physical segment no longer exists",
+    "gtf_hierarchy_coherent": (
+        "GTF parent and child disagree on locus/strand, or a synthetic parent "
+        "does not enclose its child"
+    ),
     "attributes_reparse": "re-parsing attributes_blob does not reproduce the attributes rows",
 }
 
@@ -440,12 +603,15 @@ def _inv12_attributes_reparse(con, sample: int):
     """
     from gffbase.feature import _LazyAttributes
 
-    rows = con.execute(
+    sql = (
         "SELECT id, CAST(attributes_blob AS BLOB) FROM features "
         "WHERE attributes_blob IS NOT NULL AND is_synthetic = FALSE "
-        "ORDER BY file_order LIMIT ?",
-        [sample],
-    ).fetchall()
+        "ORDER BY file_order"
+    )
+    if sample is None:
+        rows = con.execute(sql).fetchall()
+    else:
+        rows = con.execute(f"{sql} LIMIT ?", [sample]).fetchall()
     offenders = []
     for fid, blob in rows:
         stored: dict[str, list[str]] = {}
@@ -488,7 +654,7 @@ def validate_db(
     level: str = "fast",
     *,
     raise_on_error: bool = False,
-    sample: int = 200,
+    sample: int | None = 200,
 ) -> ValidationReport:
     """Check a database's structural invariants.
 
@@ -502,6 +668,8 @@ def validate_db(
     """
     if level not in LEVELS:
         raise ValueError(f"level must be one of {LEVELS}; got {level!r}")
+    if sample is not None and (not isinstance(sample, int) or sample < 0):
+        raise ValueError("sample must be a non-negative integer or None")
 
     con = db.conn if hasattr(db, "conn") else db
     report = ValidationReport(level=level)
@@ -518,31 +686,43 @@ def validate_db(
             continue
         try:
             count, examples = fn(con)
-        except duckdb.Error as exc:  # pragma: no cover - a malformed database
+        except (DuckDBError, ValueError, TypeError, OverflowError, UnicodeError) as exc:
+            # Corrupt tables, metadata, and stored blobs must become a report
+            # entry; do not hide programmer errors raised by a check itself.
             report.violations.append(
                 Violation(number, name, severity, 1, f"check could not run: {exc}")
             )
             continue
         report.checked.append(f"{number} ({name})")
+        report.checked_ids.append(number)
         if count:
             report.violations.append(
                 Violation(number, name, severity, count, _DETAILS[name], examples)
             )
 
     if level == "full":
-        count, examples = _inv12_attributes_reparse(con, sample)
-        report.checked.append("INV-12 (attributes_reparse)")
-        if count:
-            report.violations.append(
-                Violation(
-                    "INV-12",
-                    "attributes_reparse",
-                    ERROR,
-                    count,
-                    _DETAILS["attributes_reparse"],
-                    examples,
+        for number, stable_id, name, fn in (
+            ("INV-11 exact", "INV-11-exact", "closure_exact", _inv11_exact_closure),
+            (
+                "INV-12",
+                "INV-12",
+                "attributes_reparse",
+                lambda c: _inv12_attributes_reparse(c, sample),
+            ),
+        ):
+            try:
+                count, examples = fn(con)
+            except (DuckDBError, ValueError, TypeError, OverflowError, UnicodeError) as exc:
+                report.violations.append(
+                    Violation(number, name, ERROR, 1, f"check could not run: {exc}")
                 )
-            )
+                continue
+            report.checked.append(f"{number} ({name})")
+            report.checked_ids.append(stable_id)
+            if count:
+                report.violations.append(
+                    Violation(number, name, ERROR, count, _DETAILS[name], examples)
+                )
 
     for violation in report.violations:
         (_log.error if violation.severity == ERROR else _log.warning)("%s", violation)

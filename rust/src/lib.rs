@@ -80,7 +80,10 @@ fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
 
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
+#[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi", ignore_url_escape_characters=false))]
+// Keep the established Python-callable arguments flat; grouping them would
+// change PyO3's public API solely to satisfy an internal lint.
+#[allow(clippy::too_many_arguments)]
 fn parse_file(
     py: Python<'_>,
     path: &str,
@@ -89,6 +92,7 @@ fn parse_file(
     force_gff: bool,
     strict: bool,
     validation: &str,
+    ignore_url_escape_characters: bool,
 ) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
@@ -96,6 +100,7 @@ fn parse_file(
         force_gff,
         strict,
         profile: parse_profile(validation)?,
+        decode_url_escapes: !ignore_url_escape_characters,
     };
     let source = FileSource::open(path)
         .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
@@ -107,7 +112,9 @@ fn parse_file(
 
 /// Parse an in-memory byte buffer. Yields one tuple per feature.
 #[pyfunction]
-#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi"))]
+#[pyo3(signature = (data, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi", ignore_url_escape_characters=false))]
+// See `parse_file`: this is a public PyO3 signature, not an internal API.
+#[allow(clippy::too_many_arguments)]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -116,6 +123,7 @@ fn parse_bytes(
     force_gff: bool,
     strict: bool,
     validation: &str,
+    ignore_url_escape_characters: bool,
 ) -> PyResult<Py<PyAny>> {
     let opts = ParseOptions {
         checklines,
@@ -123,6 +131,7 @@ fn parse_bytes(
         force_gff,
         strict,
         profile: parse_profile(validation)?,
+        decode_url_escapes: !ignore_url_escape_characters,
     };
     let source = FileSource::from_bytes(data.to_vec());
     let iter = RecordIter::new(source, opts)
@@ -146,6 +155,7 @@ fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<Py<
         // the first `checklines` get skipped without poisoning detection.
         strict: false,
         profile: ValidationProfile::Gffutils,
+        decode_url_escapes: true,
     };
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
@@ -228,7 +238,7 @@ fn record_to_pytuple(py: Python<'_>, rec: &parser::Record) -> PyResult<Py<PyAny>
 
     let pairs = PyList::empty(py);
     for (k, v, idx) in &rec.attributes_pairs {
-        // `idx` stays an int: the Python side stores it in a SMALLINT column
+        // `idx` stays an int: the Python side stores it in an INTEGER column
         // and orders multi-valued attributes by it.
         pairs.append(PyTuple::new(
             py,
@@ -283,12 +293,20 @@ fn dialect_to_pydict(py: Python<'_>, d: &dialect::Dialect) -> PyResult<Py<PyAny>
     Ok(dict.into_any().unbind())
 }
 
+fn public_version() -> String {
+    let cargo_version = env!("CARGO_PKG_VERSION");
+    match cargo_version.split_once("-rc.") {
+        Some((release, candidate)) => format!("{}rc{}", release, candidate),
+        None => cargo_version.to_string(),
+    }
+}
+
 #[pymodule]
 fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(detect_dialect, m)?)?;
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add("__version__", public_version())?;
     // Phase 16 — expose the descriptive Python exception type.
     m.add("GFFFormatError", py.get_type::<GFFFormatError>())?;
     Ok(())

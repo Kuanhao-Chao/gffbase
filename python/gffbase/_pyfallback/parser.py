@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import gzip
 import io
+import math
+import unicodedata
 from collections.abc import Iterator
 
 from gffbase._pyfallback.attributes import parse_attributes
@@ -79,8 +81,8 @@ GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise s
 
 def _open(path: str):
     if path.endswith(".gz"):
-        return gzip.open(path, "rt", encoding="utf-8", newline="")
-    return open(path, encoding="utf-8", newline="")
+        return gzip.open(path, "rb")
+    return open(path, "rb")
 
 
 def _decode_error(err: UnicodeDecodeError, line_no: int):
@@ -92,25 +94,30 @@ def _decode_error(err: UnicodeDecodeError, line_no: int):
     only part of the message that helps you find the byte.
     """
     return _make_error(
-        f"line {line_no}: attribute column is not valid UTF-8",
+        f"line {line_no}: line is not valid UTF-8",
         line_no,
         "InvalidAttribute",
     )
 
 
-def _iter_lines(stream) -> Iterator[str]:
+def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
     # Every read in the fallback funnels through here, which is why the decode
     # guard lives here rather than at each call site. Text-mode decoding is
     # lazy, so the `UnicodeDecodeError` surfaces on iteration, not on open().
-    line_no = 0
     while True:
-        line_no += 1
         try:
             line = next(stream)
         except StopIteration:
             return
-        except UnicodeDecodeError as err:
-            raise _decode_error(err, line_no) from err
+        if isinstance(line, bytes):
+            try:
+                line = line.decode("utf-8", errors="strict")
+            except UnicodeDecodeError as err:
+                # Yield the error rather than raising it here. The outer parser
+                # owns the physical line counter and the strict/warn policy,
+                # and a binary line stream remains usable after one bad line.
+                yield err
+                continue
         if line.endswith("\n"):
             line = line[:-1]
         if line.endswith("\r"):
@@ -130,82 +137,250 @@ def _validate(
     frame: str,
     n_pairs: int,
     blob: str,
-) -> Exception | None:
+    is_gtf: bool,
+) -> list[Exception]:
     """Mirror of `validate.rs::validate_fields` + `validate_attributes_pairs`."""
+    errors: list[Exception] = []
     if not seqid:
-        return _make_error(
-            f"line {line_no}: seqid (col 1) is empty",
-            line_no,
-            "EmptySeqid",
+        errors.append(
+            _make_error(
+                f"line {line_no}: seqid (col 1) is empty",
+                line_no,
+                "EmptySeqid",
+            )
         )
     if not featuretype:
-        return _make_error(
-            f"line {line_no}: featuretype (col 3) is empty",
-            line_no,
-            "EmptyFeaturetype",
+        errors.append(
+            _make_error(
+                f"line {line_no}: featuretype (col 3) is empty",
+                line_no,
+                "EmptyFeaturetype",
+            )
         )
-    if any(ch.isspace() for ch in featuretype):
-        return _make_error(
-            f"line {line_no}: featuretype contains whitespace: {featuretype!r}",
-            line_no,
-            "InvalidFeaturetype",
+    if any(_is_token_whitespace_or_control(ch) for ch in featuretype):
+        errors.append(
+            _make_error(
+                f"line {line_no}: featuretype contains whitespace: {featuretype!r}",
+                line_no,
+                "InvalidFeaturetype",
+            )
         )
-    if start is not None and start < 1:
-        return _make_error(
-            f"line {line_no}: start coordinate must be >= 1 (got {start})",
-            line_no,
-            "InvalidCoordinate",
+    if start is None:
+        errors.append(
+            _make_error(
+                f"line {line_no}: start coordinate must be a positive integer; got '.'",
+                line_no,
+                "InvalidCoordinate",
+            )
         )
-    if start is not None and end is not None and end < start:
-        return _make_error(
-            f"line {line_no}: end < start ({end} < {start})",
-            line_no,
-            "InvalidCoordinate",
+    elif start < 1:
+        errors.append(
+            _make_error(
+                f"line {line_no}: start coordinate must be >= 1 (got {start})",
+                line_no,
+                "InvalidCoordinate",
+            )
+        )
+    if end is None:
+        errors.append(
+            _make_error(
+                f"line {line_no}: end coordinate must be a positive integer; got '.'",
+                line_no,
+                "InvalidCoordinate",
+            )
+        )
+    elif end < 1:
+        errors.append(
+            _make_error(
+                f"line {line_no}: end coordinate must be >= 1 (got {end})",
+                line_no,
+                "InvalidCoordinate",
+            )
+        )
+    elif start is not None and start > 0 and end < start:
+        errors.append(
+            _make_error(
+                f"line {line_no}: end < start ({end} < {start})",
+                line_no,
+                "InvalidCoordinate",
+            )
         )
     if strand not in ("+", "-", "?", "."):
-        return _make_error(
-            f"line {line_no}: strand must be one of '+', '-', '?', '.'; got {strand!r}",
-            line_no,
-            "InvalidStrand",
+        errors.append(
+            _make_error(
+                f"line {line_no}: strand must be one of '+', '-', '?', '.'; got {strand!r}",
+                line_no,
+                "InvalidStrand",
+            )
         )
     if frame not in (".", "0", "1", "2"):
-        return _make_error(
-            f"line {line_no}: phase must be 0, 1, 2, or '.'; got {frame!r}",
-            line_no,
-            "InvalidPhase",
+        errors.append(
+            _make_error(
+                f"line {line_no}: phase must be 0, 1, 2, or '.'; got {frame!r}",
+                line_no,
+                "InvalidPhase",
+            )
         )
     if featuretype == "CDS" and frame == ".":
-        return _make_error(
-            f"line {line_no}: CDS row missing required phase (must be 0, 1, or 2)",
-            line_no,
-            "InvalidPhase",
+        errors.append(
+            _make_error(
+                f"line {line_no}: CDS row missing required phase (must be 0, 1, or 2)",
+                line_no,
+                "InvalidPhase",
+            )
         )
     if score not in ("", "."):
-        try:
-            float(score)
-        except ValueError:
-            return _make_error(
-                f"line {line_no}: score must be a float or '.'; got {score!r}",
-                line_no,
-                "InvalidScore",
+        if score != score.strip():
+            errors.append(
+                _make_error(
+                    f"line {line_no}: score must not contain surrounding whitespace; got {score!r}",
+                    line_no,
+                    "InvalidScore",
+                )
             )
-    trimmed = blob.strip()
-    if trimmed and trimmed != ".":
-        # GFF3 attribute pairs use `key=value`; GTF uses `key "value"`.
-        # The attribute parser is permissive enough to return a stub
-        # `(token, "")` pair from raw garbage, so we require the blob
-        # itself to show structure: at least one `=` (GFF3) OR a quoted
-        # value (GTF) must appear, AND the parser must have produced
-        # at least one pair.
-        has_eq = "=" in trimmed
-        has_quote = '"' in trimmed
-        if (not has_eq and not has_quote) or n_pairs == 0:
-            return _make_error(
-                f"line {line_no}: attribute string did not parse into any "
-                f"key=value pair: {trimmed[:60]!r}",
+        else:
+            try:
+                parsed_score = float(score)
+            except ValueError:
+                errors.append(
+                    _make_error(
+                        f"line {line_no}: score must be a float or '.'; got {score!r}",
+                        line_no,
+                        "InvalidScore",
+                    )
+                )
+            else:
+                if not math.isfinite(parsed_score):
+                    errors.append(
+                        _make_error(
+                            f"line {line_no}: score must be finite or '.'; got {score!r}",
+                            line_no,
+                            "InvalidScore",
+                        )
+                    )
+    attr_message = _validate_attribute_syntax(blob, n_pairs=n_pairs, is_gtf=is_gtf)
+    if attr_message is not None:
+        errors.append(
+            _make_error(
+                f"line {line_no}: {attr_message}",
                 line_no,
                 "InvalidAttribute",
             )
+        )
+    return errors
+
+
+def _attribute_segments(blob: str) -> tuple[list[str], bool]:
+    """Split column 9 while tracking whether double quotes balance."""
+    segments: list[str] = []
+    start = 0
+    in_quotes = False
+    escaped = False
+    for index, char in enumerate(blob):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"' and not escaped:
+            in_quotes = not in_quotes
+        if char == ";" and not in_quotes:
+            segments.append(blob[start:index])
+            start = index + 1
+    segments.append(blob[start:])
+    return segments, not in_quotes
+
+
+def _validate_percent_escapes(value: str) -> bool:
+    index = 0
+    while index < len(value):
+        if value[index] != "%":
+            index += 1
+            continue
+        if index + 2 >= len(value) or any(
+            char not in "0123456789abcdefABCDEF" for char in value[index + 1 : index + 3]
+        ):
+            return False
+        index += 3
+    return True
+
+
+def _valid_attribute_key(key: str) -> bool:
+    return bool(key) and not any(
+        _is_token_whitespace_or_control(char) or char in ';,=%&"' for char in key
+    )
+
+
+def _is_token_whitespace_or_control(char: str) -> bool:
+    """Match Rust's explicit Unicode whitespace/control token predicate."""
+    return char.isspace() or unicodedata.category(char) == "Cc"
+
+
+def _is_gtf_separator_whitespace(char: str) -> bool:
+    """Whitespace separates GTF fields; control characters never do."""
+    return char.isspace() and unicodedata.category(char) != "Cc"
+
+
+def _valid_gtf_quoted_value(value: str) -> bool:
+    if len(value) < 2 or not value.startswith('"') or not value.endswith('"'):
+        return False
+    escaped = False
+    for char in value[1:-1]:
+        if char == '"' and not escaped:
+            return False
+        if char == "\\":
+            escaped = not escaped
+        else:
+            escaped = False
+    return True
+
+
+def _validate_attribute_syntax(blob: str, *, n_pairs: int, is_gtf: bool) -> str | None:
+    """Validate strict GFF3/GTF column-9 grammar without changing parsing."""
+    trimmed = blob.strip()
+    if not trimmed or trimmed == ".":
+        return None
+
+    segments, quotes_balanced = _attribute_segments(trimmed)
+    if not quotes_balanced:
+        return "attribute string contains an unbalanced double quote"
+
+    # A single final semicolon is conventional in GTF and tolerated in GFF3.
+    if segments and not segments[-1].strip():
+        segments.pop()
+    if not segments or any(not segment.strip() for segment in segments):
+        return "attribute string contains an empty attribute"
+
+    for raw_segment in segments:
+        segment = raw_segment.strip()
+        if is_gtf:
+            split_at = next(
+                (index for index, char in enumerate(segment) if _is_gtf_separator_whitespace(char)),
+                -1,
+            )
+            if split_at <= 0:
+                return f"GTF attribute is not a quoted key/value pair: {segment[:60]!r}"
+            key = segment[:split_at]
+            value = segment[split_at:].strip()
+            if not _valid_attribute_key(key):
+                return f"attribute key is empty or contains a reserved character: {key!r}"
+            if not _valid_gtf_quoted_value(value):
+                return f"GTF attribute value must be double-quoted: {segment[:60]!r}"
+            continue
+
+        if "=" not in segment:
+            return f"GFF3 attribute is missing '=': {segment[:60]!r}"
+        key, value = segment.split("=", 1)
+        if not _valid_attribute_key(key):
+            return f"attribute key is empty or contains a reserved character: {key!r}"
+        if '"' in value:
+            return f"GFF3 attribute value contains an unescaped quote: {segment[:60]!r}"
+        if not _validate_percent_escapes(value):
+            return f"GFF3 attribute contains an invalid percent escape: {segment[:60]!r}"
+
+    if n_pairs == 0:
+        return f"attribute string did not parse into any key/value pair: {trimmed[:60]!r}"
     return None
 
 
@@ -242,14 +417,14 @@ def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
 def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
     """Parse one line into a ParsedFeature.
 
-    Returns ``(feature, violation_or_None)``. Under the ``ncbi`` profile a
-    violation is raised; under ``gffutils`` it is returned alongside the
+    Returns ``(feature, violations)``. Under the ``ncbi`` profile the first
+    violation is raised; under ``gffutils`` every violation is returned with the
     feature, because the compatibility contract is to keep the record and
     annotate it. Mirrors `parser.rs` exactly -- the two engines are diffed
     against each other by `test_engine_equivalence`.
     """
     rejects = profile == "ncbi"
-    violation = None
+    violations: list[Exception] = []
     fields = line.split("\t")
     if len(fields) < 9:
         violation = _make_error(
@@ -259,19 +434,29 @@ def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
         )
         if rejects:
             raise violation
+        violations.append(violation)
         # Compat: gffutils never errors here. `feature_from_line` splits on
         # tab and `zip(_gffkeys, fields)` truncates, so the missing columns
         # take their defaults and a space-delimited line becomes one feature
         # whose seqid is the whole line.
         while len(fields) < 9:
             fields.append("" if len(fields) == 8 else ".")
+    elif len(fields) > 9:
+        violation = _make_error(
+            f"line {line_no}: expected exactly 9 tab-separated fields, found {len(fields)}",
+            line_no,
+            "TooManyFields",
+        )
+        if rejects:
+            raise violation
+        violations.append(violation)
     seqid, source, featuretype, start_s, end_s, score, strand, frame = fields[:8]
     blob = fields[8]
     extra = fields[9:]
-    pairs, _obs = parse_attributes(blob)
+    pairs, obs = parse_attributes(blob, compat_whole_value_quotes=not rejects)
     start = _coord_or_error(start_s, line_no, "start")
     end = _coord_or_error(end_s, line_no, "end")
-    err = _validate(
+    field_errors = _validate(
         line_no=line_no,
         seqid=seqid,
         featuretype=featuretype,
@@ -282,11 +467,12 @@ def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
         frame=frame,
         n_pairs=len(pairs),
         blob=blob,
+        is_gtf=obs["fmt"] == "gtf",
     )
-    if err is not None:
+    if field_errors:
         if rejects:
-            raise err
-        violation = violation or err
+            raise field_errors[0]
+        violations.extend(field_errors)
     return ParsedFeature(
         seqid=seqid,
         source=source,
@@ -299,7 +485,7 @@ def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
         attributes_blob=blob.encode("utf-8"),
         attributes_pairs=pairs,
         extra=extra,
-    ), violation
+    ), violations
 
 
 def _stream_features(
@@ -350,6 +536,11 @@ def _stream_features(
 
     for line in _iter_lines(stream):
         line_no += 1
+        if isinstance(line, UnicodeDecodeError):
+            err = _decode_error(line, line_no)
+            if _maybe_handle(err):
+                continue
+            raise err from line
         if not line:
             continue
         if line.startswith("##"):
@@ -369,14 +560,17 @@ def _stream_features(
             fasta_reached = True
             break
         try:
-            feat, violation = _parse_line_into_feature(line, line_no, profile)
+            feat, violations = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
-        if violation is not None:
+        for violation in violations:
             _record(violation)
-        _, obs = parse_attributes(feat.attributes_blob.decode("utf-8", errors="replace"))
+        _, obs = parse_attributes(
+            feat.attributes_blob.decode("utf-8", errors="replace"),
+            compat_whole_value_quotes=profile == "gffutils",
+        )
         samples.append(obs)
         buffered.append(feat)
         if not force_dialect_check and len(buffered) >= checklines:
@@ -395,6 +589,11 @@ def _stream_features(
 
     for line in _iter_lines(stream):
         line_no += 1
+        if isinstance(line, UnicodeDecodeError):
+            err = _decode_error(line, line_no)
+            if _maybe_handle(err):
+                continue
+            raise err from line
         if not line:
             continue
         if line.startswith("##"):
@@ -411,12 +610,12 @@ def _stream_features(
             # See above: a bare `>` ends the feature section.
             return
         try:
-            feat, violation = _parse_line_into_feature(line, line_no, profile)
+            feat, violations = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
             if _maybe_handle(e):
                 continue
             raise
-        if violation is not None:
+        for violation in violations:
             _record(violation)
         yield feat, directives, dialect
 
@@ -538,7 +737,10 @@ def parse_bytes(
     strict: bool = True,
     validation: str = "ncbi",
 ) -> _FallbackIterator:
-    stream = io.StringIO(data.decode("utf-8", errors="replace"))
+    # Keep the stream binary and decode one physical line at a time in
+    # `_iter_lines`. That preserves line-aware diagnostics and lets
+    # `strict=False` skip one invalid line and continue with the next.
+    stream = io.BytesIO(data)
     return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 

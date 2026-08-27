@@ -126,7 +126,7 @@ def DataIterator(
             **kwargs,
         )
 
-    if isinstance(data, (str, os.PathLike)):
+    if isinstance(data, str | os.PathLike):
         cls = _UrlIterator if is_url(str(data)) else _FileIterator
         return cls(
             os.fspath(data) if isinstance(data, os.PathLike) else data,

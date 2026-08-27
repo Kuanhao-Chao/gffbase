@@ -111,6 +111,30 @@ def test_end_less_than_start_strict(engine):
     assert excinfo.value.kind == "InvalidCoordinate"
 
 
+@pytest.mark.parametrize(
+    "start,end",
+    [(".", "10"), ("1", "."), (".", "-1"), ("1", "0"), ("1", "-1")],
+)
+def test_coordinates_must_be_present_and_positive_strict(engine, start, end):
+    bad = f"chr1\tsrc\texon\t{start}\t{end}\t.\t+\t.\tID=x\n".encode()
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+    assert excinfo.value.kind == "InvalidCoordinate"
+
+
+def test_missing_coordinates_are_retained_with_a_compat_warning(engine):
+    text = b"chr1\tsrc\tregion\t.\t.\t.\t.\t.\tID=r\n"
+    it = parse_bytes(text, engine=engine, validation="gffutils")
+    (record,) = list(it)
+    assert (record.start, record.end) == (None, None)
+    assert [warning["kind"] for warning in it.warnings] == [
+        "InvalidCoordinate",
+        "InvalidCoordinate",
+    ]
+    assert "start coordinate" in it.warnings[0]["message"]
+    assert "end coordinate" in it.warnings[1]["message"]
+
+
 # ---------------------------------------------------------------------------
 # 6–7. Strand validation.
 # ---------------------------------------------------------------------------
@@ -193,6 +217,35 @@ def test_featuretype_with_whitespace_strict(engine):
     assert excinfo.value.kind == "InvalidFeaturetype"
 
 
+@pytest.mark.parametrize("control", ["\x1c", "\x1d", "\x1e", "\x1f", "\x7f", "\x85"])
+def test_featuretype_with_unicode_control_is_rejected_consistently(engine, control):
+    bad = f"chr1\tsrc\texon{control}part\t1\t10\t.\t+\t.\tID=x\n".encode()
+
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+
+    assert excinfo.value.kind == "InvalidFeaturetype"
+
+
+def test_control_character_keeps_full_compat_warning_order(engine):
+    bad = b"\tsrc\tbad\x1ctype\t.\t0\t 1 \tx\t9\tbroken\textra\n"
+    iterator = parse_bytes(bad, engine=engine, validation="gffutils")
+
+    list(iterator)
+
+    assert [warning["kind"] for warning in iterator.warnings] == [
+        "TooManyFields",
+        "EmptySeqid",
+        "InvalidFeaturetype",
+        "InvalidCoordinate",
+        "InvalidCoordinate",
+        "InvalidStrand",
+        "InvalidPhase",
+        "InvalidScore",
+        "InvalidAttribute",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # 13. Score validation.
 # ---------------------------------------------------------------------------
@@ -209,6 +262,42 @@ def test_float_score_accepted(engine):
     ok = b"chr1\tsrc\texon\t1\t10\t0.95\t+\t.\tID=x\n"
     records, _ = _consume(ok, strict=True, engine=engine)
     assert len(records) == 1
+
+
+@pytest.mark.parametrize("score", ["nan", "NaN", "inf", "+inf", "-inf", "Infinity"])
+def test_non_finite_scores_are_rejected_strict(engine, score):
+    bad = f"chr1\tsrc\texon\t1\t10\t{score}\t+\t.\tID=x\n".encode()
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+    assert excinfo.value.kind == "InvalidScore"
+
+
+@pytest.mark.parametrize("score", [" 1", "1 "])
+def test_score_surrounding_whitespace_is_rejected_strict(engine, score):
+    bad = f"chr1\tsrc\texon\t1\t10\t{score}\t+\t.\tID=x\n".encode()
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+    assert excinfo.value.kind == "InvalidScore"
+
+
+def test_compat_emits_every_applicable_diagnostic_in_strict_order(engine):
+    bad = b"\tsrc\tbad type\t.\t0\t 1 \tx\t9\tbroken\textra\n"
+    iterator = parse_bytes(bad, engine=engine, validation="gffutils")
+
+    (record,) = list(iterator)
+
+    assert record.score == " 1 "
+    assert [warning["kind"] for warning in iterator.warnings] == [
+        "TooManyFields",
+        "EmptySeqid",
+        "InvalidFeaturetype",
+        "InvalidCoordinate",
+        "InvalidCoordinate",
+        "InvalidStrand",
+        "InvalidPhase",
+        "InvalidScore",
+        "InvalidAttribute",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -267,17 +356,15 @@ def test_directives_and_comments_only_no_error(engine):
 
 
 # ---------------------------------------------------------------------------
-# 17. All-`.` row. 1-based but no concrete coords — accept if start/end
-#     are `.` (some real-world chromosome rows use this).
+# 17. All-`.` coordinates are a compatibility extension, not strict GFF3.
 # ---------------------------------------------------------------------------
 
 
-def test_all_dots_row_accepted(engine):
-    ok = b"chr1\tsrc\tregion\t.\t.\t.\t.\t.\tID=r\n"
-    records, _ = _consume(ok, strict=True, engine=engine)
-    assert len(records) == 1
-    assert records[0].start is None
-    assert records[0].end is None
+def test_all_dots_row_rejected_strict(engine):
+    bad = b"chr1\tsrc\tregion\t.\t.\t.\t.\t.\tID=r\n"
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+    assert excinfo.value.kind == "InvalidCoordinate"
 
 
 # ---------------------------------------------------------------------------
@@ -305,10 +392,56 @@ def test_garbage_attribute_string_strict(engine):
     assert excinfo.value.kind == "InvalidAttribute"
 
 
+@pytest.mark.parametrize(
+    "blob",
+    [
+        "ID=x;broken",
+        "ID=x;=empty-key",
+        "=empty-key",
+        'ID=x;Name="unterminated',
+        "ID=bad%",
+        "ID=bad%2",
+        "ID=bad%XZ",
+    ],
+)
+def test_malformed_attribute_grammar_is_rejected_strict(engine, blob):
+    bad = f"chr1\tsrc\texon\t1\t10\t.\t+\t.\t{blob}\n".encode()
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(bad, engine=engine))
+    assert excinfo.value.kind == "InvalidAttribute"
+
+
+def test_too_many_fields_rejected_strict_but_preserved_in_compat(engine):
+    text = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\textra1\textra2\n"
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(text, engine=engine))
+    assert excinfo.value.kind == "TooManyFields"
+
+    it = parse_bytes(text, engine=engine, validation="gffutils")
+    (record,) = list(it)
+    assert record.extra == ["extra1", "extra2"]
+    assert [warning["kind"] for warning in it.warnings] == ["TooManyFields"]
+
+
 def test_dot_attribute_string_accepted(engine):
     ok = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\t.\n"
     records, _ = _consume(ok, strict=True, engine=engine)
     assert len(records) == 1
+
+
+def test_python_parse_bytes_invalid_utf8_is_line_aware():
+    text = GOOD + b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=bad\xff\n"
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(text, engine="python"))
+    assert excinfo.value.line_no == 2
+    assert excinfo.value.kind == "InvalidAttribute"
+
+
+def test_validation_aliases_and_unknown_profile(engine):
+    assert len(list(parse_bytes(GOOD, engine=engine, validation="strict"))) == 1
+    assert len(list(parse_bytes(GOOD, engine=engine, validation="compat"))) == 1
+    with pytest.raises(ValueError, match="validation must be"):
+        parse_bytes(GOOD, engine=engine, validation="unknown")
 
 
 # ---------------------------------------------------------------------------

@@ -175,7 +175,7 @@ def create_db(
     # created somewhere other than the path the caller named. Checking here as
     # well because `create_db` reaches the filesystem (the `force=True` unlink)
     # before it ever constructs a `FeatureDB`.
-    if isinstance(dbfn, (str, os.PathLike)) and "\x00" in os.fspath(dbfn):
+    if isinstance(dbfn, str | os.PathLike) and "\x00" in os.fspath(dbfn):
         raise ValueError(
             f"database path contains an embedded NUL byte: {os.fspath(dbfn)!r}. "
             "Paths are passed to DuckDB as C strings, which would silently "
@@ -217,7 +217,7 @@ def create_db(
     # is the honest route here -- the ingest pipeline is file-oriented all the
     # way down to the Rust parser, so "accepting features directly" would mean
     # serializing them anyway, just less visibly.
-    if not from_string and not isinstance(data, (str, bytes, os.PathLike)):
+    if not from_string and not isinstance(data, str | bytes | os.PathLike):
         data = _render_features(data)
         from_string = True
 

@@ -339,15 +339,15 @@ def _corrupt(db_path: str) -> None:
 
 
 def test_validate_reports_a_corrupt_database(db_path, capsys):
-    """The violation must be visible even when it does not fail the run."""
+    """Dangling edges and attributes are errors, not a successful warning."""
     _corrupt(db_path)
     code, _out, err = run(capsys, "validate", db_path)
     assert "INV-6" in err
     assert "edges_resolve" in err
-    assert "1 warning(s)" in err
-    # A warning is not an error: this database is damaged but still answers
-    # every query, so the default exit status stays 0.
-    assert code == 0
+    assert "INV-15" in err
+    assert "no_orphan_attributes" in err
+    assert "1 error(s), 1 warning(s)" in err
+    assert code == 1
 
 
 def test_validate_strict_fails_on_warnings(db_path, capsys):

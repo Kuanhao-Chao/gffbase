@@ -248,18 +248,19 @@ def test_utf8_bom_first_line(engine):
     assert any(any(k == "ID" and v == "x" for k, v, _ in r.attributes_pairs) for r in records)
 
 
-def test_latin1_garbage_in_attribute_value_doesnt_crash(engine):
+def test_latin1_garbage_in_attribute_value_is_rejected_or_warned(engine):
     """Some real-world annotations smuggle Latin-1 bytes into ``Note=``
-    or ``description=`` fields. The parser must not crash; it should
-    yield the record (lossy or strict-decoded depending on engine) or
-    surface a warning. The exact handling is engine-dependent — we
-    only assert *no crash*."""
+    or ``description=`` fields. Invalid UTF-8 must never be silently replaced,
+    because replacement can alter IDs and relationship keys."""
     latin1 = b"chr1\trs\texon\t1\t10\t.\t+\t.\tID=x;Note=caf\xe9_signal\n"
-    try:
-        records = list(parse_bytes(latin1, engine=engine, strict=False))
-    except Exception as e:  # pragma: no cover - defense-in-depth
-        pytest.fail(f"Latin-1 byte should not crash the parser: {e!r}")
-    assert len(records) >= 0  # parser made it through
+    with pytest.raises(GFFFormatError) as excinfo:
+        list(parse_bytes(latin1, engine=engine))
+    assert excinfo.value.line_no == 1
+    assert excinfo.value.kind == "InvalidAttribute"
+
+    iterator = parse_bytes(latin1, engine=engine, strict=False)
+    assert list(iterator) == []
+    assert [warning["kind"] for warning in iterator.warnings] == ["InvalidAttribute"]
 
 
 # ---------------------------------------------------------------------------

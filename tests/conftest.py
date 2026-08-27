@@ -20,8 +20,16 @@ import os
 from pathlib import Path
 
 import pytest
+from hypothesis import settings
 
 DATA_DIR = Path(__file__).parent / "data"
+
+# Property tests are ordinary, bounded CI tests by default. Maintainers can
+# opt into the deeper deterministic campaign without editing test code:
+# `GFFBASE_HYPOTHESIS_PROFILE=extended pytest -m property`.
+settings.register_profile("quick", max_examples=40, deadline=None)
+settings.register_profile("extended", max_examples=500, deadline=None)
+settings.load_profile(os.environ.get("GFFBASE_HYPOTHESIS_PROFILE", "quick"))
 
 
 @pytest.fixture
@@ -44,11 +52,3 @@ def engine(request):
         if not native_available():
             pytest.skip("Rust extension not built. Run `maturin develop`.")
     return eng
-
-
-def pytest_configure(config):
-    # Ensure the in-tree package is importable without install when running
-    # `pytest` directly from the repo.
-    repo_root = Path(__file__).parent.parent
-    py_src = repo_root / "python"
-    os.environ["PYTHONPATH"] = f"{py_src}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"

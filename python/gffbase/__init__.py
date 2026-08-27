@@ -21,28 +21,8 @@ DataIterator, GFFWriter and the exception hierarchy -- on top of a DuckDB
 ingestion engine fed by a Rust parser.
 """
 
-from gffbase.exceptions import (
-    AttributeStringError,
-    ClosedDatabaseError,
-    DuplicateIDError,
-    EmptyInputError,
-    FeatureNotFoundError,
-    MultipartConstraintError,
-    ReadOnlyError,
-    SchemaVersionError,
-)
-from gffbase.exceptions import (
-    GFFFormatError as _PyGFFFormatError,
-)
+from importlib import import_module
 
-# Prefer the Rust-defined exception class when the extension
-# is loaded — that's the type Rust will actually raise. Fall back to
-# the pure-Python definition otherwise. Both inherit from `ValueError`
-# so legacy `pytest.raises(ValueError)` callers keep working.
-try:  # pragma: no cover — import-time branch
-    from gffbase._native import GFFFormatError
-except ImportError:
-    GFFFormatError = _PyGFFFormatError
 # The compatibility submodules are bound on the package namespace because
 # gffutils binds them, and the documented one-line migration is
 # `import gffbase as gffutils`. Without these, `gffutils.constants.
@@ -58,8 +38,22 @@ from gffbase import (
     create,
     ingest,
     merge_criteria,
+    version,
 )
+from gffbase._version import __version__
 from gffbase.create_db import create_db
+from gffbase.exceptions import (
+    AttributeStringError,
+    ClosedDatabaseError,
+    DuplicateIDError,
+    EmptyInputError,
+    FeatureNotFoundError,
+    MultipartConstraintError,
+    ReadOnlyError,
+    SchemaVersionError,
+    SynthesisConflictError,
+)
+from gffbase.exceptions import GFFFormatError as _PyGFFFormatError
 from gffbase.feature import Feature, FeatureSegment, MultipartFeature, ParsedFeature
 from gffbase.gffwriter import GFFWriter
 from gffbase.helpers import example_filename
@@ -69,6 +63,32 @@ from gffbase.migrate import coalesce_multipart, migrate_v1_to_v2
 from gffbase.parser import detect_dialect, native_available, parse_bytes, parse_gff
 from gffbase.sqlite_export import export_sqlite
 from gffbase.validate import ValidationError, validate_db
+
+
+def _require_matching_native_version(native_module) -> None:
+    """Reject a Python package paired with a stale native extension."""
+    native_version = getattr(native_module, "__version__", None)
+    if native_version == __version__:
+        return
+    raise RuntimeError(
+        "gffbase native-extension version mismatch: "
+        f"Python package is {__version__}, but "
+        f"{getattr(native_module, '__file__', 'gffbase._native')} is "
+        f"{native_version or 'missing __version__'}. Rebuild or reinstall "
+        "gffbase so the Python package and native extension come from the same build."
+    )
+
+
+# Prefer the Rust exception class when the extension is loaded. Importing all
+# package modules above is safe: Python cannot return this partially initialized
+# package to a caller, and this check runs before package initialization ends.
+try:  # pragma: no cover - import availability is environment-dependent
+    _native_module = import_module("gffbase._native")
+except ImportError:
+    GFFFormatError = _PyGFFFormatError
+else:
+    _require_matching_native_version(_native_module)
+    GFFFormatError = _native_module.GFFFormatError
 
 __all__ = [
     # Drop-in legacy surface
@@ -82,6 +102,7 @@ __all__ = [
     "example_filename",
     "FeatureNotFoundError",
     "DuplicateIDError",
+    "SynthesisConflictError",
     "AttributeStringError",
     "EmptyInputError",
     "GFFFormatError",
@@ -111,10 +132,3 @@ __all__ = [
     "version",
     "__version__",
 ]
-
-__version__ = "0.2.0"
-
-# Imported LAST, and deliberately: `gffbase.version` re-exports `__version__`
-# from this module, so importing it any earlier is a circular import against a
-# partially-initialized package.
-from gffbase import version  # noqa: E402  (must follow __version__)

@@ -58,6 +58,7 @@ impl ValidationProfile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     TooFewFields,
+    TooManyFields,
     EmptySeqid,
     EmptyFeaturetype,
     InvalidFeaturetype,
@@ -72,6 +73,7 @@ impl ErrorKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             ErrorKind::TooFewFields => "TooFewFields",
+            ErrorKind::TooManyFields => "TooManyFields",
             ErrorKind::EmptySeqid => "EmptySeqid",
             ErrorKind::EmptyFeaturetype => "EmptyFeaturetype",
             ErrorKind::InvalidFeaturetype => "InvalidFeaturetype",
@@ -113,11 +115,11 @@ impl fmt::Display for GffError {
     }
 }
 
-/// Validate the parsed 9-column GFF3 record. `start` and `end` are
-/// `None` when the source file used `.` (some real-world files do this
-/// for chromosome-level rows; we accept it but check ordering when both
-/// are present).
+/// Validate the parsed 9-column GFF3 record. The strict NCBI profile requires
+/// concrete, positive coordinates; the compatibility profile invokes these
+/// same checks but records violations instead of rejecting the record.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub fn validate_fields(
     line_no: usize,
     seqid: &str,
@@ -130,8 +132,44 @@ pub fn validate_fields(
     attrs_blob: &[u8],
     is_gtf: bool,
 ) -> Result<(), GffError> {
+    match validate_field_errors(
+        line_no,
+        seqid,
+        featuretype,
+        start,
+        end,
+        score,
+        strand,
+        frame,
+        attrs_blob,
+        is_gtf,
+    )
+    .into_iter()
+    .next()
+    {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+/// Return every applicable field diagnostic in the same order strict mode
+/// uses to select its first rejection.
+#[allow(clippy::too_many_arguments)]
+pub fn validate_field_errors(
+    line_no: usize,
+    seqid: &str,
+    featuretype: &str,
+    start: Option<i64>,
+    end: Option<i64>,
+    score: &str,
+    strand: &str,
+    frame: &str,
+    attrs_blob: &[u8],
+    is_gtf: bool,
+) -> Vec<GffError> {
+    let mut errors = Vec::new();
     if seqid.is_empty() {
-        return Err(GffError::new(
+        errors.push(GffError::new(
             line_no,
             ErrorKind::EmptySeqid,
             "seqid (col 1) is empty",
@@ -139,41 +177,62 @@ pub fn validate_fields(
     }
 
     if featuretype.is_empty() {
-        return Err(GffError::new(
+        errors.push(GffError::new(
             line_no,
             ErrorKind::EmptyFeaturetype,
             "featuretype (col 3) is empty",
         ));
     }
-    if featuretype.chars().any(|c| c.is_whitespace()) {
-        return Err(GffError::new(
+    if featuretype.chars().any(is_token_whitespace_or_control) {
+        errors.push(GffError::new(
             line_no,
             ErrorKind::InvalidFeaturetype,
             format!("featuretype contains whitespace: {:?}", featuretype),
         ));
     }
 
-    if let Some(s) = start {
-        if s < 1 {
-            return Err(GffError::new(
+    match start {
+        None => {
+            errors.push(GffError::new(
                 line_no,
                 ErrorKind::InvalidCoordinate,
-                format!("start coordinate must be >= 1 (got {})", s),
+                "start coordinate must be a positive integer; got '.'",
             ));
         }
+        Some(value) if value < 1 => errors.push(GffError::new(
+            line_no,
+            ErrorKind::InvalidCoordinate,
+            format!("start coordinate must be >= 1 (got {})", value),
+        )),
+        Some(_) => {}
     }
-    if let (Some(s), Some(e)) = (start, end) {
-        if e < s {
-            return Err(GffError::new(
+    match end {
+        None => {
+            errors.push(GffError::new(
                 line_no,
                 ErrorKind::InvalidCoordinate,
-                format!("end < start ({} < {})", e, s),
+                "end coordinate must be a positive integer; got '.'",
+            ));
+        }
+        Some(value) if value < 1 => errors.push(GffError::new(
+            line_no,
+            ErrorKind::InvalidCoordinate,
+            format!("end coordinate must be >= 1 (got {})", value),
+        )),
+        Some(_) => {}
+    }
+    if let (Some(start), Some(end)) = (start, end) {
+        if start > 0 && end > 0 && end < start {
+            errors.push(GffError::new(
+                line_no,
+                ErrorKind::InvalidCoordinate,
+                format!("end < start ({} < {})", end, start),
             ));
         }
     }
 
     if !matches!(strand, "+" | "-" | "?" | ".") {
-        return Err(GffError::new(
+        errors.push(GffError::new(
             line_no,
             ErrorKind::InvalidStrand,
             format!("strand must be one of '+', '-', '?', '.'; got {:?}", strand),
@@ -181,26 +240,47 @@ pub fn validate_fields(
     }
 
     if !matches!(frame, "." | "0" | "1" | "2") {
-        return Err(GffError::new(
+        errors.push(GffError::new(
             line_no,
             ErrorKind::InvalidPhase,
             format!("phase must be 0, 1, 2, or '.'; got {:?}", frame),
         ));
     }
     if featuretype == "CDS" && frame == "." {
-        return Err(GffError::new(
+        errors.push(GffError::new(
             line_no,
             ErrorKind::InvalidPhase,
             "CDS row missing required phase (must be 0, 1, or 2)",
         ));
     }
 
-    if score != "." && !score.is_empty() && score.parse::<f64>().is_err() {
-        return Err(GffError::new(
+    if score != "." && !score.is_empty() && score != score.trim() {
+        errors.push(GffError::new(
             line_no,
             ErrorKind::InvalidScore,
-            format!("score must be a float or '.'; got {:?}", score),
+            format!(
+                "score must not contain surrounding whitespace; got {:?}",
+                score
+            ),
         ));
+    } else if score != "." && !score.is_empty() {
+        match score.parse::<f64>() {
+            Ok(value) if value.is_finite() => {}
+            Ok(_) => {
+                errors.push(GffError::new(
+                    line_no,
+                    ErrorKind::InvalidScore,
+                    format!("score must be finite or '.'; got {:?}", score),
+                ));
+            }
+            Err(_) => {
+                errors.push(GffError::new(
+                    line_no,
+                    ErrorKind::InvalidScore,
+                    format!("score must be a float or '.'; got {:?}", score),
+                ));
+            }
+        }
     }
 
     // Attribute-string structure is validated AFTER parsing in
@@ -209,7 +289,7 @@ pub fn validate_fields(
     // duplicate the parser's GTF/GFF3 dispatch.
     let _ = (attrs_blob, is_gtf);
 
-    Ok(())
+    errors
 }
 
 /// Post-parse attribute check. If the parser yielded zero `(key, value)`
@@ -231,30 +311,161 @@ pub fn validate_attributes_pairs(
     if trimmed.is_empty() || trimmed == "." {
         return Ok(());
     }
-    let has_eq = trimmed.contains('=');
-    let has_quote = trimmed.contains('"');
-    let has_pair = n_pairs > 0;
 
-    // Accept the blob if EITHER `=` (GFF3) OR `"` (GTF) appears AND the
-    // parser produced at least one pair. The dialect flag is informational
-    // — `force_gff=True` may falsely label a GTF-attribute line as GFF3,
-    // and we don't want that user override to trigger a spurious
-    // validation failure.
-    let _ = is_gtf;
-    let malformed = !has_pair || (!has_eq && !has_quote);
-    if malformed {
+    if let Err(message) = validate_attribute_syntax(trimmed, is_gtf) {
+        return Err(GffError::new(line_no, ErrorKind::InvalidAttribute, message));
+    }
+    if n_pairs == 0 {
         return Err(GffError::new(
             line_no,
             ErrorKind::InvalidAttribute,
             format!(
-                "attribute string did not parse into any key=value pair: {:?}",
-                if trimmed.len() > 60 {
-                    &trimmed[..60]
-                } else {
-                    trimmed
-                }
+                "attribute string did not parse into any key/value pair: {:?}",
+                preview(trimmed)
             ),
         ));
+    }
+    Ok(())
+}
+
+fn preview(value: &str) -> String {
+    value.chars().take(60).collect()
+}
+
+fn valid_attribute_key(key: &str) -> bool {
+    !key.is_empty()
+        && !key.chars().any(|ch| {
+            is_token_whitespace_or_control(ch) || matches!(ch, ';' | ',' | '=' | '%' | '&' | '"')
+        })
+}
+
+fn is_token_whitespace_or_control(ch: char) -> bool {
+    ch.is_whitespace() || ch.is_control()
+}
+
+fn valid_percent_escapes(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            index += 1;
+            continue;
+        }
+        if index + 2 >= bytes.len()
+            || !bytes[index + 1].is_ascii_hexdigit()
+            || !bytes[index + 2].is_ascii_hexdigit()
+        {
+            return false;
+        }
+        index += 3;
+    }
+    true
+}
+
+fn valid_gtf_quoted_value(value: &str) -> bool {
+    if value.len() < 2 || !value.starts_with('"') || !value.ends_with('"') {
+        return false;
+    }
+    let inner = &value[1..value.len() - 1];
+    let mut escaped = false;
+    for ch in inner.chars() {
+        if ch == '"' && !escaped {
+            return false;
+        }
+        if ch == '\\' {
+            escaped = !escaped;
+        } else {
+            escaped = false;
+        }
+    }
+    true
+}
+
+fn validate_attribute_syntax(trimmed: &str, is_gtf: bool) -> Result<(), String> {
+    let mut segments: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for (index, ch) in trimmed.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
+            in_quotes = !in_quotes;
+        }
+        if ch == ';' && !in_quotes {
+            segments.push(&trimmed[start..index]);
+            start = index + ch.len_utf8();
+        }
+    }
+    if in_quotes {
+        return Err("attribute string contains an unbalanced double quote".to_string());
+    }
+    segments.push(&trimmed[start..]);
+    if segments
+        .last()
+        .is_some_and(|segment| segment.trim().is_empty())
+    {
+        segments.pop();
+    }
+    if segments.is_empty() || segments.iter().any(|segment| segment.trim().is_empty()) {
+        return Err("attribute string contains an empty attribute".to_string());
+    }
+
+    for raw_segment in segments {
+        let segment = raw_segment.trim();
+        if is_gtf {
+            let split_at = segment
+                .find(|ch: char| ch.is_whitespace() && !ch.is_control())
+                .ok_or_else(|| {
+                    format!(
+                        "GTF attribute is not a quoted key/value pair: {:?}",
+                        preview(segment)
+                    )
+                })?;
+            let key = &segment[..split_at];
+            let value = segment[split_at..].trim();
+            if !valid_attribute_key(key) {
+                return Err(format!(
+                    "attribute key is empty or contains a reserved character: {:?}",
+                    key
+                ));
+            }
+            if !valid_gtf_quoted_value(value) {
+                return Err(format!(
+                    "GTF attribute value must be double-quoted: {:?}",
+                    preview(segment)
+                ));
+            }
+            continue;
+        }
+
+        let (key, value) = segment
+            .split_once('=')
+            .ok_or_else(|| format!("GFF3 attribute is missing '=': {:?}", preview(segment)))?;
+        if !valid_attribute_key(key) {
+            return Err(format!(
+                "attribute key is empty or contains a reserved character: {:?}",
+                key
+            ));
+        }
+        if value.contains('"') {
+            return Err(format!(
+                "GFF3 attribute value contains an unescaped quote: {:?}",
+                preview(segment)
+            ));
+        }
+        if !valid_percent_escapes(value) {
+            return Err(format!(
+                "GFF3 attribute contains an invalid percent escape: {:?}",
+                preview(segment)
+            ));
+        }
     }
     Ok(())
 }
@@ -331,6 +542,18 @@ mod tests {
             ErrorKind::InvalidCoordinate,
         );
         assert_eq!(
+            err_kind("chr1", "exon", None, Some(10), ".", "+", ".", b"ID=x"),
+            ErrorKind::InvalidCoordinate,
+        );
+        assert_eq!(
+            err_kind("chr1", "exon", Some(1), None, ".", "+", ".", b"ID=x"),
+            ErrorKind::InvalidCoordinate,
+        );
+        assert_eq!(
+            err_kind("chr1", "exon", Some(1), Some(-1), ".", "+", ".", b"ID=x"),
+            ErrorKind::InvalidCoordinate,
+        );
+        assert_eq!(
             err_kind("chr1", "exon", Some(-5), Some(10), ".", "+", ".", b"ID=x"),
             ErrorKind::InvalidCoordinate,
         );
@@ -387,6 +610,12 @@ mod tests {
         );
         ok("chr1", "exon", Some(1), Some(10), "0.95", "+", ".", b"ID=x");
         ok("chr1", "exon", Some(1), Some(10), ".", "+", ".", b"ID=x");
+        for score in ["nan", "NaN", "inf", "+inf", "-inf", "Infinity"] {
+            assert_eq!(
+                err_kind("chr1", "exon", Some(1), Some(10), score, "+", ".", b"ID=x"),
+                ErrorKind::InvalidScore,
+            );
+        }
     }
 
     #[test]
@@ -406,8 +635,17 @@ mod tests {
         // GTF unquoted garbage (no `=`, no `"`) → error.
         let e = validate_attributes_pairs(1, 1, b"unquoted", true).unwrap_err();
         assert_eq!(e.kind, ErrorKind::InvalidAttribute);
-        // GFF3 user forced over GTF data: blob has quotes, no `=`. Should
-        // still be accepted because the structure is recognizable.
-        validate_attributes_pairs(1, 1, br#"gene_id "ENSG";"#, false).unwrap();
+        // A GTF blob cannot masquerade as strict GFF3.
+        assert!(validate_attributes_pairs(1, 1, br#"gene_id "ENSG";"#, false).is_err());
+        // Missing separators, empty keys, unbalanced quotes, and malformed
+        // percent escapes are all rejected by the strict grammar.
+        for blob in [
+            b"ID=x;broken".as_slice(),
+            b"=x".as_slice(),
+            b"ID=x;Name=\"unterminated".as_slice(),
+            b"ID=bad%XZ".as_slice(),
+        ] {
+            assert!(validate_attributes_pairs(1, 1, blob, false).is_err());
+        }
     }
 }

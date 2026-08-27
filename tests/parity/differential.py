@@ -192,7 +192,7 @@ def feature_attributes(feature) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for key in feature.attributes:
         value = feature.attributes[key]
-        out[key] = list(value) if isinstance(value, (list, tuple)) else [value]
+        out[key] = list(value) if isinstance(value, list | tuple) else [value]
     return out
 
 

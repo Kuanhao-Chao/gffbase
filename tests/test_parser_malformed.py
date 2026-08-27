@@ -60,7 +60,7 @@ def test_fasta_terminator_halts_iteration():
 
 def test_dot_coordinates_become_none():
     text = b"chr1\tsrc\texon\t.\t.\t.\t+\t.\tID=x\n"
-    feats = list(parse_bytes(text))
+    feats = list(parse_bytes(text, validation="gffutils"))
     assert feats[0].start is None
     assert feats[0].end is None
 
@@ -92,7 +92,7 @@ def test_percent_escape_decoded():
 
 def test_invalid_percent_escape_passes_through():
     text = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tNote=100%%\n"
-    feats = list(parse_bytes(text))
+    feats = list(parse_bytes(text, validation="gffutils"))
     # Malformed %X — value preserved as literal.
     assert "100%" in feats[0].attributes_dict()["Note"][0]
 
@@ -105,7 +105,7 @@ def test_gff3_multivalue_split_on_comma():
 
 def test_extra_columns_past_nine_preserved():
     text = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x\textra1\textra2\n"
-    feats = list(parse_bytes(text))
+    feats = list(parse_bytes(text, validation="gffutils"))
     assert feats[0].extra == ["extra1", "extra2"]
 
 

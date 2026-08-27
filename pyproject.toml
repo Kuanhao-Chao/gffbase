@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "gffbase"
-version = "0.2.0"
+version = "0.2.0rc1"
 description = "GFFBase — Rust-accelerated GFF3/GTF parser with a DuckDB-backed storage engine and a drop-in gffutils-compatible Python API."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,6 +70,8 @@ dependencies = [
 test = [
     "pytest>=7",
     "pytest-cov>=4",
+    "hypothesis>=6",
+    "packaging>=24",
     # `tests/test_release_hygiene.py` parses `.github/workflows/*.yml` with a
     # duplicate-key-strict loader, because GitHub Actions refuses a workflow
     # that has one and PyYAML's default loader does not. That check is only a
@@ -88,6 +90,8 @@ bench = [
 dev = [
     "pytest>=7",
     "pytest-cov>=4",
+    "hypothesis>=6",
+    "packaging>=24",
     "psutil>=5",
     "ruff>=0.4",
     "mypy>=1.8",
@@ -208,7 +212,7 @@ testpaths = ["tests"]
 #     pytest --cov=gffbase --cov-report=term-missing --cov-fail-under=<N>
 #
 # See .github/workflows/ci.yml for the enforced thresholds.
-addopts = "-q"
+addopts = "-q -m 'not corpus and not parity and not slow and not pandas_docs'"
 # pytest keeps the last THREE runs of every `tmp_path` directory by default.
 # That was harmless when tests built in-memory databases; it is not now. An
 # on-disk DuckDB file is pre-allocated at ~6 MB whatever it contains, and
@@ -227,6 +231,8 @@ markers = [
     "slow: long-running; excluded from the default PR run",
     "parity: differential comparison against an installed gffutils oracle",
     "corpus: needs a downloaded multi-GB annotation corpus (tests/test_corpus.py)",
+    "property: bounded Hypothesis invariants; use GFFBASE_HYPOTHESIS_PROFILE=extended for more examples",
+    "pandas_docs: executable documentation examples that require the pandas extra",
 ]
 # `native` and `rtree` were declared here and carried by no test. Both
 # conditions are handled better where they arise -- the `engine` fixture in

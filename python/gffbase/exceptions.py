@@ -78,6 +78,21 @@ class DuplicateIDError(ValueError):
     """
 
 
+class SynthesisConflictError(DuplicateIDError):
+    """One inferred GTF parent ID spans incompatible genomic groups.
+
+    A gene or transcript cannot be synthesized safely when the same raw
+    ``gene_id`` or ``transcript_id`` occurs on more than one ``(seqid,
+    strand)`` pair.  The default is to raise rather than silently choose one
+    location and build an envelope across chromosomes.  Callers that
+    deliberately want one parent per group can opt into
+    ``merge_strategy="create_unique"``.
+
+    Subclassing :class:`DuplicateIDError` preserves compatibility with code
+    that already catches duplicate identifiers during ingestion.
+    """
+
+
 class AttributeStringError(ValueError):
     """Raised on malformed col-9 attributes."""
 

@@ -38,10 +38,7 @@ pub fn unescape(input: &str) -> Cow<'_, str> {
         out.push(bytes[i]);
         i += 1;
     }
-    match String::from_utf8(out) {
-        Ok(s) => Cow::Owned(s),
-        Err(_) => Cow::Borrowed(input),
-    }
+    Cow::Owned(String::from_utf8_lossy(&out).into_owned())
 }
 
 #[inline]
@@ -73,5 +70,10 @@ mod tests {
     fn malformed_escapes_pass_through() {
         assert_eq!(unescape("100%"), "100%");
         assert_eq!(unescape("%ZZ"), "%ZZ");
+    }
+
+    #[test]
+    fn invalid_utf8_is_replaced_without_undoing_other_escapes() {
+        assert_eq!(unescape("ok%20bad%FFtail%GG%2"), "ok bad\u{fffd}tail%GG%2");
     }
 }

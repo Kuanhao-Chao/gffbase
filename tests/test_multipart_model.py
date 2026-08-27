@@ -276,7 +276,9 @@ def test_normalized_rendering_re_emits_from_the_parsed_mapping():
     f = Feature(seqid="chr1", featuretype="gene", start=1, end=9, attributes=odd, id="x")
     normalized = f.to_line(normalized=True)
     assert normalized != f.to_line()
-    assert normalized.endswith("ID=x;Name=y")
+    # The space before the delimiter is part of the preceding GFF3 value;
+    # normalized rendering must preserve parsed value bytes, not erase them.
+    assert normalized.endswith("ID=x ;Name=y")
 
 
 def test_normalizing_does_not_disturb_the_byte_faithful_path():

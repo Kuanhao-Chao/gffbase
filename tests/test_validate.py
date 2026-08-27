@@ -183,7 +183,7 @@ def test_a_widened_envelope_is_caught(db):
 def test_the_violation_names_the_feature_and_both_coordinate_pairs(db):
     """A report a user cannot act on is a report they will ignore."""
     _set_envelope(db, "cds1", 100, 200)
-    (violation,) = [v for v in validate_db(db).violations if v.name == "envelope_exact"]
+    (violation,) = (v for v in validate_db(db).violations if v.name == "envelope_exact")
     assert violation.invariant == "INV-5"
     assert violation.severity == ERROR
     assert violation.count == 1
@@ -213,6 +213,10 @@ def test_inv4_seg_idx_not_dense(db):
 
 def test_inv6_dangling_edge(db):
     db.conn.execute("INSERT INTO edges VALUES ('ghost', 'cds1')")
+    # Keep closure internally consistent so this test isolates INV-6. A newly
+    # inserted edge with no corresponding closure row is now (correctly) also
+    # an INV-11 error.
+    db.conn.execute("INSERT INTO closure VALUES ('ghost', 'cds1', 1)")
     report = validate_db(db)
     assert "edges_resolve" in _names(report)
     assert report.ok is True, "a dangling parent is normal GFF3; it must not be an error"
@@ -270,6 +274,54 @@ def test_inv11_depth_one_row_with_no_edge(db):
     assert "closure_sound" in _names(validate_db(db))
 
 
+def test_inv11_missing_depth_one_row(db):
+    db.conn.execute(
+        "DELETE FROM closure WHERE ancestor = 't1' AND descendant = 'cds1' AND depth = 1"
+    )
+    report = validate_db(db)
+    assert "closure_sound" in _names(report)
+    violation = next(v for v in report.violations if v.name == "closure_sound")
+    assert any(example[-1] == "missing closure row" for example in violation.examples)
+
+
+def test_inv11_rejects_nonpositive_depth_in_fast_validation(db):
+    db.conn.execute("INSERT INTO closure VALUES ('g1', 'cds1', 0)")
+    report = validate_db(db, level="fast")
+    violation = next(v for v in report.violations if v.name == "closure_sound")
+    assert any(example[-1] == "non-positive closure depth" for example in violation.examples)
+
+
+def test_inv11_rejects_duplicate_transitive_row_in_fast_validation(db):
+    db.conn.execute("INSERT INTO closure VALUES ('g1', 'cds1', 2)")
+    report = validate_db(db, level="fast")
+    violation = next(v for v in report.violations if v.name == "closure_sound")
+    assert any(example[-1] == "duplicate closure row" for example in violation.examples)
+
+
+def test_inv11_missing_transitive_row(db):
+    db.conn.execute(
+        "DELETE FROM closure WHERE ancestor = 'g1' AND descendant = 'cds1' AND depth = 2"
+    )
+    assert "closure_sound" not in _names(validate_db(db, level="fast"))
+    assert "closure_exact" in _names(validate_db(db, level="full"))
+
+
+def test_inv11_wrong_depth_row(db):
+    db.conn.execute(
+        "UPDATE closure SET depth = 7 WHERE ancestor = 'g1' AND descendant = 'cds1' AND depth = 2"
+    )
+    assert "closure_sound" not in _names(validate_db(db, level="fast"))
+    report = validate_db(db, level="full")
+    assert "closure_exact" in _names(report)
+    reasons = {
+        example[-1]
+        for violation in report.violations
+        if violation.name == "closure_exact"
+        for example in violation.examples
+    }
+    assert reasons == {"missing closure row", "extra or wrong-depth closure row"}
+
+
 def test_inv13_conflict_pointing_at_a_missing_feature(db):
     db.conn.execute("INSERT INTO id_conflicts VALUES ('x', 'ghost', 'multipart', NULL, NULL)")
     assert "conflicts_resolve" in _names(validate_db(db))
@@ -283,6 +335,70 @@ def test_inv13_unknown_id_origin(db):
 def test_inv14_file_order_not_the_first_segments(db):
     db.conn.execute("UPDATE features SET file_order = 99 WHERE id = 'cds1'")
     assert "file_order_is_first_segment" in _names(validate_db(db))
+
+
+def test_inv15_orphan_attribute_row(db):
+    db.conn.execute(
+        "INSERT INTO attributes (feature_id, key, value, idx) VALUES ('ghost', 'Name', 'orphan', 0)"
+    )
+    assert "no_orphan_attributes" in _names(validate_db(db))
+
+
+def test_inv15_rejects_attribute_rows_for_a_nonexistent_segment(db):
+    db.conn.execute(
+        "INSERT INTO attributes (feature_id, key, value, idx, seg_idx) "
+        "VALUES ('cds1', 'Name', 'orphan-segment', 0, 999)"
+    )
+
+    report = validate_db(db)
+
+    violation = next(v for v in report.violations if v.name == "attribute_segments_resolve")
+    assert violation.examples[0][-1] == 999
+
+
+def test_inv16_synthetic_parent_must_enclose_its_children(tmp_path):
+    src = tmp_path / "synth.gtf"
+    src.write_text(
+        'chr1\trs\texon\t100\t200\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
+        'chr1\trs\texon\t300\t400\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
+    )
+    synth = create_db(str(src), ":memory:")
+    _set_envelope(synth, "T1", 100, 150)
+    assert "gtf_hierarchy_coherent" in _names(validate_db(synth))
+
+
+def test_inv16_requires_same_sequence_and_strand_for_authored_gtf_edges(tmp_path):
+    src = tmp_path / "authored.gtf"
+    src.write_text(
+        'chr1\trs\ttranscript\t100\t200\t.\t+\t.\ttranscript_id "T1";\n'
+        'chr1\trs\texon\t100\t200\t.\t+\t.\ttranscript_id "T1";\n'
+    )
+    authored = create_db(str(src), ":memory:", disable_infer_genes=True)
+    authored.conn.execute("UPDATE features SET seqid = 'chr2', strand = '-' WHERE id = 'T1'")
+
+    assert "gtf_hierarchy_coherent" in _names(validate_db(authored))
+
+
+def test_inv16_does_not_require_authored_parents_to_be_exact_envelopes(tmp_path):
+    src = tmp_path / "authored.gtf"
+    src.write_text(
+        'chr1\trs\ttranscript\t150\t160\t.\t+\t.\ttranscript_id "T1";\n'
+        'chr1\trs\texon\t100\t200\t.\t+\t.\ttranscript_id "T1";\n'
+    )
+    authored = create_db(str(src), ":memory:", disable_infer_genes=True)
+
+    assert "gtf_hierarchy_coherent" not in _names(validate_db(authored))
+
+
+@pytest.mark.parametrize(
+    "parent,child",
+    [("g1", "cds1"), ("t1", "g1"), ("cds1", "t1")],
+)
+def test_inv16_rejects_disallowed_gtf_edge_types(db, parent, child):
+    db.conn.execute("UPDATE meta SET value = 'gtf' WHERE key = 'fmt'")
+    db.conn.execute("INSERT INTO edges VALUES (?, ?)", [parent, child])
+
+    assert "gtf_hierarchy_coherent" in _names(validate_db(db))
 
 
 def test_inv12_catches_attributes_that_no_longer_match_their_blob(db):
@@ -358,6 +474,67 @@ def test_the_convenience_method_reaches_the_same_report(db):
     assert db.validate(level="full").level == "full"
 
 
+def test_checked_ids_are_stable_without_changing_human_readable_entries(db):
+    report = validate_db(db, level="full")
+
+    assert report.checked[0] == "INV-1 (unique_ids)"
+    assert report.checked_ids[0] == "INV-1"
+    assert report.checked_ids[-2:] == ["INV-11-exact", "INV-12"]
+
+
+def test_full_validation_sample_none_checks_every_attribute_blob(tmp_path):
+    src = tmp_path / "many.gff3"
+    src.write_text(
+        "".join(
+            f"chr1\trs\tgene\t{index}\t{index}\t.\t+\t.\tID=g{index};Name=n{index}\n"
+            for index in range(1, 203)
+        )
+    )
+    many = create_db(str(src), ":memory:")
+    many.conn.execute("UPDATE attributes SET value = 'tampered' WHERE feature_id = 'g202'")
+
+    assert "attributes_reparse" not in _names(validate_db(many, level="full", sample=200))
+    assert "attributes_reparse" in _names(validate_db(many, level="full", sample=None))
+
+
+def test_corrupt_max_depth_is_reported_as_a_violation_instead_of_crashing(db):
+    db.conn.execute("UPDATE meta SET value = 'not-an-integer' WHERE key = 'max_depth'")
+
+    report = validate_db(db, level="full")
+
+    violation = next(v for v in report.violations if v.name == "closure_exact")
+    assert "check could not run" in violation.detail
+
+
+def test_violation_examples_are_bounded_but_count_is_exact(db):
+    db.conn.executemany(
+        "INSERT INTO attributes (feature_id, key, value, idx) VALUES (?, 'Name', 'x', 0)",
+        [(f"ghost-{index}",) for index in range(12)],
+    )
+
+    report = validate_db(db)
+
+    violation = next(v for v in report.violations if v.name == "no_orphan_attributes")
+    assert violation.count == 12
+    assert len(violation.examples) == 5
+
+
+def test_closure_stores_only_the_minimum_depth_for_each_pair(tmp_path):
+    src = tmp_path / "shortcut.gff3"
+    src.write_text(
+        "chr1\trs\tgene\t1\t100\t.\t+\t.\tID=g\n"
+        "chr1\trs\tmRNA\t1\t100\t.\t+\t.\tID=t;Parent=g\n"
+        "chr1\trs\texon\t1\t10\t.\t+\t.\tID=e;Parent=g,t\n"
+    )
+
+    shortcut = create_db(str(src), ":memory:")
+
+    assert shortcut.conn.execute(
+        "SELECT depth FROM closure WHERE ancestor = 'g' AND descendant = 'e' ORDER BY depth"
+    ).fetchall() == [(1,)]
+    assert validate_db(shortcut, level="full").ok
+
+
 def test_an_unknown_level_is_rejected(db):
     with pytest.raises(ValueError, match="level must be"):
         validate_db(db, level="thorough")
@@ -383,6 +560,8 @@ def test_checks_needing_segments_are_skipped_not_silently_passed(tmp_path):
 
     assert any("INV-5" in s for s in report.skipped)
     assert not any("INV-5" in c for c in report.checked)
+    assert any("INV-15a" in s for s in report.skipped)
+    assert not any("INV-15a" in c for c in report.checked)
     assert report.ok
 
 
