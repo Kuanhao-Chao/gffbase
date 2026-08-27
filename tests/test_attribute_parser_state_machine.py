@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import pytest
-from gffbase import constants, native_available, parse_bytes
+from gffbase import constants, create_db, native_available, parse_bytes
 
 ENGINES = ["python"] + (["rust"] if native_available() else [])
 
@@ -60,6 +60,24 @@ def test_gff3_value_whitespace_after_equals_is_literal_data(engine):
     (record,) = list(parse_bytes(row, engine=engine))
 
     assert record.attributes_pairs == [("ID", "x", 0), ("Note", " ", 0)]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_compat_gff3_value_whitespace_after_equals_is_literal_data(engine):
+    row = b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x;Note= \n"
+
+    (record,) = list(parse_bytes(row, engine=engine, validation="gffutils"))
+
+    assert record.attributes_pairs == [("ID", "x", 0), ("Note", " ", 0)]
+
+
+def test_default_create_db_keeps_gff3_value_whitespace_and_revalidates():
+    text = "chr1\tsrc\texon\t1\t10\t.\t+\t.\tID=x;Note= \n"
+
+    db = create_db(text, ":memory:", from_string=True)
+
+    assert db["x"].attributes["Note"] == [" "]
+    assert db.validate(level="full", sample=None).ok
 
 
 @pytest.mark.parametrize("engine", ENGINES)

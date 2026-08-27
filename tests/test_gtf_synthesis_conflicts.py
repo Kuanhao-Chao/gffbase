@@ -97,6 +97,41 @@ AUTHORED_PARENT_GTF = (
     'chr2\trs\texon\t300\t400\t.\t-\t.\tgene_id "G1"; transcript_id "T1";\n'
 )
 
+SAME_LOCUS_AUTHORED_PARENT_GTF = (
+    'chr1\trs\ttranscript\t100\t400\t.\t+\t.\tID "A"; transcript_id "T1";\n'
+    'chr1\trs\ttranscript\t100\t400\t.\t+\t.\tID "B"; transcript_id "T1";\n'
+    'chr1\trs\texon\t150\t200\t.\t+\t.\tID "E"; transcript_id "T1";\n'
+)
+
+
+@pytest.mark.parametrize("strategy", ["error", "create_unique"])
+def test_same_locus_authored_parent_ids_are_never_routed_arbitrarily(tmp_path, strategy):
+    with pytest.raises(SynthesisConflictError, match=r"T1.*2 authored.*ambiguous"):
+        create_db(
+            str(_write(tmp_path, SAME_LOCUS_AUTHORED_PARENT_GTF)),
+            ":memory:",
+            id_spec="ID",
+            disable_infer_genes=True,
+            merge_strategy=strategy,
+        )
+
+
+@pytest.mark.parametrize("strategy", ["error", "create_unique"])
+def test_same_locus_authored_parent_conflict_leaves_no_partial_database(tmp_path, strategy):
+    destination = tmp_path / "same-locus.duckdb"
+
+    with pytest.raises(SynthesisConflictError, match=r"T1.*2 authored.*ambiguous"):
+        create_db(
+            str(_write(tmp_path, SAME_LOCUS_AUTHORED_PARENT_GTF)),
+            str(destination),
+            id_spec="ID",
+            disable_infer_genes=True,
+            merge_strategy=strategy,
+        )
+
+    assert not destination.exists()
+    assert list(tmp_path.glob("same-locus.duckdb.gffbase-building.*")) == []
+
 
 @pytest.mark.parametrize("mode", ["compat", "strict"])
 def test_an_authored_parent_conflict_raises_by_default(tmp_path, mode):

@@ -74,7 +74,7 @@ def parse_attributes(
 
         if local_fmt == "gff3":
             if compat_whole_value_quotes:
-                clean_val, was_quoted = _strip_quotes(raw_val)
+                clean_val, was_quoted = _strip_whole_quotes(raw_val)
             else:
                 clean_val, was_quoted = raw_val, False
         else:
@@ -169,6 +169,13 @@ def _find_unescaped_top_level(text: str, delimiter: str | None) -> int:
 
 def _strip_quotes(s: str) -> tuple[str, bool]:
     s = s.strip()
+    if len(s) >= 2 and s.startswith('"') and s.endswith('"'):
+        return s[1:-1], True
+    return s, False
+
+
+def _strip_whole_quotes(s: str) -> tuple[str, bool]:
+    """Strip only quotes that enclose the literal, untrimmed GFF3 value."""
     if len(s) >= 2 and s.startswith('"') and s.endswith('"'):
         return s[1:-1], True
     return s, False
