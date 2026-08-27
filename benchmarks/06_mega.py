@@ -24,15 +24,13 @@ Runs the same metrics across GENCODE (GTF and GFF3), RefSeq, MANE and CHESS:
   * Spatial query qps (R-tree path)
   * Vectorized batched extraction wall (children_batched, format='arrow')
 
-Results MERGE into `06_mega.json` by corpus key, so `--only mane` updates
-MANE and leaves every other corpus alone. The previous version wrote the whole
-file from whatever `--only` selected, so each targeted re-run silently deleted
-the others -- which is why the published five-row table was eventually backed
-by a results file containing one row.
+Each process writes beneath ``GFFBASE_BENCH_OUT``. Cluster workers always use
+different output directories; a single post-run merger validates and combines
+them, so parallel jobs never race through a shared read-modify-write result.
 
 Safety valve: if legacy gffutils ingest exceeds ``--legacy-timeout`` it is
-killed and reported as a LOWER BOUND (`wall_seconds` null,
-`wall_seconds_lower_bound` set). No wall time is ever synthesized.
+killed and reported as a censored timeout (`wall_seconds` null,
+``cap_seconds`` set). It produces no comparison ratio.
 
 Disk: a corpus pair reaches ~13 GiB, and all five together do not fit on a
 normal laptop. Each pair is purged as soon as its numbers are recorded unless
@@ -52,11 +50,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
     OUT,
     RESULTS,
+    benchmark_env,
+    configure_duckdb_connection,
+    database_signature,
     du,
     merge_results,
     pretty_bytes,
@@ -65,7 +65,11 @@ from benchmarks.common import (
     repeat,
     require_free_disk,
     run_subprocess,
+    sha256_file,
+    signatures_match,
 )
+from benchmarks.corpora import CORPORA as CORPUS_REGISTRY
+from benchmarks.corpora import corpus_path
 
 DATA = ROOT / "benchmarks" / "data"
 
@@ -97,38 +101,7 @@ DISK_NEED_GIB = {
 # minutes on MANE rather than ninety on GENCODE GTF, and the largest pair runs
 # last so `--keep-db gencode-gff3` can hand it straight to stages 01-05
 # without a second 6-minute ingest.
-CORPORA: list[dict] = [
-    {
-        "name": "MANE v1.5 (Ensembl IDs)",
-        "key": "mane",
-        "input": DATA / "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
-        "fmt": "gff3",
-    },
-    {
-        "name": "CHESS 3.1.3",
-        "key": "chess",
-        "input": DATA / "chess3.1.3.GRCh38.gff.gz",
-        "fmt": "gff3",
-    },
-    {
-        "name": "RefSeq GRCh38.p14",
-        "key": "refseq",
-        "input": DATA / "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
-        "fmt": "gff3",
-    },
-    {
-        "name": "GENCODE v49 (GTF)",
-        "key": "gencode-gtf",
-        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
-        "fmt": "gtf",
-    },
-    {
-        "name": "GENCODE v49 (GFF3)",
-        "key": "gencode-gff3",
-        "input": DATA / "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
-        "fmt": "gff3",
-    },
-]
+CORPORA: list[dict] = [{**corpus, "input": corpus_path(corpus)} for corpus in CORPUS_REGISTRY]
 
 
 # ---------------------------------------------------------------------------
@@ -147,10 +120,18 @@ def count_feature_lines(path: Path) -> int:
     return n
 
 
-def gffbase_ingest_script(input_path: Path, dbfn: Path, fmt: str) -> str:
+def gffbase_ingest_script(
+    input_path: Path,
+    dbfn: Path,
+    fmt: str,
+    *,
+    threads: int = 1,
+    infer_gtf_parents: bool = True,
+    validation_sample: int | None = None,
+    validation_requested: str = "all",
+) -> str:
     return f"""
-import json, time, sys
-sys.path.insert(0, {str(ROOT / "python")!r})
+import dataclasses, json, time
 from gffbase import create_db
 t0 = time.perf_counter()
 # CHESS / MANE / RefSeq are all GFF3; GENCODE is GTF. The hardened
@@ -172,26 +153,37 @@ t0 = time.perf_counter()
 #    decides whether the run completes at all.
 db = create_db({str(input_path)!r}, {str(dbfn)!r}, force=True,
                merge_strategy="create_unique",
-               force_gff={"False" if fmt == "gtf" else "True"})
+               force_gff={"False" if fmt == "gtf" else "True"},
+               disable_infer_genes={not infer_gtf_parents!r},
+               disable_infer_transcripts={not infer_gtf_parents!r},
+               pragmas={{"threads": {threads}}})
 elapsed = time.perf_counter() - t0
+n_features = db.count_features_of_type()
+report = db.validate(level="full", sample={validation_sample!r})
 print(json.dumps({{
     "wall_seconds": elapsed,
-    "n_features":   db.count_features_of_type(),
+    "n_features":   n_features,
     # Reported so the driver can refuse to publish a "spatial qps" number
     # that was actually measured on the B-tree fallback. `INSTALL spatial`
     # needs network egress, and on a firewalled node it fails silently.
     "rtree_built":  db._rtree_built,
     "fmt":          db.fmt,
+    "validation": {{
+        "ok": report.ok,
+        "level": report.level,
+        "checked": report.checked,
+        "skipped": report.skipped,
+        "errors": [dataclasses.asdict(v) for v in report.errors],
+        "warnings": [dataclasses.asdict(v) for v in report.warnings],
+        "requested_sample": {validation_requested!r},
+        "sample_checked": n_features if {validation_sample!r} is None else min({validation_sample!r}, n_features),
+        "checked_ids": report.checked_ids,
+    }},
 }}))
 """
 
 
-def legacy_ingest_script(input_path: Path, dbfn: Path) -> str:
-    # Match the Phase-11 canonical legacy configuration: inference
-    # enabled so the comparison is apples-to-apples against gffbase's
-    # full ingest pipeline (which DOES synthesize gene/transcript
-    # parents on GTF). The `disable_infer_*=True` flags would skip the
-    # very work that makes legacy hours-slow on GENCODE.
+def legacy_ingest_script(input_path: Path, dbfn: Path, *, infer_gtf_parents: bool = True) -> str:
     return f"""
 import json, time, gffutils
 t0 = time.perf_counter()
@@ -199,6 +191,8 @@ db = gffutils.create_db(
     {str(input_path)!r}, {str(dbfn)!r}, force=True,
     keep_order=False, sort_attribute_values=False,
     merge_strategy="create_unique", verbose=False,
+    disable_infer_genes={not infer_gtf_parents!r},
+    disable_infer_transcripts={not infer_gtf_parents!r},
 )
 elapsed = time.perf_counter() - t0
 print(json.dumps({{
@@ -208,47 +202,41 @@ print(json.dumps({{
 """
 
 
-def run_legacy_with_timeout(input_path: Path, dbfn: Path, timeout: int, n_input_lines: int) -> dict:
-    """Run legacy gffutils ingest, capped at `timeout` seconds.
+def run_legacy_with_timeout(
+    input_path: Path,
+    dbfn: Path,
+    timeout: int,
+    n_input_lines: int,
+    *,
+    infer_gtf_parents: bool = True,
+    threads: int = 1,
+) -> dict:
+    """Run legacy gffutils ingest under a recorded hard cap.
 
-    On timeout the run yields a LOWER BOUND, not an estimate: `wall_seconds`
-    is left null and `wall_seconds_lower_bound` is the cap. Downstream, that
-    turns the speedup into `speedup_lower_bound` and the rendered table into
-    `> N×`.
-
-    This replaces a hardcoded `wall_seconds = timeout * 2.0`. That factor had
-    no measurement behind it -- its own comment conceded there was no way to
-    observe gffutils' progress -- yet it was the sole source of the published
-    "≥ 2 hr 30 min" legacy wall and the "≥ 32×" headline speedup. A number
-    invented by multiplying a timeout is not a benchmark result, and quoting
-    it next to measured ones invites a reviewer to distrust all of them.
-
-    A floor is weaker-sounding and unfalsifiable: legacy provably did not
-    finish in `timeout` seconds, because we watched it not finish.
+    A timeout is censored: it records its cap but never substitutes a wall
+    time, lower bound or performance claim for the uncompleted comparator.
     """
-    script = legacy_ingest_script(input_path, dbfn)
+    script = legacy_ingest_script(input_path, dbfn, infer_gtf_parents=infer_gtf_parents)
     result = run_subprocess(
         script,
         label=f"legacy gffutils ingest({input_path.name})",
         timeout=timeout,
+        env_extra=benchmark_env(threads),
     )
-    if result.get("timed_out"):
+    if result.get("state") == "timed_out":
         result["wall_seconds"] = None
-        result["wall_seconds_lower_bound"] = float(timeout)
         result["cap_seconds"] = timeout
-        result["note"] = (
-            f"killed at the {timeout} s safety valve without finishing; "
-            f"the true wall is greater than this, by an unmeasured amount"
-        )
+        result.pop("timed_out", None)
     return result
 
 
 def sample_regions_from_db(
-    db_path: Path, n: int = 5000, seed: int = REGION_SEED
+    db_path: Path, n: int = 5000, seed: int = REGION_SEED, *, threads: int = 1
 ) -> list[tuple[str, int, int]]:
     import duckdb
 
     con = duckdb.connect(str(db_path), read_only=True)
+    configure_duckdb_connection(con, threads)
     rows = con.execute("""
         SELECT seqid, MIN(start) AS lo, MAX("end") AS hi
         FROM features GROUP BY seqid HAVING COUNT(*) > 50
@@ -268,7 +256,7 @@ def sample_regions_from_db(
     return out
 
 
-def bench_spatial(db_path: Path, regions, repeats: int = 1) -> dict:
+def bench_spatial(db_path: Path, regions, repeats: int = 1, *, threads: int = 1) -> dict:
     import gffbase
 
     # `with`, not a bare constructor: a writable DuckDB connection holds an
@@ -276,6 +264,7 @@ def bench_spatial(db_path: Path, regions, repeats: int = 1) -> dict:
     # its numbers are recorded. Leaking the handle left the file locked, which
     # is merely untidy on POSIX and blocks the delete outright on Windows.
     with gffbase.FeatureDB(str(db_path), read_only=True) as db:
+        configure_duckdb_connection(db.conn, threads)
         counted = {"total": 0}
 
         def once() -> float:
@@ -304,11 +293,14 @@ def bench_spatial(db_path: Path, regions, repeats: int = 1) -> dict:
     }
 
 
-def bench_batched(db_path: Path, n_genes: int = 5000, repeats: int = 1) -> dict:
+def bench_batched(
+    db_path: Path, n_genes: int = 5000, repeats: int = 1, *, threads: int = 1
+) -> dict:
     import gffbase
 
     # See `bench_spatial` on why this is a `with` block.
     db = gffbase.FeatureDB(str(db_path), read_only=True)
+    configure_duckdb_connection(db.conn, threads)
     # FeatureDB.execute() doesn't accept params — drop down to the
     # underlying duckdb connection for parameter binding.
     cur = db.conn.execute(
@@ -360,31 +352,36 @@ def bench_batched(db_path: Path, n_genes: int = 5000, repeats: int = 1) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def derive_speedup(g_info: dict, l_info: dict) -> tuple[float | None, float | None, bool]:
-    """(speedup, lower_bound, counts_conflict) from two measured ingests.
+def derive_speedup(g_info: dict, l_info: dict) -> tuple[float | None, None, bool]:
+    """Return a ratio only for two completed, signature-equivalent ingests.
 
     Purely derived from values measured elsewhere, and defined once so the
     rule cannot drift between where it is computed and where it is repaired.
 
-    Only a feature-count CONFLICT disqualifies the comparison. An earlier
-    version required the counts to be *equal*, which suppressed the floor on a
-    capped run -- the one case where the legacy count cannot exist, because the
-    process was killed before it could report one. GENCODE-GTF lost a
-    legitimate "> 22x" that way.
-
-    A completed legacy run gives a speedup; a capped one gives a floor. They
-    live in DIFFERENT keys so a renderer cannot print a bound as a measurement.
+    Counts remain a useful diagnostic, but are not a correctness proof.  Both
+    versioned database signatures must exist and compare exactly equal.  A
+    Candidate completion and exhaustive validation are mandatory. A timed-out
+    comparator is censored and cannot produce a speedup or a floor.
     """
+    signature_equal = signatures_match(
+        g_info.get("correctness_signature"), l_info.get("correctness_signature")
+    )
     g_n, l_n = g_info.get("n_features"), l_info.get("n_features")
-    conflict = g_n is not None and l_n is not None and g_n != l_n
+    count_conflict = g_n is not None and l_n is not None and g_n != l_n
+    conflict = signature_equal is False or count_conflict
 
     g_wall = g_info.get("wall_seconds")
-    if not g_wall or conflict:
+    validation = g_info.get("validation") or {}
+    candidate_valid = (
+        g_info.get("state") == "completed"
+        and validation.get("ok") is True
+        and validation.get("requested_sample") == "all"
+        and validation.get("sample_checked") == g_info.get("n_features")
+    )
+    if not g_wall or not candidate_valid or conflict or signature_equal is not True:
         return None, None, conflict
-    if l_info.get("wall_seconds"):
+    if l_info.get("state") == "completed" and l_info.get("wall_seconds"):
         return l_info["wall_seconds"] / g_wall, None, conflict
-    if l_info.get("wall_seconds_lower_bound"):
-        return None, l_info["wall_seconds_lower_bound"] / g_wall, conflict
     return None, None, conflict
 
 
@@ -427,13 +424,43 @@ def rel(path: Path) -> str:
     try:
         return str(Path(path).resolve().relative_to(ROOT))
     except ValueError:
-        return str(path)
+        # The checksum separately identifies an external input; its absolute
+        # location must never enter a portable benchmark payload.
+        return f"external/{Path(path).name}"
+
+
+def _validation_sample(value: str) -> int | None:
+    """Parse the portable validation mode used in benchmark payloads."""
+
+    if value == "all":
+        return None
+    try:
+        sample = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be 'all' or an integer >= 1") from exc
+    if sample < 1:
+        raise argparse.ArgumentTypeError("must be 'all' or an integer >= 1")
+    return sample
 
 
 def run_one(corpus: dict, args) -> dict:
     name = corpus["name"]
     key = corpus["key"]
     inp = corpus["input"]
+    result_key = key
+    infer_gtf_parents = True
+    if key == "gencode-gtf":
+        infer_gtf_parents = args.gtf_arm != "no-infer"
+        if args.gtf_arm == "default":
+            result_key = "gencode-gtf-default"
+        elif args.gtf_arm == "parent-stripped":
+            if args.gtf_input is None:
+                raise SystemExit("--gtf-arm parent-stripped requires --gtf-input")
+            inp = args.gtf_input
+            result_key = "gencode-gtf-parent-stripped"
+        else:
+            # This is the recommended real-data GTF headline.
+            result_key = "gencode-gtf"
     print(f"\n=== {name} ({inp.name}) ===", flush=True)
     if not inp.exists():
         msg = f"missing input: {inp}"
@@ -445,19 +472,36 @@ def run_one(corpus: dict, args) -> dict:
     n_lines = count_feature_lines(inp)
     print(f"  feature lines: {n_lines:,}", flush=True)
 
-    gffbase_db = OUT / f"{key}.duckdb"
-    legacy_db = OUT / f"{key}_legacy.sqlite"
+    gffbase_db = OUT / f"{result_key}.duckdb"
+    legacy_db = OUT / f"{result_key}_legacy.sqlite"
 
     # ---- gffbase ingest ----
     print("  [gffbase] ingest…", flush=True)
     if gffbase_db.exists():
         gffbase_db.unlink()
     g_info = run_subprocess(
-        gffbase_ingest_script(inp, gffbase_db, corpus["fmt"]),
+        gffbase_ingest_script(
+            inp,
+            gffbase_db,
+            corpus["fmt"],
+            threads=args.threads,
+            infer_gtf_parents=infer_gtf_parents,
+            validation_sample=args.validation_sample_value,
+            validation_requested=args.validation_sample,
+        ),
         label=f"gffbase ingest({inp.name})",
         timeout=args.gffbase_timeout,
+        env_extra=benchmark_env(args.threads),
     )
+    g_info["cap_seconds"] = args.gffbase_timeout
+    g_info.pop("timed_out", None)
     g_info["disk_bytes"] = du(gffbase_db)
+    if (
+        g_info.get("exit_code") == 0
+        and gffbase_db.is_file()
+        and (g_info.get("validation") or {}).get("ok")
+    ):
+        g_info["correctness_signature"] = database_signature(gffbase_db, engine="gffbase")
     if g_info.get("wall_seconds"):
         print(
             f"    wall={pretty_seconds(g_info['wall_seconds'])}, "
@@ -469,15 +513,34 @@ def run_one(corpus: dict, args) -> dict:
         print(f"    failed: exit={g_info.get('exit_code')}", flush=True)
 
     # ---- legacy ingest (with safety-valve timeout) ----
-    print(f"  [legacy ] ingest (timeout {args.legacy_timeout}s)…", flush=True)
-    if legacy_db.exists():
-        legacy_db.unlink()
-    l_info = run_legacy_with_timeout(inp, legacy_db, args.legacy_timeout, n_lines)
-    l_info["disk_bytes"] = du(legacy_db)
-    if l_info.get("timed_out"):
+    if args.skip_legacy:
+        print("  [legacy ] skipped by --skip-legacy", flush=True)
+        l_info = {
+            "state": "skipped",
+            "skipped": "requested by --skip-legacy",
+            "n_features": None,
+        }
+    else:
+        print(f"  [legacy ] ingest (timeout {args.legacy_timeout}s)…", flush=True)
+        if legacy_db.exists():
+            legacy_db.unlink()
+        l_info = run_legacy_with_timeout(
+            inp,
+            legacy_db,
+            args.legacy_timeout,
+            n_lines,
+            infer_gtf_parents=infer_gtf_parents,
+            threads=args.threads,
+        )
+        l_info["cap_seconds"] = args.legacy_timeout
+        l_info["disk_bytes"] = du(legacy_db)
+        if l_info.get("exit_code") == 0 and legacy_db.is_file():
+            l_info["correctness_signature"] = database_signature(legacy_db, engine="gffutils")
+    if l_info.get("skipped"):
+        pass
+    elif l_info.get("state") == "timed_out":
         print(
-            f"    KILLED at the {args.legacy_timeout}s cap without finishing "
-            f"— wall is > {pretty_seconds(float(args.legacy_timeout))}",
+            f"    timed out at the {args.legacy_timeout}s cap; comparator censored",
             flush=True,
         )
     elif l_info.get("wall_seconds"):
@@ -495,7 +558,7 @@ def run_one(corpus: dict, args) -> dict:
     # then never compared, so a corpus where the two disagreed -- a different
     # duplicate-ID policy, a parent-synthesis difference on GTF -- would have
     # published a headline number comparing two different workloads.
-    speedup, speedup_lower_bound, counts_conflict = derive_speedup(g_info, l_info)
+    speedup, _, counts_conflict = derive_speedup(g_info, l_info)
     if counts_conflict:
         print(
             f"    !! feature-count mismatch: gffbase={g_info['n_features']:,} "
@@ -508,9 +571,9 @@ def run_one(corpus: dict, args) -> dict:
     print(f"  [gffbase] spatial — {args.n_spatial} regions…", flush=True)
     spatial = {"skipped": "no DB"} if not gffbase_db.exists() else None
     if spatial is None:
-        regions = sample_regions_from_db(gffbase_db, n=args.n_spatial)
+        regions = sample_regions_from_db(gffbase_db, n=args.n_spatial, threads=args.threads)
         if regions:
-            spatial = bench_spatial(gffbase_db, regions, repeats=args.repeats)
+            spatial = bench_spatial(gffbase_db, regions, repeats=args.repeats, threads=args.threads)
             print(
                 f"    wall={pretty_seconds(spatial['wall_seconds'])}, "
                 f"qps={spatial['qps']:.0f}, "
@@ -524,7 +587,12 @@ def run_one(corpus: dict, args) -> dict:
     print(f"  [gffbase] batched — {args.n_batched} anchors…", flush=True)
     batched = {"skipped": "no DB"} if not gffbase_db.exists() else None
     if batched is None:
-        batched = bench_batched(gffbase_db, n_genes=args.n_batched, repeats=args.repeats)
+        batched = bench_batched(
+            gffbase_db,
+            n_genes=args.n_batched,
+            repeats=args.repeats,
+            threads=args.threads,
+        )
         if "skipped" not in batched:
             print(
                 f"    wall={pretty_seconds(batched['wall_seconds'])}, "
@@ -535,7 +603,7 @@ def run_one(corpus: dict, args) -> dict:
 
     return {
         "name": name,
-        "key": key,
+        "key": result_key,
         # Per-row provenance. Results MERGE by key -- which is the fix for a
         # real bug, where `--only mane` used to wipe the other four corpora --
         # but it means one file can hold rows measured at different times from
@@ -549,21 +617,26 @@ def run_one(corpus: dict, args) -> dict:
         },
         "input": rel(inp),
         "input_bytes": inp.stat().st_size if inp.exists() else 0,
+        "input_sha256": sha256_file(inp) if inp.exists() else None,
         "feature_lines": n_lines,
         "gffbase": g_info,
         "legacy": l_info,
         "ingest_speedup": speedup,
-        "ingest_speedup_lower_bound": speedup_lower_bound,
         "spatial": spatial,
         "batched": batched,
         "db_paths": {"gffbase": rel(gffbase_db), "legacy": rel(legacy_db)},
         "params": {
-            "legacy_timeout_sec": args.legacy_timeout,
-            "gffbase_timeout_sec": args.gffbase_timeout,
+            "legacy_cap_seconds": args.legacy_timeout,
+            "gffbase_cap_seconds": args.gffbase_timeout,
             "n_spatial": args.n_spatial,
             "n_batched": args.n_batched,
             "repeats": args.repeats,
             "region_seed": REGION_SEED,
+            "threads": args.threads,
+            "gtf_arm": args.gtf_arm if key == "gencode-gtf" else None,
+            "infer_gtf_parents": infer_gtf_parents if key == "gencode-gtf" else None,
+            "validation_sample": args.validation_sample,
+            "benchmark_env": benchmark_env(args.threads),
         },
     }
 
@@ -574,8 +647,7 @@ def main() -> None:
         "--legacy-timeout",
         type=int,
         default=5400,
-        help="seconds before legacy ingest is killed (default 5400 = 90 min). "
-        "A killed run is reported as a lower bound, never extrapolated.",
+        help="seconds before legacy ingest is killed (default 5400 = 90 min)",
     )
     ap.add_argument(
         "--gffbase-timeout", type=int, default=3600, help="seconds before gffbase ingest is killed"
@@ -584,7 +656,7 @@ def main() -> None:
         "--rederive",
         action="store_true",
         help=(
-            "recompute the DERIVED fields (speedup, lower bound) in an existing "
+            "recompute the DERIVED speedup field in an existing "
             "results file from the measurements already in it, then exit. For "
             "when the derivation rule is corrected and re-measuring would cost "
             "hours. Touches no measured value."
@@ -614,6 +686,37 @@ def main() -> None:
     ap.add_argument("--n-spatial", type=int, default=5000)
     ap.add_argument("--n-batched", type=int, default=5000)
     ap.add_argument(
+        "--threads",
+        type=int,
+        default=int(__import__("os").environ.get("GFFBASE_THREADS", "1")),
+        help="DuckDB threads for every ingest and query connection",
+    )
+    ap.add_argument(
+        "--validation-sample",
+        type=str,
+        default="all",
+        help="full validation attribute sample: 'all' (canonical) or an integer >= 1",
+    )
+    ap.add_argument(
+        "--gtf-arm",
+        choices=("no-infer", "default", "parent-stripped"),
+        default="no-infer",
+        help=(
+            "GENCODE GTF control: recommended real-data run with redundant parent "
+            "inference disabled, legacy defaults, or a derived parent-stripped input"
+        ),
+    )
+    ap.add_argument(
+        "--gtf-input",
+        type=Path,
+        help="derived GTF path required by --gtf-arm parent-stripped",
+    )
+    ap.add_argument(
+        "--skip-legacy",
+        action="store_true",
+        help="run only gffbase (used for thread-scaling diagnostics)",
+    )
+    ap.add_argument(
         "--only",
         action="append",
         default=None,
@@ -636,6 +739,15 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    if args.threads < 1:
+        ap.error("--threads must be >= 1")
+    if args.repeats < 1:
+        ap.error("--repeats must be >= 1")
+    try:
+        args.validation_sample_value = _validation_sample(args.validation_sample)
+    except argparse.ArgumentTypeError as exc:
+        ap.error(f"--validation-sample {exc}")
+
     OUT.mkdir(parents=True, exist_ok=True)
     if args.rederive:
         path = OUT / "06_mega.json"
@@ -643,11 +755,12 @@ def main() -> None:
         for key, row in (data.get("corpora") or {}).items():
             if "error" in row or not row.get("gffbase"):
                 continue
-            before = (row.get("ingest_speedup"), row.get("ingest_speedup_lower_bound"))
-            sp, lb, _ = derive_speedup(row["gffbase"], row.get("legacy") or {})
-            row["ingest_speedup"], row["ingest_speedup_lower_bound"] = sp, lb
-            if before != (sp, lb):
-                print(f"  {key}: {before} -> {(sp, lb)}", flush=True)
+            before = row.get("ingest_speedup")
+            sp, _, _ = derive_speedup(row["gffbase"], row.get("legacy") or {})
+            row["ingest_speedup"] = sp
+            row.pop("ingest_speedup_lower_bound", None)
+            if before != sp:
+                print(f"  {key}: {before} -> {sp}", flush=True)
         path.write_text(json.dumps(data, indent=2) + "\n")
         print(f"rederived {path.relative_to(ROOT)} (no measured value changed)", flush=True)
         return
@@ -677,11 +790,12 @@ def main() -> None:
         except Exception as exc:  # pragma: no cover - top-level guard
             print(f"  ERROR on {corpus['name']}: {exc}", flush=True)
             row = {"name": corpus["name"], "key": key, "error": str(exc)}
-        results[key] = row
+        output_key = row.get("key", key)
+        results[output_key] = row
 
         # Write after EVERY corpus, not once at the end. A five-hour sweep
         # that dies on the last corpus used to lose all of it.
-        merge_results("06_mega", "corpora", {key: row})
+        merge_results("06_mega", "corpora", {output_key: row})
 
         if not args.no_purge and key not in keep:
             paths = row.get("db_paths") or {}
@@ -746,14 +860,12 @@ def main() -> None:
         legacy = row["legacy"]
         if legacy.get("wall_seconds"):
             legacy_cell = pretty_seconds(legacy["wall_seconds"])
-        elif legacy.get("wall_seconds_lower_bound"):
-            legacy_cell = "> " + pretty_seconds(legacy["wall_seconds_lower_bound"])
+        elif legacy.get("state") == "timed_out":
+            legacy_cell = f"timeout ({legacy.get('cap_seconds')} s)"
         else:
             legacy_cell = "fail"
         if row.get("ingest_speedup"):
             speed_cell = f"{row['ingest_speedup']:.2f}x"
-        elif row.get("ingest_speedup_lower_bound"):
-            speed_cell = f"> {row['ingest_speedup_lower_bound']:.2f}x"
         else:
             speed_cell = "n/a"
         print(
@@ -764,11 +876,7 @@ def main() -> None:
             flush=True,
         )
     print("=" * 92, flush=True)
-    print(
-        "'>' = legacy was killed at the safety valve without finishing, so the "
-        "wall and the speedup are floors. No value is extrapolated.",
-        flush=True,
-    )
+    print("timeout = comparator did not complete; no speedup is reported.", flush=True)
 
 
 if __name__ == "__main__":
