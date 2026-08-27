@@ -848,6 +848,7 @@ def _prepare_gtf_parent_map(
         )
         SELECT raw_id, seqid, strand, MIN(file_order) AS first_file_order,
                BOOL_OR(is_authored) AS has_authored_parent,
+               COUNT(DISTINCT authored_id) FILTER (WHERE is_authored) AS authored_id_count,
                MIN(authored_id) FILTER (WHERE is_authored) AS authored_id
         FROM candidates
         GROUP BY raw_id, seqid, strand
@@ -871,22 +872,36 @@ def _prepare_gtf_parent_map(
         row[0] for row in con.execute("SELECT resolved_id FROM __gtf_parent_map").fetchall()
     )
 
-    by_raw: dict[str, list[tuple[str, str | None, int | None, bool, str | None]]] = {}
-    for raw_id, seqid, strand, first_file_order, is_authored, authored_id in groups:
+    by_raw: dict[str, list[tuple[str, str | None, int | None, bool, int, str | None]]] = {}
+    for raw_id, seqid, strand, first_file_order, is_authored, authored_count, authored_id in groups:
         by_raw.setdefault(raw_id, []).append(
-            (seqid, strand, first_file_order, bool(is_authored), authored_id)
+            (seqid, strand, first_file_order, bool(is_authored), int(authored_count), authored_id)
         )
 
     mapping_rows: list[tuple] = []
     conflict_rows: list[tuple] = []
     for raw_id, locations in by_raw.items():
+        for (
+            seqid,
+            strand,
+            _first_file_order,
+            _is_authored,
+            authored_count,
+            _authored_id,
+        ) in locations:
+            if authored_count > 1:
+                raise SynthesisConflictError(
+                    f"cannot resolve {parent_type} {raw_id!r}: {authored_count} authored "
+                    f"{parent_type} IDs share ({seqid!r}, {strand!r}); children naming "
+                    f"{attribute} are ambiguous"
+                )
         # With inference disabled, a bare gene_id/transcript_id is metadata,
         # not a request to invent a parent. We still must route and validate
         # IDs that *do* name an authored parent; otherwise a child on another
         # chromosome silently attaches to that authored row in compat mode.
         if not synthesize_missing and not any(location[3] for location in locations):
             continue
-        authored_ids = {location[4] for location in locations if location[3]}
+        authored_ids = {location[5] for location in locations if location[3]}
         raw_id_collision = synthesize_missing and raw_id in taken and raw_id not in authored_ids
         if raw_id_collision and merge_strategy != "create_unique":
             occupied_type = con.execute(
@@ -900,7 +915,7 @@ def _prepare_gtf_parent_map(
         if len(locations) > 1 and merge_strategy != "create_unique":
             rendered = ", ".join(
                 f"({seqid!r}, {strand!r}, first source order {order})"
-                for seqid, strand, order, _is_authored, _authored_id in locations
+                for seqid, strand, order, _is_authored, _authored_count, _authored_id in locations
             )
             raise SynthesisConflictError(
                 f"cannot synthesize {parent_type} {raw_id!r}: {attribute} occurs "
@@ -923,9 +938,14 @@ def _prepare_gtf_parent_map(
 
         authored_locations = [index for index, location in enumerate(locations) if location[3]]
         canonical_index = authored_locations[0] if authored_locations else 0
-        for rank, (seqid, strand, first_file_order, is_authored, authored_id) in enumerate(
-            locations
-        ):
+        for rank, (
+            seqid,
+            strand,
+            first_file_order,
+            is_authored,
+            _authored_count,
+            authored_id,
+        ) in enumerate(locations):
             if is_authored:
                 resolved_id = authored_id or raw_id
             elif rank == canonical_index and not raw_id_collision:
