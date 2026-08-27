@@ -410,6 +410,18 @@ def test_inv12_catches_attributes_that_no_longer_match_their_blob(db):
     assert "attributes_reparse" in _names(validate_db(db, level="full"))
 
 
+def test_inv12_checks_every_segment_of_a_multipart_feature(db):
+    db.conn.execute(
+        "UPDATE segments SET attributes_blob = 'ID=cds1;Parent=tampered'::BLOB "
+        "WHERE feature_id = 'cds1' AND seg_idx = 1"
+    )
+
+    report = validate_db(db, level="full", sample=None)
+
+    violation = next(v for v in report.violations if v.name == "attributes_reparse")
+    assert any(example[:2] == ("cds1", 1) for example in violation.examples)
+
+
 def test_inv12_tolerates_a_key_with_no_values(tmp_path):
     """`pseudo` / `ID=` yield a key with an EMPTY value list, which cannot be
     represented as a `(key, value)` row. That difference is the schema's, not a
@@ -495,6 +507,47 @@ def test_full_validation_sample_none_checks_every_attribute_blob(tmp_path):
 
     assert "attributes_reparse" not in _names(validate_db(many, level="full", sample=200))
     assert "attributes_reparse" in _names(validate_db(many, level="full", sample=None))
+
+
+def test_full_validation_reports_actual_eligible_and_checked_features(tmp_path):
+    src = tmp_path / "coverage.gtf"
+    src.write_text(
+        'chr1\trs\texon\t1\t10\t.\t+\t.\tgene_id "g1"; transcript_id "t1";\n'
+        'chr1\trs\texon\t20\t30\t.\t+\t.\tgene_id "g2"; transcript_id "t2";\n'
+    )
+    inferred = create_db(str(src), ":memory:")
+
+    sampled = validate_db(inferred, level="full", sample=1)
+    exhaustive = validate_db(inferred, level="full", sample=None)
+
+    assert inferred.count_features_of_type() == 6  # four parents are synthetic
+    assert (sampled.attribute_eligible, sampled.attribute_checked) == (2, 1)
+    assert (exhaustive.attribute_eligible, exhaustive.attribute_checked) == (2, 2)
+
+
+def test_full_validation_streams_attribute_rows_without_fetchall(db):
+    class NoMaterializeCursor:
+        def __init__(self, cursor):
+            self.cursor = cursor
+
+        def fetchmany(self, size):
+            return self.cursor.fetchmany(size)
+
+        def fetchall(self):
+            raise AssertionError("INV-12 must stream rather than materialize all rows")
+
+    class GuardedConnection:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, sql, params=None):
+            cursor = self.connection.execute(sql, params or [])
+            return NoMaterializeCursor(cursor) if sql.startswith("WITH eligible AS") else cursor
+
+    report = validate_db(GuardedConnection(db.conn), level="full", sample=None)
+
+    assert report.ok
+    assert report.attribute_checked == report.attribute_eligible
 
 
 def test_corrupt_max_depth_is_reported_as_a_violation_instead_of_crashing(db):

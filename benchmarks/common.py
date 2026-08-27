@@ -44,8 +44,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 # `psutil` is imported lazily, inside the two functions that measure with it.
 # At module scope it made `06_mega.py --help` -- and every import of this
@@ -76,6 +78,43 @@ LEGACY_DB = OUT / "gencode-gff3_legacy.sqlite"
 #: Results schema. Bump when the shape changes so a stale file is detectable
 #: rather than silently misread.
 SCHEMA_VERSION = "3"
+
+# These are applied to every ingest child.  Keeping the complete set in the
+# top-level provenance lets a controller reject a run that would otherwise
+# look comparable while silently oversubscribing a helper library.
+_BENCHMARK_ENV_KEYS = (
+    "GFFBASE_THREADS",
+    "GFFUTILS2_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "BLIS_NUM_THREADS",
+    "DUCKDB_DISABLE_PROGRESS_BAR",
+    "PYTHONUNBUFFERED",
+)
+
+FULL_VALIDATION_IDS = (
+    "INV-1",
+    "INV-2",
+    "INV-3",
+    "INV-4",
+    "INV-5",
+    "INV-6",
+    "INV-7",
+    "INV-9",
+    "INV-10",
+    "INV-11",
+    "INV-11b",
+    "INV-13",
+    "INV-14",
+    "INV-15",
+    "INV-15a",
+    "INV-16",
+    "INV-11-exact",
+    "INV-12",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -229,13 +268,19 @@ def environment() -> dict:
     result that does not say what it ran on is not a measurement, and one that
     does not say what version it measured cannot detect a regression.
     """
-    import psutil
+    import psutil  # type: ignore[import-untyped]
 
     free = shutil.disk_usage(str(OUT if OUT.exists() else BENCH_DIR)).free
     try:
         affinity = sorted(os.sched_getaffinity(0))
     except (AttributeError, OSError):
         affinity = None
+    try:
+        threads = int(os.environ.get("GFFBASE_THREADS", "1"))
+    except ValueError:
+        threads = 1
+    if threads < 1:
+        threads = 1
     return {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "git_commit": _cmd("git", "-C", str(ROOT), "rev-parse", "HEAD"),
@@ -268,7 +313,9 @@ def environment() -> dict:
             ),
             "wheel_sha256": os.environ.get("GFFBASE_BENCH_WHEEL_SHA256"),
         },
-        "env": {k: os.environ[k] for k in ("GFFBASE_TEST_DISABLE_RTREE",) if k in os.environ},
+        # Do not snapshot an arbitrary parent shell.  These are the actual
+        # bounded controls applied by ``run_subprocess`` for a harness run.
+        "env": benchmark_env(threads),
     }
 
 
@@ -407,20 +454,47 @@ def run_subprocess(
             out, _ = proc.communicate()
 
     text = out.decode("utf-8", errors="replace").strip()
+    if timed_out:
+        state = "timed_out"
+    elif proc.returncode == 0:
+        state = "completed"
+    else:
+        state = "failed"
     info: dict = {
         "label": label,
         "peak_rss_bytes": peak,
         "peak_rss_mb": peak / (1024 * 1024),
         "exit_code": proc.returncode,
-        "timed_out": timed_out,
-        "state": "timed_out" if timed_out else "completed",
+        "state": state,
         "benchmark_env": applied_env,
     }
+    if timeout is not None:
+        info["cap_seconds"] = timeout
     last = text.splitlines()[-1] if text else ""
+    parse_error = None
     try:
-        info.update(json.loads(last))
-    except (ValueError, json.JSONDecodeError):
-        info["raw_stdout_tail"] = text[-1000:]
+        payload = json.loads(last)
+        if not isinstance(payload, dict):
+            raise ValueError("last stdout line is not a JSON object")
+        reserved = set(info)
+        collisions = sorted(reserved.intersection(payload))
+        if collisions:
+            raise ValueError(f"child payload overwrites authoritative fields: {collisions}")
+        if state == "completed":
+            info.update(payload)
+    except (ValueError, json.JSONDecodeError) as exc:
+        parse_error = str(exc)
+    if state != "completed" or parse_error is not None:
+        # Child stdout can contain local input paths, commands, or exception
+        # text.  Keep bounded diagnostic evidence without serializing it.
+        info["stdout_bytes"] = len(out)
+        info["stdout_sha256"] = hashlib.sha256(out).hexdigest()
+        if parse_error is not None:
+            info["stdout_parse_error"] = "invalid final JSON object"
+    if state != "completed":
+        # A killed or failed process has no completed ingest wall.  Never let
+        # a partial child payload turn the cap into a measurement.
+        info["wall_seconds"] = None
     return info
 
 
@@ -481,20 +555,224 @@ class _RowsCursor:
         return rows
 
 
-def _blob_attribute_rows(rows) -> list[tuple[str, int, int, str, int, str]]:
-    """Expand every physical segment's column-nine values in stored order."""
+def _canonical_attribute_rows(values: dict) -> Iterator[tuple[str, int, str | None]]:
+    """Yield a deterministic semantic representation of column nine.
 
-    from gffbase._pyfallback.attributes import parse_attributes
+    GFF/GTF attribute key order is not semantic and the two engines expose it
+    differently for inferred parents.  Keys are therefore sorted, while the
+    order of values for each key is retained.  A key with no values is emitted
+    with index ``-1`` and ``None`` so flags such as ``pseudo`` remain covered.
+    """
 
-    out = []
-    for feature_id, seg_idx, blob in rows:
-        text = bytes(blob or b"").decode("utf-8", errors="replace")
-        pairs, _ = parse_attributes(text)
-        out.extend(
-            (str(feature_id), int(seg_idx), ordinal, str(key), int(value_idx), str(value))
-            for ordinal, (key, value, value_idx) in enumerate(pairs)
-        )
-    return out
+    for key in sorted(values):
+        raw_values = values[key]
+        items = raw_values if isinstance(raw_values, (list, tuple)) else [raw_values]
+        if not items:
+            yield str(key), -1, None
+            continue
+        for value_idx, value in enumerate(items):
+            yield str(key), value_idx, str(value)
+
+
+def _gffbase_attribute_rows(cursor) -> Iterator[tuple[str, int, str, int, str | None]]:
+    """Stream canonical attributes for every physical gffbase segment."""
+
+    from gffbase.feature import _LazyAttributes
+
+    current: tuple[str, int] | None = None
+    blob: bytes | None = None
+    normalized: dict[str, list[str]] = {}
+
+    def emit():
+        if current is None:
+            return
+        if blob is not None:
+            values = {str(key): list(items) for key, items in _LazyAttributes(blob=blob).items()}
+        else:
+            values = normalized
+        for key, value_idx, value in _canonical_attribute_rows(values):
+            yield current[0], current[1], key, value_idx, value
+
+    while rows := cursor.fetchmany(10_000):
+        for feature_id, seg_idx, raw_blob, key, value in rows:
+            identity = (str(feature_id), int(seg_idx))
+            if identity != current:
+                yield from emit()
+                current = identity
+                blob = bytes(raw_blob) if raw_blob is not None else None
+                normalized = {}
+            if key is not None:
+                normalized.setdefault(str(key), []).append(str(value))
+    yield from emit()
+
+
+def _gffutils_signature_components(
+    con, *, scratch_dir: Path
+) -> tuple[str, int, str, int, str, int, str, int, int, list]:
+    """Normalize gffutils in a temporary on-disk SQLite database.
+
+    The temporary tables deliberately trade disk for bounded memory.  They
+    preserve gffutils' resolved logical IDs, canonicalize attribute keys
+    lexically (while preserving each key's value index), and remove legacy
+    GTF relation artifacts.  Resolved IDs are essential under
+    ``merge_strategy="create_unique"``: both engines retain incompatible
+    duplicate source IDs as ``x``/``x_1``, while each row's ``ID`` attribute
+    remains ``x``.  With inference disabled, gffutils records
+    dangling ``gene_id``/``transcript_id`` endpoints that are not features;
+    with explicit parent records, it also records their identifier attributes
+    as self-ancestry (``gene -> gene`` and ``transcript -> transcript``).
+    Neither represents a semantic parent relationship.
+    """
+
+    import sqlite3
+
+    dialect_rows = con.execute("SELECT dialect FROM meta").fetchmany(1)
+    dialect = json.loads(dialect_rows[0][0]) if dialect_rows else {}
+    is_gtf = dialect.get("fmt") == "gtf"
+
+    with tempfile.TemporaryDirectory(prefix=".gffbase-signature-", dir=scratch_dir) as directory:
+        norm = sqlite3.connect(str(Path(directory) / "normal.sqlite"))
+        try:
+            norm.executescript(
+                """
+                PRAGMA journal_mode = OFF;
+                PRAGMA synchronous = OFF;
+                PRAGMA temp_store = FILE;
+                PRAGMA cache_size = -65536;
+                CREATE TABLE stage (rowid INTEGER, dbid TEXT, logical TEXT, seqid TEXT,
+                    source TEXT, featuretype TEXT, start INTEGER, "end" INTEGER,
+                    score TEXT, strand TEXT, frame TEXT);
+                CREATE TABLE attrs (dbid TEXT, key TEXT, value_idx INTEGER, value TEXT NULL);
+                CREATE TABLE relations (parent TEXT, child TEXT, depth INTEGER);
+                """
+            )
+            cursor = con.execute(
+                "SELECT rowid, id, seqid, source, featuretype, start, end, score, strand, frame, attributes "
+                "FROM features ORDER BY rowid"
+            )
+            while rows := cursor.fetchmany(10_000):
+                stages = []
+                attributes: list[tuple[str, str, int, str | None]] = []
+                for rowid, dbid, *columns, raw in rows:
+                    values = json.loads(raw or "{}")
+                    logical = str(dbid)
+                    seqid, source, featuretype, start, end, score, strand, frame = columns
+                    # The projects use different reserved source labels for
+                    # the same inferred GTF parents.  Treat both labels as one
+                    # engine-neutral semantic source.
+                    if source in {"gffbase_derived", "gffutils_derived"}:
+                        source = "derived"
+                    stages.append(
+                        (
+                            rowid,
+                            str(dbid),
+                            logical,
+                            seqid,
+                            source,
+                            featuretype,
+                            start,
+                            end,
+                            score,
+                            strand,
+                            frame,
+                        )
+                    )
+                    attributes.extend(
+                        (str(dbid), key, value_idx, value)
+                        for key, value_idx, value in _canonical_attribute_rows(values)
+                    )
+                norm.executemany(
+                    "INSERT INTO stage VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", stages
+                )
+                norm.executemany("INSERT INTO attrs VALUES (?, ?, ?, ?)", attributes)
+            cursor = con.execute("SELECT parent, child, level FROM relations")
+            while rows := cursor.fetchmany(10_000):
+                norm.executemany("INSERT INTO relations VALUES (?, ?, ?)", rows)
+            norm.commit()
+            norm.executescript(
+                """
+                CREATE INDEX stage_dbid ON stage(dbid);
+                CREATE TABLE segments AS
+                SELECT rowid, dbid, logical,
+                       ROW_NUMBER() OVER (PARTITION BY logical ORDER BY rowid) - 1 AS seg_idx,
+                       seqid, source, featuretype, start, "end", score, strand, frame
+                FROM stage;
+                CREATE INDEX segments_dbid ON segments(dbid);
+                CREATE TABLE feature_ids AS SELECT DISTINCT logical FROM segments;
+                CREATE TABLE mappings AS SELECT dbid, logical FROM stage;
+                """
+            )
+            segment_sha, segment_count = _hash_cursor(
+                norm.execute(
+                    'SELECT logical, seg_idx, seqid, source, featuretype, start, "end", score, strand, frame '
+                    "FROM segments ORDER BY logical, seg_idx"
+                )
+            )
+            attribute_sha, attribute_count = _hash_cursor(
+                norm.execute(
+                    "SELECT s.logical, s.seg_idx, a.key, a.value_idx, a.value "
+                    "FROM attrs a JOIN segments s ON s.dbid = a.dbid "
+                    "ORDER BY s.logical, s.seg_idx, a.key, a.value_idx, a.value"
+                )
+            )
+            endpoint_filter = (
+                "JOIN feature_ids fp ON fp.logical = COALESCE(mp.logical, r.parent) "
+                "JOIN feature_ids fc ON fc.logical = COALESCE(mc.logical, r.child) "
+                if is_gtf
+                else ""
+            )
+            normalized_relations = (
+                "FROM relations r "
+                "LEFT JOIN mappings mp ON mp.dbid = r.parent "
+                "LEFT JOIN mappings mc ON mc.dbid = r.child " + endpoint_filter
+            )
+            semantic_relation_filter = (
+                "COALESCE(mp.logical, r.parent) <> COALESCE(mc.logical, r.child)"
+                if is_gtf
+                else "1 = 1"
+            )
+            direct_sha, direct_count = _hash_cursor(
+                norm.execute(
+                    "SELECT DISTINCT COALESCE(mp.logical, r.parent), "
+                    "COALESCE(mc.logical, r.child) "
+                    + normalized_relations
+                    + "WHERE r.depth = 1 AND "
+                    + semantic_relation_filter
+                    + " ORDER BY 1, 2"
+                )
+            )
+            closure_sha, closure_count = _hash_cursor(
+                norm.execute(
+                    "SELECT COALESCE(mp.logical, r.parent), COALESCE(mc.logical, r.child), "
+                    "MIN(r.depth) "
+                    + normalized_relations
+                    + "WHERE "
+                    + semantic_relation_filter
+                    + " GROUP BY 1, 2 ORDER BY 1, 2"
+                )
+            )
+            feature_count = int(norm.execute("SELECT COUNT(*) FROM feature_ids").fetchone()[0])
+            histogram = [
+                [row[0], int(row[1])]
+                for row in norm.execute(
+                    "SELECT featuretype, COUNT(*) FROM segments WHERE seg_idx = 0 "
+                    "GROUP BY featuretype ORDER BY featuretype"
+                )
+            ]
+            return (
+                segment_sha,
+                segment_count,
+                attribute_sha,
+                attribute_count,
+                direct_sha,
+                direct_count,
+                closure_sha,
+                closure_count,
+                feature_count,
+                histogram,
+            )
+        finally:
+            norm.close()
 
 
 _SIGNATURE_COMPONENTS = (
@@ -594,22 +872,45 @@ def database_signature(path: Path, *, engine: str) -> dict:
     """
 
     path = Path(path)
+    con: Any
     if engine == "gffbase":
         import duckdb
 
         con = duckdb.connect(str(path), read_only=True)
+        fmt_row = con.execute("SELECT value FROM meta WHERE key = 'fmt'").fetchone()
+        is_gtf = bool(fmt_row and fmt_row[0] == "gtf")
         segment_sql = """
-            SELECT feature_id, seg_idx, seqid, source, featuretype, start, "end", score, strand, frame
+            SELECT feature_id, seg_idx, seqid,
+                   CASE WHEN source IN ('gffbase_derived', 'gffutils_derived')
+                        THEN 'derived' ELSE source END,
+                   featuretype, start, "end", score, strand, frame
             FROM segments_all ORDER BY feature_id, seg_idx
         """
         attribute_sql = """
-            SELECT feature_id, seg_idx, attributes_blob
-            FROM segments_all ORDER BY feature_id, seg_idx
+            SELECT sa.feature_id, sa.seg_idx, CAST(sa.attributes_blob AS BLOB),
+                   a.key, a.value
+            FROM segments_all sa
+            LEFT JOIN segments sm ON sm.feature_id = sa.feature_id AND sm.seg_idx = sa.seg_idx
+            LEFT JOIN attributes a ON a.feature_id = sa.feature_id AND a.seg_idx =
+                CASE WHEN sm.seg_idx > 0 AND sm.attrs_same_as_seg0 THEN 0 ELSE sa.seg_idx END
+            ORDER BY sa.feature_id, sa.seg_idx, a.key, a.idx, a.value
         """
-        direct_sql = "SELECT parent, child FROM edges ORDER BY parent, child"
-        closure_sql = """
-            SELECT ancestor, descendant, depth FROM closure
-            ORDER BY ancestor, descendant, depth
+        endpoint_joins = (
+            "JOIN features p ON p.id = e.parent JOIN features c ON c.id = e.child" if is_gtf else ""
+        )
+        closure_endpoint_joins = (
+            "JOIN features a ON a.id = cl.ancestor JOIN features d ON d.id = cl.descendant"
+            if is_gtf
+            else ""
+        )
+        direct_sql = f"""
+            SELECT DISTINCT e.parent, e.child FROM edges e {endpoint_joins}
+            ORDER BY e.parent, e.child
+        """
+        closure_sql = f"""
+            SELECT cl.ancestor, cl.descendant, MIN(cl.depth) FROM closure cl
+            {closure_endpoint_joins}
+            GROUP BY cl.ancestor, cl.descendant ORDER BY cl.ancestor, cl.descendant
         """
         feature_count_sql = "SELECT COUNT(*) FROM features"
         histogram_sql = """
@@ -628,85 +929,27 @@ def database_signature(path: Path, *, engine: str) -> dict:
             segment_sha, segment_count = _hash_cursor(con.execute(segment_sql))
             direct_sha, direct_count = _hash_cursor(con.execute(direct_sql))
             closure_sha, closure_count = _hash_cursor(con.execute(closure_sql))
-            feature_count = int(con.execute(feature_count_sql).fetchone()[0])
+            feature_count_row = con.execute(feature_count_sql).fetchone()
+            if feature_count_row is None:  # pragma: no cover - COUNT always returns one row
+                raise ValueError("features count query returned no row")
+            feature_count = int(feature_count_row[0])
             histogram = [[row[0], int(row[1])] for row in con.execute(histogram_sql).fetchall()]
-            attribute_rows = _blob_attribute_rows(con.execute(attribute_sql).fetchall())
-            attribute_sha, attribute_count = _hash_cursor(_RowsCursor(attribute_rows))
-        else:
-            # gffutils represents each physical line as a separate feature,
-            # including a duplicate-ID suffix in the database key.  Recover
-            # the source ID from column nine and number those physical rows as
-            # segments, matching gffbase's compact multipart representation.
-            rows = con.execute(
-                "SELECT rowid, id, seqid, source, featuretype, start, end, score, strand, frame, attributes "
-                "FROM features ORDER BY rowid"
-            ).fetchall()
-            logical_by_dbid: dict[str, str] = {}
-            parsed_rows = []
-            for row in rows:
-                rowid, dbid, *columns, raw = row
-                values = json.loads(raw or "{}")
-                source_id = values.get("ID")
-                logical = str(
-                    source_id[0] if isinstance(source_id, list) and source_id else source_id or dbid
-                )
-                logical_by_dbid[str(dbid)] = logical
-                parsed_rows.append((rowid, logical, columns, values))
-            segment_index: dict[str, int] = {}
-            segment_rows = []
-            attribute_rows: list[tuple[str, int, int, str, int, str]] = []
-            logical_types: dict[str, str] = {}
-            for _, logical, columns, values in parsed_rows:
-                seg_idx = segment_index.get(logical, 0)
-                segment_index[logical] = seg_idx + 1
-                seqid, source, featuretype, start, end, score, strand, frame = columns
-                segment_rows.append(
-                    (logical, seg_idx, seqid, source, featuretype, start, end, score, strand, frame)
-                )
-                logical_types.setdefault(logical, str(featuretype))
-                for key_ord, (key, item_values) in enumerate(values.items()):
-                    if not isinstance(item_values, list):
-                        item_values = [item_values]
-                    attribute_rows.extend(
-                        (logical, seg_idx, key_ord, str(key), idx, str(value))
-                        for idx, value in enumerate(item_values)
-                    )
-            direct_rows = {
-                (
-                    logical_by_dbid.get(str(parent), str(parent)),
-                    logical_by_dbid.get(str(child), str(child)),
-                )
-                for parent, child in con.execute(
-                    "SELECT parent, child FROM relations WHERE level = 1"
-                )
-            }
-            closure_depths: dict[tuple[str, str], int] = {}
-            for parent, child, depth in con.execute("SELECT parent, child, level FROM relations"):
-                key = (
-                    logical_by_dbid.get(str(parent), str(parent)),
-                    logical_by_dbid.get(str(child), str(child)),
-                )
-                closure_depths[key] = min(closure_depths.get(key, int(depth)), int(depth))
-            segment_rows.sort(key=lambda row: (row[0], row[1]))
-            attribute_rows.sort(key=lambda row: (row[0], row[1], row[2], row[3], row[4], row[5]))
-            segment_sha, segment_count = _hash_cursor(_RowsCursor(segment_rows))
-            direct_sha, direct_count = _hash_cursor(_RowsCursor(sorted(direct_rows)))
-            closure_sha, closure_count = _hash_cursor(
-                _RowsCursor(
-                    [
-                        (parent, child, depth)
-                        for (parent, child), depth in sorted(closure_depths.items())
-                    ]
-                )
+            attribute_sha, attribute_count = _hash_cursor(
+                _RowsCursor(_gffbase_attribute_rows(con.execute(attribute_sql)))
             )
-            feature_count = len(logical_types)
-            histogram_counts: dict[str, int] = {}
-            for featuretype in logical_types.values():
-                histogram_counts[featuretype] = histogram_counts.get(featuretype, 0) + 1
-            histogram = [
-                [featuretype, count] for featuretype, count in sorted(histogram_counts.items())
-            ]
-            attribute_sha, attribute_count = _hash_cursor(_RowsCursor(attribute_rows))
+        else:
+            (
+                segment_sha,
+                segment_count,
+                attribute_sha,
+                attribute_count,
+                direct_sha,
+                direct_count,
+                closure_sha,
+                closure_count,
+                feature_count,
+                histogram,
+            ) = _gffutils_signature_components(con, scratch_dir=path.parent)
     finally:
         con.close()
 
@@ -735,6 +978,171 @@ def signatures_match(left: dict | None, right: dict | None) -> bool | None:
     if not validate_database_signature(left) or not validate_database_signature(right):
         return None
     return left == right
+
+
+def _positive_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
+def candidate_evidence_is_valid(
+    candidate: dict | None,
+    *,
+    require_exhaustive: bool = False,
+    require_rtree: bool = False,
+) -> bool:
+    """Validate one candidate's completed ingest evidence without I/O.
+
+    A numeric validation sample is useful for scaling diagnostics, but is not
+    publication evidence.  A B-tree fallback is a valid ingest/batched-query
+    result, but never a spatial-index measurement.
+    """
+
+    if not isinstance(candidate, dict):
+        return False
+    validation = candidate.get("validation")
+    if not isinstance(validation, dict):
+        return False
+    eligible = validation.get("sample_eligible")
+    checked = validation.get("sample_checked")
+    requested = validation.get("requested_sample")
+    if (
+        not isinstance(eligible, int)
+        or isinstance(eligible, bool)
+        or eligible < 0
+        or not isinstance(checked, int)
+        or isinstance(checked, bool)
+        or checked < 0
+    ):
+        return False
+    if requested == "all":
+        coverage_ok = checked == eligible
+    elif isinstance(requested, str) and requested.isdigit() and int(requested) > 0:
+        coverage_ok = checked == min(int(requested), eligible)
+    else:
+        return False
+    if require_exhaustive and requested != "all":
+        return False
+
+    rtree_built = candidate.get("rtree_built")
+    if not isinstance(rtree_built, bool) or (require_rtree and not rtree_built):
+        return False
+    expected_ids = list(FULL_VALIDATION_IDS)
+    skipped = validation.get("skipped")
+    if rtree_built:
+        expected_ids.insert(7, "INV-8")
+        skipped_ok = skipped == []
+    else:
+        skipped_ok = skipped == ["INV-8 (bbox_matches): no R-tree was built for this database"]
+
+    signature = candidate.get("correctness_signature")
+    feature_count = candidate.get("n_features")
+    if not isinstance(signature, dict):
+        return False
+    return (
+        candidate.get("state") == "completed"
+        and candidate.get("exit_code") == 0
+        and _positive_number(candidate.get("wall_seconds"))
+        and isinstance(feature_count, int)
+        and not isinstance(feature_count, bool)
+        and feature_count >= 0
+        and validation.get("ok") is True
+        and validation.get("level") == "full"
+        and validation.get("errors") == []
+        and skipped_ok
+        and validation.get("checked_ids") == expected_ids
+        and coverage_ok
+        and validate_database_signature(signature)
+        and signature.get("feature_count") == feature_count
+    )
+
+
+def _contains_private_path(value: object) -> bool:
+    """Return whether a portable result recursively carries an absolute path."""
+
+    if isinstance(value, dict):
+        return any(_contains_private_path(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_private_path(item) for item in value)
+    return isinstance(value, str) and (
+        value.startswith(("/", "\\\\"))
+        or (len(value) > 2 and value[1] == ":" and value[2] in "/\\")
+    )
+
+
+def benchmark_row_evidence_error(row: dict | None) -> str | None:
+    """Return why a schema-v3 benchmark row is not publishable, else ``None``.
+
+    This is the one pure gate shared by the harness's direct publisher and
+    the Markdown renderer.  It recomputes a published ratio from completed,
+    signature-equivalent ingests instead of trusting a serialized number.
+    """
+
+    if not isinstance(row, dict):
+        return "row is not an object"
+    if _contains_private_path(row):
+        return "row contains an absolute path"
+    candidate = row.get("gffbase")
+    if not candidate_evidence_is_valid(candidate, require_exhaustive=True):
+        return "candidate is incomplete or invalid"
+    if not isinstance(candidate, dict):  # keeps this pure seam safe for untyped payloads
+        return "candidate is incomplete or invalid"
+    spatial = row.get("spatial") or {}
+    if spatial.get("state") == "completed" and not candidate_evidence_is_valid(
+        candidate, require_exhaustive=True, require_rtree=True
+    ):
+        return "spatial result lacks an R-tree-backed candidate"
+    legacy = row.get("legacy")
+    if not isinstance(legacy, dict):
+        return "comparator is missing"
+    speedup = row.get("ingest_speedup")
+    if legacy.get("state") == "timed_out":
+        if (
+            legacy.get("wall_seconds") is not None
+            or not _positive_number(legacy.get("cap_seconds"))
+            or speedup is not None
+        ):
+            return "timed-out comparator is not censored"
+        return None
+    if legacy.get("state") != "completed" or legacy.get("exit_code") != 0:
+        return "comparator is incomplete"
+    if not _positive_number(legacy.get("wall_seconds")):
+        return "comparator has no completed wall time"
+    legacy_wall = legacy.get("wall_seconds")
+    candidate_wall = candidate.get("wall_seconds")
+    if not isinstance(legacy_wall, (int, float)) or not isinstance(candidate_wall, (int, float)):
+        return "completed wall time is invalid"
+    if (
+        signatures_match(
+            candidate.get("correctness_signature"), legacy.get("correctness_signature")
+        )
+        is not True
+    ):
+        return "candidate and comparator signatures differ"
+    if candidate.get("n_features") != legacy.get("n_features"):
+        return "candidate and comparator feature counts differ"
+    expected = legacy_wall / candidate_wall
+    if (
+        not _positive_number(speedup)
+        or not isinstance(speedup, (int, float))
+        or abs(speedup - expected) > max(1e-12, abs(expected) * 1e-12)
+    ):
+        return "ingest speedup does not match completed evidence"
+    return None
+
+
+def benchmark_results_evidence_error(data: dict | None) -> str | None:
+    """Return why a complete schema-v3 result payload is unpublishable."""
+
+    if not isinstance(data, dict) or str(data.get("schema_version")) != SCHEMA_VERSION:
+        return "unsupported benchmark schema"
+    corpora = data.get("corpora")
+    if not isinstance(corpora, dict) or not corpora:
+        return "result has no corpus rows"
+    for key, row in corpora.items():
+        error = benchmark_row_evidence_error(row)
+        if error:
+            return f"{key}: {error}"
+    return None
 
 
 # ---------------------------------------------------------------------------
