@@ -170,8 +170,8 @@ def verify_corpus(
 ) -> dict:
     """Verify a corpus against its immutable registry entry.
 
-    Reading a gzip stream to EOF also verifies its trailer/CRC.  The returned
-    dictionary is suitable for embedding verbatim in run provenance.
+    Reading a gzip stream to EOF also verifies its trailer/CRC. The returned
+    path is run-local diagnostic metadata, not portable provenance.
     """
 
     path = Path(path)

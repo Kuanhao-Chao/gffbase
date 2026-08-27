@@ -12,7 +12,7 @@ migration is one import change.
 > ```python
 > # ❌ ANTI-PATTERN with gffbase: 50 000 small queries.
 > # Pays DuckDB's vectorization startup × 50 000 + per-row Feature
-> # construction × 1.6 M. ≥ 10 minutes wall on GENCODE v49.
+> # construction × 1.6 M. Can take many minutes on a full GENCODE v49 run.
 > for transcript_id in fifty_thousand_transcript_ids:
 >     for exon in db.children(transcript_id, featuretype="exon"):
 >         starts.append(exon.start)
@@ -145,7 +145,7 @@ annotation releases:
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
 | --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | > 1 hr 30 min | **> 22.0×** | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | censored at 1 hr 30 min | — | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
 | **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **3 min 1 s** | 3 min 37 s | **1.20×** | 4.73 GB | **1,188** | 352 ms / 999 k desc |
 | **CHESS 3.1.3** | GFF3 | 2,761,061 | **48.4 s** | 1 min 9 s | **1.43×** | 2.43 GB | **1,893** | 96 ms / 161 k desc |
 | **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **19.8 s** | 26.5 s | **1.34×** | 1.61 GB | **2,086** | 80 ms / 156 k desc |
@@ -158,8 +158,8 @@ annotation releases:
 *Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
-A `>` marks a legacy run killed at the safety valve without finishing, so both
-the wall and the speedup are floors rather than estimates. Method and fairness
+“Censored at” marks a legacy run killed at its safety valve without finishing;
+it supplies neither a completed wall nor a speedup. Method and fairness
 constraints: [Methodology](https://khchao.com/gffbase/performance/methodology/).
 
 | Single-call workload | Versus legacy |
