@@ -91,7 +91,7 @@ pub fn parse_attributes(
         // Quoted GTF value handling.
         let (clean_val, was_quoted) = if local_fmt == Format::Gff3 {
             if compat_whole_value_quotes {
-                strip_quotes(raw_val)
+                strip_whole_quotes(raw_val)
             } else {
                 (raw_val, false)
             }
@@ -217,6 +217,15 @@ fn find_unescaped_top_level(text: &str, delimiter: Option<char>) -> Option<usize
 
 fn strip_quotes(s: &str) -> (&str, bool) {
     let s = s.trim();
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        return (&s[1..s.len() - 1], true);
+    }
+    (s, false)
+}
+
+/// Compatibility quoting is a legacy whole-value spelling, not permission to
+/// trim GFF3 value bytes. Only literal surrounding quotes activate it.
+fn strip_whole_quotes(s: &str) -> (&str, bool) {
     if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
         return (&s[1..s.len() - 1], true);
     }
