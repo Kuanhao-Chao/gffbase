@@ -47,6 +47,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from benchmarks.common import benchmark_row_evidence_error  # noqa: E402
+
 RESULTS = ROOT / "benchmarks" / "results"
 MEGA = RESULTS / "06_mega.json"
 
@@ -95,22 +100,25 @@ def human_bytes(n: float | None) -> str:
     return f"{n:.2f} TB"
 
 
-def _legacy_cell(row: dict) -> str:
+def _legacy_cell(row: dict, schema_version: str) -> str:
     legacy = row.get("legacy") or {}
     if legacy.get("wall_seconds"):
         return human_seconds(legacy["wall_seconds"])
-    if legacy.get("wall_seconds_lower_bound"):
-        # A cap, not a measurement. It renders as a floor and it never
-        # acquires a decorative multiplier on the way to the page.
-        return f"> {human_seconds(legacy['wall_seconds_lower_bound'])}"
+    if schema_version == "3" and legacy.get("state") == "timed_out":
+        return f"censored at {human_seconds(legacy.get('cap_seconds'))}"
+    if schema_version == "2" and legacy.get("timed_out"):
+        # Historical schema-v2 stored its cap under a misleading lower-bound
+        # name.  Preserve the raw artifact, but render it only as censoring
+        # evidence—not as a completed wall or a performance floor.
+        return f"censored at {human_seconds(legacy.get('wall_seconds_lower_bound'))}"
+    if legacy.get("state") == "skipped":
+        return "not run"
     return "failed"
 
 
 def _speedup_cell(row: dict) -> str:
     if row.get("ingest_speedup"):
         return f"**{row['ingest_speedup']:.2f}×**"
-    if row.get("ingest_speedup_lower_bound"):
-        return f"**> {row['ingest_speedup_lower_bound']:.1f}×**"
     return "—"
 
 
@@ -130,19 +138,34 @@ def _spread_note(row: dict) -> str:
     return f" ±{100 * (hi - lo) / (2 * lo):.0f}% (n={n})"
 
 
-def _check_no_invented_numbers(row: dict) -> None:
-    """A capped run must not carry a wall time. Refuse to render if it does.
+def _check_no_invented_numbers(row: dict, schema_version: str) -> None:
+    """A capped run is censored and must never become a ratio or wall.
 
-    This is the guardrail against the defect being reintroduced: the previous
-    harness wrote `wall_seconds = timeout * 2.0` on a killed run, and the
-    renderer had no way to tell that apart from a measurement.
+    Schema v2 is accepted only as the immutable historical artifact. Its old
+    lower-bound fields are ignored by the renderer. New schema-v3 rows must
+    use the strict state/cap contract and are rejected if stale floor fields
+    reappear.
     """
     legacy = row.get("legacy") or {}
-    if legacy.get("timed_out") and legacy.get("wall_seconds") is not None:
+    if schema_version == "2":
+        if legacy.get("timed_out") and legacy.get("wall_seconds") is not None:
+            raise Stale(f"{row.get('key')}: historical timeout carries a synthesized wall")
+        return
+    if schema_version != "3":
+        raise Stale(f"unsupported benchmark schema {schema_version!r}")
+    forbidden = {"timed_out", "wall_seconds_lower_bound"}.intersection(legacy)
+    if "ingest_speedup_lower_bound" in row:
+        forbidden.add("ingest_speedup_lower_bound")
+    if forbidden:
+        raise Stale(f"{row.get('key')}: schema v3 carries stale fields {sorted(forbidden)}")
+    if legacy.get("state") == "timed_out" and (
+        legacy.get("wall_seconds") is not None
+        or not isinstance(legacy.get("cap_seconds"), (int, float))
+        or legacy.get("cap_seconds") <= 0
+        or row.get("ingest_speedup") is not None
+    ):
         raise Stale(
-            f"{row.get('key')}: legacy run timed out but carries "
-            f"wall_seconds={legacy['wall_seconds']}. A killed run has no wall time; "
-            "it has a lower bound. Refusing to publish a synthesized number."
+            f"{row.get('key')}: timed-out comparator violates the censored state/cap contract"
         )
 
 
@@ -153,6 +176,7 @@ def _check_no_invented_numbers(row: dict) -> None:
 
 def render_corpus_table(data: dict) -> str:
     corpora = data.get("corpora") or {}
+    schema_version = str(data.get("schema_version"))
     lines = [
         "| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |",
         "| --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -161,7 +185,11 @@ def render_corpus_table(data: dict) -> str:
         row = corpora.get(key)
         if not row or "error" in row:
             continue
-        _check_no_invented_numbers(row)
+        _check_no_invented_numbers(row, schema_version)
+        if schema_version == "3":
+            evidence_error = benchmark_row_evidence_error(row)
+            if evidence_error:
+                raise Stale(f"{key}: invalid speedup evidence: {evidence_error}")
         g = row.get("gffbase") or {}
         spatial = row.get("spatial") or {}
         batched = row.get("batched") or {}
@@ -178,7 +206,7 @@ def render_corpus_table(data: dict) -> str:
         lines.append(
             f"| {label} | {fmt} | {row.get('feature_lines', 0):,} "
             f"| **{human_seconds(g.get('wall_seconds'))}** "
-            f"| {_legacy_cell(row)} "
+            f"| {_legacy_cell(row, schema_version)} "
             f"| {_speedup_cell(row)} "
             f"| {human_bytes(g.get('peak_rss_bytes'))} "
             f"| {f'**{qps:,.0f}**' + _spread_note(row) if qps else '—'} "
