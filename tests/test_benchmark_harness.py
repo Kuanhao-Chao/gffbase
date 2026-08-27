@@ -27,6 +27,7 @@ properties that decide whether a published number means anything:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -83,7 +84,9 @@ def test_the_harness_imports_without_the_bench_extras():
     )
 
 
-@pytest.mark.parametrize("flag", ["--repeats", "--publish", "--only", "--legacy-timeout"])
+@pytest.mark.parametrize(
+    "flag", ["--repeats", "--publish", "--only", "--legacy-timeout", "--validation-sample"]
+)
 def test_the_documented_flags_exist(flag):
     """`docs/performance/methodology.md` prints commands a reader will paste.
 
@@ -130,6 +133,52 @@ def _derive_speedup():
     return module.derive_speedup
 
 
+def _signature(seed: str = "a") -> dict:
+    """Independent v3 fixture; expected values do not call production code."""
+
+    def digest(label: str) -> str:
+        return hashlib.sha256(f"{seed}:{label}".encode()).hexdigest()
+
+    payload = {
+        "schema_version": "database-signature-v3",
+        "segment_count": 1000,
+        "segments_sha256": digest("segments"),
+        "attribute_count": 2000,
+        "attributes_sha256": digest("attributes"),
+        "direct_relationship_count": 500,
+        "direct_relationships_sha256": digest("direct"),
+        "closure_count": 700,
+        "closure_sha256": digest("closure"),
+        "feature_count": 1000,
+        "featuretype_histogram": [["gene", 1000]],
+    }
+    return {
+        **payload,
+        "combined_sha256": hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def _candidate(*, signature: dict | None = None, wall_seconds: float = 100.0) -> dict:
+    return {
+        "state": "completed",
+        "wall_seconds": wall_seconds,
+        "n_features": 1000,
+        "correctness_signature": _signature() if signature is None else signature,
+        "validation": {"ok": True, "requested_sample": "all", "sample_checked": 1000},
+    }
+
+
+def _comparator(*, signature: dict | None = None, wall_seconds: float = 200.0) -> dict:
+    return {
+        "state": "completed",
+        "wall_seconds": wall_seconds,
+        "n_features": 1000,
+        "correctness_signature": _signature() if signature is None else signature,
+    }
+
+
 def test_a_speedup_requires_both_engines_to_have_done_equal_work():
     """A ratio between two different workloads is not a speedup.
 
@@ -140,36 +189,91 @@ def test_a_speedup_requires_both_engines_to_have_done_equal_work():
     """
     derive = _derive_speedup()
     speedup, bound, conflict = derive(
-        {"wall_seconds": 100.0, "n_features": 1000},
-        {"wall_seconds": 200.0, "n_features": 999},
+        _candidate(),
+        {**_comparator(), "n_features": 999},
     )
     assert conflict is True
     assert speedup is None and bound is None, "a conflicting count still produced a ratio"
 
     speedup, bound, conflict = derive(
-        {"wall_seconds": 100.0, "n_features": 1000},
-        {"wall_seconds": 200.0, "n_features": 1000},
+        _candidate(),
+        _comparator(),
     )
     assert conflict is False
     assert speedup == pytest.approx(2.0) and bound is None
 
 
-def test_a_capped_legacy_run_still_yields_a_floor():
-    """The one case where the legacy feature count CANNOT exist.
-
-    A killed process never reports one, so requiring the two counts to be
-    equal suppressed the floor on exactly the runs the floor exists for --
-    GENCODE-GTF lost a legitimate "> 22x" that way. Only a genuine conflict
-    between two present counts disqualifies the comparison.
-    """
+def test_a_capped_legacy_run_keeps_only_its_raw_wall_bound():
+    """A killed comparator has no completed database/signature for a ratio."""
     derive = _derive_speedup()
     speedup, bound, conflict = derive(
-        {"wall_seconds": 245.1, "n_features": 6_068_892},
-        {"wall_seconds": None, "wall_seconds_lower_bound": 5400.0, "n_features": None},
+        _candidate(wall_seconds=245.1),
+        {"state": "timed_out", "wall_seconds": None, "cap_seconds": 5400.0, "n_features": None},
     )
     assert conflict is False
     assert speedup is None, "a capped run must not produce a measured speedup"
-    assert bound == pytest.approx(5400.0 / 245.1)
+    assert bound is None, "a timeout without a correctness signature must not produce a floor"
+
+
+@pytest.mark.parametrize(
+    "legacy_signature",
+    [None, _signature("b")],
+)
+def test_missing_or_false_signature_suppresses_a_ratio(legacy_signature):
+    derive = _derive_speedup()
+    comparator = _comparator(wall_seconds=20.0)
+    comparator["correctness_signature"] = legacy_signature
+    speedup, bound, _ = derive(
+        _candidate(signature=_signature("a"), wall_seconds=10.0),
+        comparator,
+    )
+    assert speedup is None and bound is None
+
+
+def test_candidate_requires_exhaustive_validation_and_completed_comparator():
+    derive = _derive_speedup()
+    sampled = _candidate()
+    sampled["validation"] = {**sampled["validation"], "requested_sample": "10000"}
+    speedup, bound, _ = derive(sampled, _comparator())
+    assert speedup is None and bound is None
+
+    speedup, bound, _ = derive(
+        _candidate(),
+        {**_comparator(), "state": "timed_out", "wall_seconds": None, "cap_seconds": 5},
+    )
+    assert speedup is None and bound is None
+
+
+def test_harness_contract_has_canonical_validation_and_no_timeout_floor_language():
+    src = _source()
+    assert 'default="all"' in src
+    assert "validation_sample_value" in src
+    assert "checked_ids" in src and "sample_checked" in src
+    assert "wall_seconds_lower_bound" not in src
+
+
+def test_complete_benchmark_environment_is_recorded_and_portable():
+    from benchmarks.common import benchmark_env, environment
+
+    expected = {
+        "GFFBASE_THREADS",
+        "GFFUTILS2_THREADS",
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "BLIS_NUM_THREADS",
+        "DUCKDB_DISABLE_PROGRESS_BAR",
+        "PYTHONUNBUFFERED",
+    }
+    assert set(benchmark_env(3)) == expected
+    payload = environment()
+    assert payload["python"]["executable"].find("/") == -1
+    install = payload["gffbase_install"]
+    for key in ("python_module", "native_module"):
+        if key in install:
+            assert "/" not in install[key]
 
 
 def test_both_engines_are_given_the_same_duplicate_id_policy():
