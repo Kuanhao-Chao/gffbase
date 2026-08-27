@@ -83,6 +83,10 @@ class ValidationReport:
     violations: list[Violation] = field(default_factory=list)
     #: Checks skipped because the database predates the structure they test.
     skipped: list[str] = field(default_factory=list)
+    #: INV-12 candidates with a stored, non-synthetic attribute blob.
+    attribute_eligible: int | None = None
+    #: INV-12 candidates actually re-parsed after applying ``sample``.
+    attribute_checked: int | None = None
 
     @property
     def errors(self) -> list[Violation]:
@@ -592,7 +596,7 @@ _DETAILS = {
 }
 
 
-def _inv12_attributes_reparse(con, sample: int):
+def _inv12_attributes_reparse(con, sample: int | None):
     """`full` only: re-parse stored blobs and compare with the attribute rows.
 
     This is the check that catches escaping bugs -- a parser that drops a
@@ -603,33 +607,59 @@ def _inv12_attributes_reparse(con, sample: int):
     """
     from gffbase.feature import _LazyAttributes
 
+    predicate = "attributes_blob IS NOT NULL AND is_synthetic = FALSE"
+    eligible_sql = f"SELECT id, file_order FROM features WHERE {predicate} ORDER BY file_order"
+    eligible = int(con.execute(f"SELECT COUNT(*) FROM features WHERE {predicate}").fetchone()[0])
+    limit = "" if sample is None else " LIMIT ?"
     sql = (
-        "SELECT id, CAST(attributes_blob AS BLOB) FROM features "
-        "WHERE attributes_blob IS NOT NULL AND is_synthetic = FALSE "
-        "ORDER BY file_order"
+        "WITH eligible AS ("
+        + eligible_sql
+        + limit
+        + ") SELECT e.id, sa.seg_idx, CAST(sa.attributes_blob AS BLOB), a.key, a.value "
+        "FROM eligible e JOIN segments_all sa ON sa.feature_id = e.id "
+        "LEFT JOIN segments sm ON sm.feature_id = sa.feature_id AND sm.seg_idx = sa.seg_idx "
+        "LEFT JOIN attributes a ON a.feature_id = sa.feature_id AND a.seg_idx = "
+        "CASE WHEN sm.seg_idx > 0 AND sm.attrs_same_as_seg0 THEN 0 ELSE sa.seg_idx END "
+        "ORDER BY e.file_order, sa.seg_idx, a.key, a.idx"
     )
-    if sample is None:
-        rows = con.execute(sql).fetchall()
-    else:
-        rows = con.execute(f"{sql} LIMIT ?", [sample]).fetchall()
+    cursor = con.execute(sql) if sample is None else con.execute(sql, [sample])
     offenders = []
-    for fid, blob in rows:
-        stored: dict[str, list[str]] = {}
-        for key, value in con.execute(
-            "SELECT key, value FROM attributes WHERE feature_id = ? AND seg_idx = 0 ORDER BY idx",
-            [fid],
-        ).fetchall():
-            stored.setdefault(key, []).append(value)
+    checked = 0
+    current_id: str | None = None
+    current_seg_idx: int | None = None
+    current_blob: bytes | None = None
+    last_counted_id: str | None = None
+    stored: dict[str, list[str]] = {}
+
+    def check_current() -> None:
+        if current_id is None:
+            return
+        assert current_blob is not None
         # A key with an EMPTY value list -- `pseudo`, `ID=`, `Complete` -- is
         # not representable as a `(key, value)` row, so the long-form table
         # correctly holds nothing for it while the parsed mapping still shows
         # the key. That difference is the schema's, not a parser bug, so it is
         # normalized away here; without this, four upstream fixtures reported
         # a violation for behaviour that is exactly right.
-        reparsed = {k: list(v) for k, v in _LazyAttributes(blob=bytes(blob)).items() if v}
+        reparsed = {k: list(v) for k, v in _LazyAttributes(blob=current_blob).items() if v}
         if reparsed != stored:
-            offenders.append((fid, stored, reparsed))
-    return len(offenders), tuple(offenders[:_EXAMPLE_LIMIT])
+            offenders.append((current_id, current_seg_idx, stored, reparsed))
+
+    while rows := cursor.fetchmany(10_000):
+        for fid, seg_idx, blob, key, value in rows:
+            if (fid, seg_idx) != (current_id, current_seg_idx):
+                check_current()
+                current_id = str(fid)
+                current_seg_idx = int(seg_idx)
+                current_blob = bytes(blob)
+                stored = {}
+                if current_id != last_counted_id:
+                    checked += 1
+                    last_counted_id = current_id
+            if key is not None:
+                stored.setdefault(str(key), []).append(str(value))
+    check_current()
+    return len(offenders), tuple(offenders[:_EXAMPLE_LIMIT]), eligible, checked
 
 
 def _has_table(con, name: str) -> bool:
@@ -711,7 +741,11 @@ def validate_db(
             ),
         ):
             try:
-                count, examples = fn(con)
+                result = fn(con)
+                if stable_id == "INV-12":
+                    count, examples, report.attribute_eligible, report.attribute_checked = result
+                else:
+                    count, examples = result
             except (DuckDBError, ValueError, TypeError, OverflowError, UnicodeError) as exc:
                 report.violations.append(
                     Violation(number, name, ERROR, 1, f"check could not run: {exc}")

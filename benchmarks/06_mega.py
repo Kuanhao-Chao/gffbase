@@ -55,6 +55,8 @@ from benchmarks.common import (
     OUT,
     RESULTS,
     benchmark_env,
+    benchmark_results_evidence_error,
+    candidate_evidence_is_valid,
     configure_duckdb_connection,
     database_signature,
     du,
@@ -176,7 +178,8 @@ print(json.dumps({{
         "errors": [dataclasses.asdict(v) for v in report.errors],
         "warnings": [dataclasses.asdict(v) for v in report.warnings],
         "requested_sample": {validation_requested!r},
-        "sample_checked": n_features if {validation_sample!r} is None else min({validation_sample!r}, n_features),
+        "sample_eligible": report.attribute_eligible,
+        "sample_checked": report.attribute_checked,
         "checked_ids": report.checked_ids,
     }},
 }}))
@@ -206,7 +209,6 @@ def run_legacy_with_timeout(
     input_path: Path,
     dbfn: Path,
     timeout: int,
-    n_input_lines: int,
     *,
     infer_gtf_parents: bool = True,
     threads: int = 1,
@@ -223,10 +225,6 @@ def run_legacy_with_timeout(
         timeout=timeout,
         env_extra=benchmark_env(threads),
     )
-    if result.get("state") == "timed_out":
-        result["wall_seconds"] = None
-        result["cap_seconds"] = timeout
-        result.pop("timed_out", None)
     return result
 
 
@@ -285,6 +283,7 @@ def bench_spatial(db_path: Path, regions, repeats: int = 1, *, threads: int = 1)
 
     seconds = timing.get("median", timing.get("value"))
     return {
+        "state": "completed",
         "n_queries": len(regions),
         "wall_seconds": seconds,
         "qps": len(regions) / seconds if seconds else None,
@@ -321,7 +320,7 @@ def bench_batched(
                 break
     if not gene_ids:
         db.close()
-        return {"skipped": "no top-level feature IDs found"}
+        return {"state": "skipped", "reason": "no top-level feature IDs found"}
 
     rows = {"n": 0}
 
@@ -339,6 +338,7 @@ def bench_batched(
 
     seconds = timing.get("median", timing.get("value"))
     return {
+        "state": "completed",
         "n_anchors": len(gene_ids),
         "n_descendants": rows["n"],
         "wall_seconds": seconds,
@@ -371,18 +371,27 @@ def derive_speedup(g_info: dict, l_info: dict) -> tuple[float | None, None, bool
     conflict = signature_equal is False or count_conflict
 
     g_wall = g_info.get("wall_seconds")
-    validation = g_info.get("validation") or {}
-    candidate_valid = (
-        g_info.get("state") == "completed"
-        and validation.get("ok") is True
-        and validation.get("requested_sample") == "all"
-        and validation.get("sample_checked") == g_info.get("n_features")
-    )
-    if not g_wall or not candidate_valid or conflict or signature_equal is not True:
+    if not _candidate_is_valid(g_info, require_exhaustive=True):
         return None, None, conflict
-    if l_info.get("state") == "completed" and l_info.get("wall_seconds"):
+    if not g_wall or conflict or signature_equal is not True:
+        return None, None, conflict
+    if (
+        l_info.get("state") == "completed"
+        and l_info.get("exit_code") == 0
+        and l_info.get("wall_seconds")
+    ):
         return l_info["wall_seconds"] / g_wall, None, conflict
     return None, None, conflict
+
+
+def _candidate_is_valid(
+    g_info: dict, *, require_exhaustive: bool = False, require_rtree: bool = False
+) -> bool:
+    """Compatibility seam around the shared pure evidence validator."""
+
+    return candidate_evidence_is_valid(
+        g_info, require_exhaustive=require_exhaustive, require_rtree=require_rtree
+    )
 
 
 def _git_commit() -> str | None:
@@ -493,8 +502,6 @@ def run_one(corpus: dict, args) -> dict:
         timeout=args.gffbase_timeout,
         env_extra=benchmark_env(args.threads),
     )
-    g_info["cap_seconds"] = args.gffbase_timeout
-    g_info.pop("timed_out", None)
     g_info["disk_bytes"] = du(gffbase_db)
     if (
         g_info.get("exit_code") == 0
@@ -517,7 +524,10 @@ def run_one(corpus: dict, args) -> dict:
         print("  [legacy ] skipped by --skip-legacy", flush=True)
         l_info = {
             "state": "skipped",
-            "skipped": "requested by --skip-legacy",
+            "reason": "requested by --skip-legacy",
+            "exit_code": None,
+            "wall_seconds": None,
+            "cap_seconds": args.legacy_timeout,
             "n_features": None,
         }
     else:
@@ -528,15 +538,13 @@ def run_one(corpus: dict, args) -> dict:
             inp,
             legacy_db,
             args.legacy_timeout,
-            n_lines,
             infer_gtf_parents=infer_gtf_parents,
             threads=args.threads,
         )
-        l_info["cap_seconds"] = args.legacy_timeout
         l_info["disk_bytes"] = du(legacy_db)
         if l_info.get("exit_code") == 0 and legacy_db.is_file():
             l_info["correctness_signature"] = database_signature(legacy_db, engine="gffutils")
-    if l_info.get("skipped"):
+    if l_info.get("state") == "skipped":
         pass
     elif l_info.get("state") == "timed_out":
         print(
@@ -567,9 +575,18 @@ def run_one(corpus: dict, args) -> dict:
             flush=True,
         )
 
+    candidate_ready = _candidate_is_valid(g_info, require_exhaustive=True)
+    spatial_ready = _candidate_is_valid(g_info, require_exhaustive=True, require_rtree=True)
+
     # ---- spatial routing ----
     print(f"  [gffbase] spatial — {args.n_spatial} regions…", flush=True)
-    spatial = {"skipped": "no DB"} if not gffbase_db.exists() else None
+    spatial = (
+        {"state": "skipped", "reason": "candidate completion/validation/signature/R-tree failed"}
+        if not spatial_ready
+        else {"state": "skipped", "reason": "no DB"}
+        if not gffbase_db.exists()
+        else None
+    )
     if spatial is None:
         regions = sample_regions_from_db(gffbase_db, n=args.n_spatial, threads=args.threads)
         if regions:
@@ -581,11 +598,17 @@ def run_one(corpus: dict, args) -> dict:
                 flush=True,
             )
         else:
-            spatial = {"skipped": "no qualifying seqids"}
+            spatial = {"state": "skipped", "reason": "no qualifying seqids"}
 
     # ---- vectorized batched ----
     print(f"  [gffbase] batched — {args.n_batched} anchors…", flush=True)
-    batched = {"skipped": "no DB"} if not gffbase_db.exists() else None
+    batched = (
+        {"state": "skipped", "reason": "candidate completion/validation/signature failed"}
+        if not candidate_ready
+        else {"state": "skipped", "reason": "no DB"}
+        if not gffbase_db.exists()
+        else None
+    )
     if batched is None:
         batched = bench_batched(
             gffbase_db,
@@ -593,7 +616,7 @@ def run_one(corpus: dict, args) -> dict:
             repeats=args.repeats,
             threads=args.threads,
         )
-        if "skipped" not in batched:
+        if batched.get("state") == "completed":
             print(
                 f"    wall={pretty_seconds(batched['wall_seconds'])}, "
                 f"anchors={batched['n_anchors']}, "
@@ -829,6 +852,17 @@ def main() -> None:
                 + "\n  ".join(stale)
                 + "\n\nRe-run the missing corpora, then publish. The measured rows are "
                 f"safe in {Path(out_path).relative_to(ROOT)}.",
+                flush=True,
+            )
+            return
+
+        evidence_error = benchmark_results_evidence_error(merged)
+        if evidence_error:
+            print(
+                "\nNOT publishing: invalid benchmark evidence.\n  "
+                + evidence_error
+                + "\n\nRe-run the affected corpus; the measured rows are safe in "
+                + f"{Path(out_path).relative_to(ROOT)}.",
                 flush=True,
             )
             return
