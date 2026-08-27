@@ -252,6 +252,27 @@ def test_signature_includes_empty_attributes_and_ordered_values(tmp_path):
     assert signatures_match(candidate_signature, comparator_signature) is True
 
 
+def test_signature_treats_attribute_key_order_as_nonsemantic_but_preserves_value_order(tmp_path):
+    first = tmp_path / "first.gff3"
+    reordered = tmp_path / "reordered.gff3"
+    values_reordered = tmp_path / "values-reordered.gff3"
+    first.write_text("chr1\ts\tgene\t1\t10\t.\t+\t.\tID=g;Name=n;Alias=a,b\n")
+    reordered.write_text("chr1\ts\tgene\t1\t10\t.\t+\t.\tAlias=a,b;Name=n;ID=g\n")
+    values_reordered.write_text("chr1\ts\tgene\t1\t10\t.\t+\t.\tID=g;Name=n;Alias=b,a\n")
+
+    paths = []
+    for source in (first, reordered, values_reordered):
+        target = source.with_suffix(".duckdb")
+        create_db(str(source), str(target), force=True, force_gff=True).close()
+        paths.append(target)
+    baseline, key_reordered, value_reordered = (
+        database_signature(path, engine="gffbase") for path in paths
+    )
+
+    assert signatures_match(baseline, key_reordered) is True
+    assert signatures_match(baseline, value_reordered) is False
+
+
 def test_signature_retains_gff3_relationships_to_unresolved_parents(tmp_path):
     source = tmp_path / "dangling.gff3"
     candidate = tmp_path / "dangling.duckdb"

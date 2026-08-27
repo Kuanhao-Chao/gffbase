@@ -118,9 +118,9 @@ def test_every_command_in_the_methodology_page_parses():
         assert proc.returncode == 0, f"documented command rejected: {args}\n{proc.stderr}"
 
 
-def test_generator_check_runs_from_the_documented_repository_root():
+def test_generator_imports_from_the_documented_repository_root():
     proc = subprocess.run(
-        [sys.executable, "tools/gen_benchmark_tables.py", "--check"],
+        [sys.executable, "tools/gen_benchmark_tables.py", "--help"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -187,7 +187,9 @@ def _candidate(*, signature: dict | None = None, wall_seconds: float = 100.0) ->
         "validation": {
             "ok": True,
             "level": "full",
+            "checked": [],
             "errors": [],
+            "warnings": [],
             "skipped": ["INV-8 (bbox_matches): no R-tree was built for this database"],
             "requested_sample": "all",
             "sample_eligible": 1000,
@@ -574,27 +576,166 @@ def test_run_one_skips_spatial_but_keeps_batched_work_without_an_rtree(tmp_path,
 def test_shared_publisher_gate_rejects_failed_forged_and_private_schema3_rows():
     from benchmarks.common import benchmark_results_evidence_error
 
-    valid_row = {
-        "key": "gencode-gtf",
-        "gffbase": _candidate(),
-        "legacy": _comparator(),
-        "ingest_speedup": 2.0,
-    }
-    valid = {"schema_version": "3", "corpora": {"gencode-gtf": valid_row}}
+    valid = _publishable_payload()
     assert benchmark_results_evidence_error(valid) is None
 
     failed = json.loads(json.dumps(valid))
-    failed["corpora"]["gencode-gtf"]["gffbase"]["state"] = "failed"
+    failed["corpora"]["mane"]["gffbase"]["state"] = "failed"
     assert "candidate" in benchmark_results_evidence_error(failed)
 
     forged = json.loads(json.dumps(valid))
-    forged["corpora"]["gencode-gtf"]["ingest_speedup"] = 999.0
+    forged["corpora"]["mane"]["ingest_speedup"] = 999.0
     assert "speedup" in benchmark_results_evidence_error(forged)
 
     private = json.loads(json.dumps(valid))
-    private["corpora"]["gencode-gtf"]["gffbase"]["stdout_path"] = "/home/private-user/log"
+    private["corpora"]["mane"]["gffbase"]["stdout_path"] = "/home/private-user/log"
     assert "absolute path" in benchmark_results_evidence_error(private)
     assert "benchmark_results_evidence_error(merged)" in _source()
+
+
+def _publishable_payload(*, threads: int = 4) -> dict:
+    """A real-shaped schema-v3 payload, assembled without production gates."""
+    from benchmarks.common import benchmark_env, environment
+
+    candidate = {
+        **_candidate(),
+        "label": "gffbase ingest(input.gff3)",
+        "peak_rss_bytes": 1,
+        "peak_rss_mb": 1 / (1024 * 1024),
+        "benchmark_env": benchmark_env(threads),
+        "cap_seconds": 10,
+        "disk_bytes": 1,
+        "fmt": "gff3",
+    }
+    legacy = {
+        **_comparator(),
+        "label": "gffutils ingest(input.gff3)",
+        "peak_rss_bytes": 1,
+        "peak_rss_mb": 1 / (1024 * 1024),
+        "benchmark_env": benchmark_env(threads),
+        "cap_seconds": 10,
+        "disk_bytes": 1,
+    }
+    row = {
+        "name": "MANE",
+        "key": "mane",
+        "measured": {
+            "timestamp_utc": "2026-08-27T00:00:00+00:00",
+            "git_commit": "a" * 40,
+            "git_dirty": False,
+        },
+        "input": "benchmarks/data/input.gff3.gz",
+        "input_bytes": 1,
+        "input_sha256": "a" * 64,
+        "feature_lines": 1000,
+        "gffbase": candidate,
+        "legacy": legacy,
+        "ingest_speedup": 2.0,
+        "spatial": {"state": "skipped", "reason": "no qualifying seqids"},
+        "batched": {"state": "skipped", "reason": "no top-level feature IDs found"},
+        "db_paths": {
+            "gffbase": "benchmarks/out/mane.duckdb",
+            "legacy": "benchmarks/out/mane.sqlite",
+        },
+        "params": {
+            "legacy_cap_seconds": 10,
+            "gffbase_cap_seconds": 10,
+            "n_spatial": 5,
+            "n_batched": 5,
+            "repeats": 1,
+            "region_seed": 20260501,
+            "threads": threads,
+            "gtf_arm": None,
+            "infer_gtf_parents": None,
+            "validation_sample": "all",
+            "benchmark_env": benchmark_env(threads),
+        },
+    }
+    env = environment(benchmark_controls=benchmark_env(threads))
+    corpora = {
+        key: {**row, "key": key, "name": key}
+        for key in ("mane", "chess", "refseq", "gencode-gtf", "gencode-gff3")
+    }
+    return {"schema_version": "3", "environment": env, "corpora": corpora}
+
+
+def test_shared_gate_rejects_query_shape_leaks_and_thread_mismatch():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    assert benchmark_results_evidence_error(payload) is None
+
+    leaked = json.loads(json.dumps(payload))
+    leaked["corpora"]["mane"]["spatial"]["qps"] = 99
+    assert "spatial" in benchmark_results_evidence_error(leaked)
+
+    mismatch = json.loads(json.dumps(payload))
+    mismatch["environment"]["env"]["GFFBASE_THREADS"] = "1"
+    assert "environment" in benchmark_results_evidence_error(mismatch)
+
+
+def test_shared_gate_requires_exact_primary_corpora_and_closed_shapes():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    assert benchmark_results_evidence_error(payload) is None
+
+    partial = json.loads(json.dumps(payload))
+    partial["corpora"] = {"mane": partial["corpora"]["mane"]}
+    assert "primary" in benchmark_results_evidence_error(partial)
+
+    extra = json.loads(json.dumps(payload))
+    extra["corpora"]["gencode-gtf-default"] = {
+        **extra["corpora"]["mane"],
+        "key": "gencode-gtf-default",
+    }
+    assert "primary" in benchmark_results_evidence_error(extra)
+
+    stale = json.loads(json.dumps(payload))
+    stale["corpora"]["mane"]["legacy"]["wall_seconds_lower_bound"] = 10
+    assert "legacy" in benchmark_results_evidence_error(stale)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "needle"),
+    [
+        (("corpora", "mane", "gffbase", "cap_seconds"), None, "candidate"),
+        (("corpora", "mane", "legacy", "cap_seconds"), 11, "comparator cap"),
+        (("corpora", "mane", "params", "unexpected"), True, "params shape"),
+        (("corpora", "mane", "db_paths", "gffbase"), "/private/db", "absolute path"),
+    ],
+)
+def test_shared_gate_rejects_closed_state_cap_and_path_mutations(path, value, needle):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    target = payload
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert needle in benchmark_results_evidence_error(payload)
+
+
+def test_external_benchmark_out_purge_uses_actual_run_paths(tmp_path, monkeypatch):
+    module = _mega_module()
+    external_out = tmp_path / "external-out"
+    external_out.mkdir()
+    monkeypatch.setattr(module, "OUT", external_out)
+    candidate = external_out / "mane.duckdb"
+    legacy = external_out / "mane_legacy.sqlite"
+    candidate.write_bytes(b"candidate")
+    legacy.write_bytes(b"legacy")
+
+    assert module._purge_run_databases(candidate, legacy) == len(b"candidatelegacy")
+    assert not candidate.exists() and not legacy.exists()
+
+
+def test_renderer_reads_nested_python_provenance_version():
+    from tools import gen_benchmark_tables as tables
+
+    rendered = tables.render_provenance({"environment": {"python": {"version": "3.12.3"}}})
+    assert "Python 3.12.3" in rendered
 
 
 def test_both_engines_are_given_the_same_duplicate_id_policy():

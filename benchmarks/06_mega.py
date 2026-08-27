@@ -452,6 +452,12 @@ def _validation_sample(value: str) -> int | None:
     return sample
 
 
+def _purge_run_databases(*paths: Path) -> int:
+    """Purge the actual run-local database paths, never published projections."""
+
+    return purge_db(*paths)
+
+
 def run_one(corpus: dict, args) -> dict:
     name = corpus["name"]
     key = corpus["key"]
@@ -818,16 +824,22 @@ def main() -> None:
 
         # Write after EVERY corpus, not once at the end. A five-hour sweep
         # that dies on the last corpus used to lose all of it.
-        merge_results("06_mega", "corpora", {output_key: row})
+        merge_results(
+            "06_mega", "corpora", {output_key: row}, benchmark_controls=benchmark_env(args.threads)
+        )
 
         if not args.no_purge and key not in keep:
-            paths = row.get("db_paths") or {}
-            # Stored relative (see `rel`); resolve against the repo to delete.
-            freed = purge_db(*(ROOT / v for v in paths.values()))
+            # Published paths are deliberately redacted for portability. Purge
+            # the actual run-local paths, including an external benchmark OUT.
+            freed = _purge_run_databases(
+                OUT / f"{output_key}.duckdb", OUT / f"{output_key}_legacy.sqlite"
+            )
             if freed:
                 print(f"  purged {key} databases ({pretty_bytes(freed)})", flush=True)
 
-    out_path = merge_results("06_mega", "corpora", results)
+    out_path = merge_results(
+        "06_mega", "corpora", results, benchmark_controls=benchmark_env(args.threads)
+    )
     print(f"\nResults → {out_path}", flush=True)
 
     if args.publish:

@@ -259,7 +259,7 @@ def _installed_gffbase() -> dict:
     return info
 
 
-def environment() -> dict:
+def environment(*, benchmark_controls: dict[str, str] | None = None) -> dict:
     """Everything needed to reproduce or fairly compare a run.
 
     None of this was recorded before: the published numbers carried their
@@ -275,12 +275,14 @@ def environment() -> dict:
         affinity = sorted(os.sched_getaffinity(0))
     except (AttributeError, OSError):
         affinity = None
-    try:
-        threads = int(os.environ.get("GFFBASE_THREADS", "1"))
-    except ValueError:
-        threads = 1
-    if threads < 1:
-        threads = 1
+    if benchmark_controls is None:
+        try:
+            threads = int(os.environ.get("GFFBASE_THREADS", "1"))
+        except ValueError:
+            threads = 1
+        benchmark_controls = benchmark_env(max(threads, 1))
+    if set(benchmark_controls) != set(_BENCHMARK_ENV_KEYS):
+        raise ValueError("benchmark_controls must contain the complete bounded environment")
     return {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "git_commit": _cmd("git", "-C", str(ROOT), "rev-parse", "HEAD"),
@@ -315,7 +317,7 @@ def environment() -> dict:
         },
         # Do not snapshot an arbitrary parent shell.  These are the actual
         # bounded controls applied by ``run_subprocess`` for a harness run.
-        "env": benchmark_env(threads),
+        "env": dict(benchmark_controls),
     }
 
 
@@ -1069,6 +1071,202 @@ def _contains_private_path(value: object) -> bool:
     )
 
 
+def _exact_keys(value: object, keys: set[str]) -> bool:
+    return isinstance(value, dict) and set(value) == keys
+
+
+def _bounded_env_is_valid(value: object, *, threads: int | None = None) -> bool:
+    if not isinstance(value, dict) or set(value) != set(_BENCHMARK_ENV_KEYS):
+        return False
+    if not all(isinstance(item, str) for item in value.values()):
+        return False
+    if threads is not None and value != benchmark_env(threads):
+        return False
+    return all(value[key] == "1" for key in _BENCHMARK_ENV_KEYS[2:])
+
+
+def _timing_is_valid(timing: object, wall_seconds: object) -> bool:
+    if not isinstance(timing, dict) or not _positive_number(wall_seconds):
+        return False
+    count = timing.get("n")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        return False
+    if count == 1:
+        return (
+            set(timing) == {"value", "n"}
+            and _positive_number(timing.get("value"))
+            and timing["value"] == wall_seconds
+        )
+    values = timing.get("values")
+    return (
+        set(timing) == {"median", "min", "max", "values", "n"}
+        and isinstance(values, list)
+        and len(values) == count
+        and all(_positive_number(value) for value in values)
+        and _positive_number(timing.get("min"))
+        and _positive_number(timing.get("median"))
+        and _positive_number(timing.get("max"))
+        and timing["min"] <= timing["median"] <= timing["max"]
+        and timing["median"] == wall_seconds
+    )
+
+
+def _query_evidence_error(section: str, value: object, candidate: dict) -> str | None:
+    if not isinstance(value, dict):
+        return f"{section} is not an object"
+    if value.get("state") == "skipped":
+        if not _exact_keys(value, {"state", "reason"}) or not isinstance(value.get("reason"), str):
+            return f"{section} skipped shape is invalid"
+        return None
+    if value.get("state") != "completed":
+        return f"{section} state is invalid"
+    if section == "spatial":
+        if not candidate_evidence_is_valid(candidate, require_exhaustive=True, require_rtree=True):
+            return "spatial result lacks an R-tree-backed candidate"
+        expected = {
+            "state",
+            "n_queries",
+            "wall_seconds",
+            "qps",
+            "total_features_returned",
+            "timing",
+        }
+        count_name = "n_queries"
+    else:
+        expected = {"state", "n_anchors", "n_descendants", "wall_seconds", "qps", "timing"}
+        count_name = "n_anchors"
+    if not _exact_keys(value, expected):
+        return f"{section} completed shape is invalid"
+    count = value.get(count_name)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        return f"{section} count is invalid"
+    if section == "spatial":
+        returned = value.get("total_features_returned")
+        if not isinstance(returned, int) or isinstance(returned, bool) or returned < 0:
+            return "spatial returned count is invalid"
+    elif not isinstance(value.get("n_descendants"), int) or value["n_descendants"] < 0:
+        return "batched descendant count is invalid"
+    wall = value.get("wall_seconds")
+    if not _timing_is_valid(value.get("timing"), wall):
+        return f"{section} timing is invalid"
+    qps = value.get("qps")
+    if (
+        not isinstance(wall, (int, float))
+        or not isinstance(qps, (int, float))
+        or not _positive_number(qps)
+        or abs(qps - count / wall) > 1e-12
+    ):
+        return f"{section} qps is invalid"
+    return None
+
+
+def _candidate_shape_is_valid(candidate: dict) -> bool:
+    expected = {
+        "label",
+        "peak_rss_bytes",
+        "peak_rss_mb",
+        "exit_code",
+        "state",
+        "benchmark_env",
+        "cap_seconds",
+        "wall_seconds",
+        "n_features",
+        "rtree_built",
+        "correctness_signature",
+        "fmt",
+        "validation",
+        "disk_bytes",
+    }
+    validation_keys = {
+        "ok",
+        "level",
+        "checked",
+        "skipped",
+        "errors",
+        "warnings",
+        "requested_sample",
+        "sample_eligible",
+        "sample_checked",
+        "checked_ids",
+    }
+    return (
+        _exact_keys(candidate, expected)
+        and _positive_number(candidate.get("cap_seconds"))
+        and isinstance(candidate.get("disk_bytes"), int)
+        and candidate["disk_bytes"] >= 0
+        and isinstance(candidate.get("fmt"), str)
+        and _exact_keys(candidate.get("validation"), validation_keys)
+        and isinstance(candidate["validation"].get("checked"), list)
+        and isinstance(candidate["validation"].get("warnings"), list)
+    )
+
+
+def _legacy_shape_is_valid(legacy: dict) -> bool:
+    base = {
+        "label",
+        "peak_rss_bytes",
+        "peak_rss_mb",
+        "exit_code",
+        "state",
+        "benchmark_env",
+        "cap_seconds",
+        "wall_seconds",
+        "disk_bytes",
+    }
+    if legacy.get("state") == "completed":
+        return (
+            _exact_keys(legacy, base | {"n_features", "correctness_signature"})
+            and legacy.get("exit_code") == 0
+            and _positive_number(legacy.get("wall_seconds"))
+        )
+    if legacy.get("state") == "timed_out":
+        optional_stdout = {"stdout_bytes", "stdout_sha256", "stdout_parse_error"}
+        return (
+            set(legacy).issubset(base | optional_stdout)
+            and base.issubset(legacy)
+            and legacy.get("exit_code") != 0
+            and legacy.get("wall_seconds") is None
+            and not {"n_features", "correctness_signature"}.intersection(legacy)
+        )
+    return False
+
+
+def _environment_is_valid(value: object, *, threads: int) -> bool:
+    required = {
+        "timestamp_utc",
+        "git_commit",
+        "git_dirty",
+        "hostname",
+        "platform",
+        "machine",
+        "cpu_model",
+        "cpu_cores_physical",
+        "cpu_cores_logical",
+        "total_ram_bytes",
+        "free_disk_bytes",
+        "cpu_affinity",
+        "python",
+        "rustc_version",
+        "packages",
+        "gffbase_install",
+        "artifact",
+        "env",
+    }
+    if not isinstance(value, dict) or not _exact_keys(value, required):
+        return False
+    python = value.get("python")
+    if not isinstance(python, dict):
+        return False
+    return (
+        _exact_keys(python, {"version", "implementation", "executable"})
+        and all(
+            isinstance(python.get(key), str) for key in ("version", "implementation", "executable")
+        )
+        and "/" not in python["executable"]
+        and _bounded_env_is_valid(value.get("env"), threads=threads)
+    )
+
+
 def benchmark_row_evidence_error(row: dict | None) -> str | None:
     """Return why a schema-v3 benchmark row is not publishable, else ``None``.
 
@@ -1079,6 +1277,24 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
 
     if not isinstance(row, dict):
         return "row is not an object"
+    row_keys = {
+        "name",
+        "key",
+        "measured",
+        "input",
+        "input_bytes",
+        "input_sha256",
+        "feature_lines",
+        "gffbase",
+        "legacy",
+        "ingest_speedup",
+        "spatial",
+        "batched",
+        "db_paths",
+        "params",
+    }
+    if not _exact_keys(row, row_keys):
+        return "row shape is invalid"
     if _contains_private_path(row):
         return "row contains an absolute path"
     candidate = row.get("gffbase")
@@ -1086,14 +1302,73 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
         return "candidate is incomplete or invalid"
     if not isinstance(candidate, dict):  # keeps this pure seam safe for untyped payloads
         return "candidate is incomplete or invalid"
-    spatial = row.get("spatial") or {}
-    if spatial.get("state") == "completed" and not candidate_evidence_is_valid(
-        candidate, require_exhaustive=True, require_rtree=True
+    if not _candidate_shape_is_valid(candidate):
+        return "candidate shape is invalid"
+    params = row.get("params")
+    if not isinstance(params, dict) or not _exact_keys(
+        params,
+        {
+            "legacy_cap_seconds",
+            "gffbase_cap_seconds",
+            "n_spatial",
+            "n_batched",
+            "repeats",
+            "region_seed",
+            "threads",
+            "gtf_arm",
+            "infer_gtf_parents",
+            "validation_sample",
+            "benchmark_env",
+        },
     ):
-        return "spatial result lacks an R-tree-backed candidate"
+        return "params shape is invalid"
+    threads = params.get("threads")
+    if not isinstance(threads, int) or isinstance(threads, bool) or threads < 1:
+        return "params threads are invalid"
+    if not _bounded_env_is_valid(params.get("benchmark_env"), threads=threads):
+        return "params benchmark environment is invalid"
+    if candidate.get("benchmark_env") != params["benchmark_env"]:
+        return "candidate benchmark environment differs from params"
+    if candidate.get("cap_seconds") != params.get("gffbase_cap_seconds"):
+        return "candidate cap differs from params"
+    for name in ("n_spatial", "n_batched", "repeats", "region_seed"):
+        if not isinstance(params.get(name), int) or params[name] < 1:
+            return f"params {name} is invalid"
+    measured = row.get("measured")
+    if not _exact_keys(measured, {"timestamp_utc", "git_commit", "git_dirty"}):
+        return "measured shape is invalid"
+    db_paths = row.get("db_paths")
+    if (
+        not isinstance(db_paths, dict)
+        or not _exact_keys(db_paths, {"gffbase", "legacy"})
+        or not all(
+            isinstance(path, str) and not _contains_private_path(path) for path in db_paths.values()
+        )
+    ):
+        return "database paths are invalid"
+    for name in ("name", "key", "input", "input_sha256"):
+        if not isinstance(row.get(name), str):
+            return f"row {name} is invalid"
+    if not _is_sha256(row.get("input_sha256")) or not all(
+        isinstance(row.get(name), int) and row[name] >= 0
+        for name in ("input_bytes", "feature_lines")
+    ):
+        return "row input evidence is invalid"
+    spatial_error = _query_evidence_error("spatial", row.get("spatial"), candidate)
+    if spatial_error:
+        return spatial_error
+    batched_error = _query_evidence_error("batched", row.get("batched"), candidate)
+    if batched_error:
+        return batched_error
     legacy = row.get("legacy")
     if not isinstance(legacy, dict):
         return "comparator is missing"
+    if not _legacy_shape_is_valid(legacy):
+        return "legacy shape is invalid"
+    if legacy.get("benchmark_env") != params["benchmark_env"]:
+        return "comparator benchmark environment differs from params"
+    if legacy.get("cap_seconds") != params.get("legacy_cap_seconds"):
+        return "comparator cap differs from params"
     speedup = row.get("ingest_speedup")
     if legacy.get("state") == "timed_out":
         if (
@@ -1135,13 +1410,28 @@ def benchmark_results_evidence_error(data: dict | None) -> str | None:
 
     if not isinstance(data, dict) or str(data.get("schema_version")) != SCHEMA_VERSION:
         return "unsupported benchmark schema"
+    if set(data) != {"schema_version", "environment", "corpora"}:
+        return "result shape is invalid"
     corpora = data.get("corpora")
-    if not isinstance(corpora, dict) or not corpora:
-        return "result has no corpus rows"
+    primary = {"mane", "chess", "refseq", "gencode-gtf", "gencode-gff3"}
+    if not isinstance(corpora, dict) or set(corpora) != primary:
+        return "result must contain exactly the primary corpora"
+    threads = None
     for key, row in corpora.items():
         error = benchmark_row_evidence_error(row)
         if error:
             return f"{key}: {error}"
+        if row.get("key") != key:
+            return f"{key}: row key differs from corpus key"
+        row_threads = row["params"]["threads"]
+        if threads is None:
+            threads = row_threads
+        elif threads != row_threads:
+            return "corpus thread controls differ"
+    if not isinstance(threads, int) or not _environment_is_valid(
+        data.get("environment"), threads=threads
+    ):
+        return "environment is invalid or differs from row controls"
     return None
 
 
@@ -1236,15 +1526,27 @@ def _result_lock(path: Path):
                 pass
 
 
-def write_results(stage: str, payload: dict) -> Path:
+def write_results(
+    stage: str, payload: dict, *, benchmark_controls: dict[str, str] | None = None
+) -> Path:
     """Write a stage's results, replacing the file. Stamps provenance."""
     OUT.mkdir(parents=True, exist_ok=True)
-    body = {"schema_version": SCHEMA_VERSION, "environment": environment(), **payload}
+    body = {
+        "schema_version": SCHEMA_VERSION,
+        "environment": environment(benchmark_controls=benchmark_controls),
+        **payload,
+    }
     path = OUT / f"{stage}.json"
     return atomic_write_json(path, body)
 
 
-def merge_results(stage: str, section: str, entries: dict) -> Path:
+def merge_results(
+    stage: str,
+    section: str,
+    entries: dict,
+    *,
+    benchmark_controls: dict[str, str] | None = None,
+) -> Path:
     """Update `entries` inside `<stage>.json[section]`, preserving the rest.
 
     This is the fix for the defect that destroyed the published record. The
@@ -1273,7 +1575,7 @@ def merge_results(stage: str, section: str, entries: dict) -> Path:
         merged.update(entries)
         body = {
             "schema_version": SCHEMA_VERSION,
-            "environment": environment(),
+            "environment": environment(benchmark_controls=benchmark_controls),
             **{
                 k: v
                 for k, v in existing.items()

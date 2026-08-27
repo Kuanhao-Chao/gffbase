@@ -237,7 +237,7 @@ def render_provenance(data: dict) -> str:
     dirty = " (working tree dirty)" if env.get("git_dirty") else ""
     return (
         f"{line1}  \n"
-        f"**Versions:** Python {env.get('python_version', '?')} · {versions}  \n"
+        f"**Versions:** Python {(env.get('python') or {}).get('version', '?')} · {versions}  \n"
         f"**Commit:** `{commit}`{dirty} · **Run:** {stamp}  \n"
         f"*Generated from `benchmarks/results/06_mega.json` by "
         f"`tools/gen_benchmark_tables.py`. Do not edit by hand.*"
