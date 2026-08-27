@@ -41,7 +41,11 @@ from gffbase._options import (
     _FeatureAdapter,
 )
 from gffbase._serialize import encode_value
-from gffbase.exceptions import DuplicateIDError, MultipartConstraintError
+from gffbase.exceptions import (
+    DuplicateIDError,
+    MultipartConstraintError,
+    SynthesisConflictError,
+)
 from gffbase.feature import ParsedFeature
 from gffbase.modes import VALIDATION_NCBI, ResolvedMode
 from gffbase.schema import (
@@ -138,7 +142,7 @@ class _ArrowBatchBuilder:
             ("feature_id", pa.string()),
             ("key", pa.string()),
             ("value", pa.string()),
-            ("idx", pa.int16()),
+            ("idx", pa.int32()),
         ]
     )
 
@@ -220,6 +224,8 @@ class _ArrowBatchBuilder:
         pairs = feat.attributes_pairs
         multivalued: set | None = None
         for k, v, idx in pairs:
+            if not -(2**31) <= idx <= 2**31 - 1:
+                raise OverflowError(f"attribute idx {idx} exceeds signed 32-bit INTEGER range")
             if not v:
                 # gffutils' rule, which the `Feature` object already applies:
                 # a WHOLLY empty value (`ID=`) means the key has no values,
@@ -711,7 +717,7 @@ def resolve_synthesized_ids(con, options, autoinc: dict, fmt: str) -> int:
             if isinstance(wanted, str) and wanted != group_key:
                 con.execute(
                     GTF_PROPAGATE_ATTRIBUTE,
-                    [group_key, wanted, wanted, featuretype, wanted],
+                    [featuretype, group_key, wanted, wanted, featuretype, wanted],
                 )
 
     rows = con.execute(
@@ -766,6 +772,7 @@ def resolve_synthesized_ids(con, options, autoinc: dict, fmt: str) -> int:
         ("attributes", "feature_id"),
         ("edges", "parent"),
         ("edges", "child"),
+        ("id_conflicts", "resolved_id"),
     ):
         con.executemany(
             f"UPDATE {table} SET {column} = ? WHERE {column} = ?",
@@ -778,6 +785,185 @@ def resolve_synthesized_ids(con, options, autoinc: dict, fmt: str) -> int:
     )
     _log.info("applied id_spec to %d synthesized feature(s)", len(renames))
     return len(renames)
+
+
+def _create_gtf_parent_map(con) -> None:
+    """Create the ingest-local routing table used by GTF synthesis.
+
+    It is deliberately temporary: the resolved hierarchy is persisted in
+    ``features``, ``edges`` and ``id_conflicts``; retaining this implementation
+    detail would require a schema bump without adding any query capability.
+    """
+    con.execute(
+        """
+        CREATE TEMP TABLE IF NOT EXISTS __gtf_parent_map (
+            parent_type     VARCHAR NOT NULL,
+            raw_id          VARCHAR NOT NULL,
+            seqid           VARCHAR NOT NULL,
+            strand          VARCHAR,
+            resolved_id     VARCHAR NOT NULL,
+            first_file_order BIGINT
+        )
+        """
+    )
+
+
+def _prepare_gtf_parent_map(
+    con,
+    *,
+    parent_type: str,
+    attribute: str,
+    child_types: tuple[str, ...],
+    merge_strategy: str,
+    autoinc: dict[str, int],
+    synthesize_missing: bool,
+) -> None:
+    """Resolve every inferred GTF parent to one genomic location.
+
+    The old synthesis SQL grouped only by the raw attribute value and selected
+    ``ANY_VALUE(seqid/strand)``.  A reused identifier could therefore produce
+    a parent on an arbitrary chromosome with an envelope spanning unrelated
+    loci.  This pass makes the ambiguity explicit before any parent is
+    inserted.  Only ``create_unique`` is an affirmative request to retain all
+    groups; every other duplicate policy raises because merge/warning/replace
+    cannot express one biological parent per location.
+    """
+    placeholders = ", ".join("?" for _ in child_types)
+    groups = con.execute(
+        f"""
+        WITH candidates AS (
+            SELECT a.value AS raw_id, f.seqid, f.strand, f.file_order,
+                   FALSE AS is_authored, NULL::VARCHAR AS authored_id
+            FROM attributes a
+            JOIN features f ON f.id = a.feature_id
+            WHERE a.key = ? AND f.featuretype IN ({placeholders})
+            UNION ALL
+            SELECT own.value AS raw_id,
+                   f.seqid, f.strand, f.file_order,
+                   TRUE AS is_authored, f.id AS authored_id
+            FROM features f
+            JOIN attributes own
+              ON own.feature_id = f.id AND own.key = ?
+            WHERE f.featuretype = ?
+        )
+        SELECT raw_id, seqid, strand, MIN(file_order) AS first_file_order,
+               BOOL_OR(is_authored) AS has_authored_parent,
+               MIN(authored_id) FILTER (WHERE is_authored) AS authored_id
+        FROM candidates
+        GROUP BY raw_id, seqid, strand
+        ORDER BY raw_id, first_file_order, seqid, COALESCE(strand, '')
+        """,
+        [attribute, *child_types, attribute, parent_type],
+    ).fetchall()
+    if not groups:
+        return
+
+    # Generated suffixes must not claim an ID supplied elsewhere as a future
+    # inferred parent, even though that parent row has not been inserted yet.
+    reserved = {
+        row[0]
+        for row in con.execute(
+            "SELECT DISTINCT value FROM attributes WHERE key IN ('gene_id', 'transcript_id')"
+        ).fetchall()
+    }
+    taken = {row[0] for row in con.execute("SELECT id FROM features").fetchall()}
+    taken.update(
+        row[0] for row in con.execute("SELECT resolved_id FROM __gtf_parent_map").fetchall()
+    )
+
+    by_raw: dict[str, list[tuple[str, str | None, int | None, bool, str | None]]] = {}
+    for raw_id, seqid, strand, first_file_order, is_authored, authored_id in groups:
+        by_raw.setdefault(raw_id, []).append(
+            (seqid, strand, first_file_order, bool(is_authored), authored_id)
+        )
+
+    mapping_rows: list[tuple] = []
+    conflict_rows: list[tuple] = []
+    for raw_id, locations in by_raw.items():
+        # With inference disabled, a bare gene_id/transcript_id is metadata,
+        # not a request to invent a parent. We still must route and validate
+        # IDs that *do* name an authored parent; otherwise a child on another
+        # chromosome silently attaches to that authored row in compat mode.
+        if not synthesize_missing and not any(location[3] for location in locations):
+            continue
+        authored_ids = {location[4] for location in locations if location[3]}
+        raw_id_collision = synthesize_missing and raw_id in taken and raw_id not in authored_ids
+        if raw_id_collision and merge_strategy != "create_unique":
+            occupied_type = con.execute(
+                "SELECT featuretype FROM features WHERE id = ?", [raw_id]
+            ).fetchone()[0]
+            raise SynthesisConflictError(
+                f"cannot synthesize {parent_type} {raw_id!r}: that ID is already used "
+                f'by featuretype {occupied_type!r}. Use merge_strategy="create_unique" '
+                "to suffix the inferred parent with provenance."
+            )
+        if len(locations) > 1 and merge_strategy != "create_unique":
+            rendered = ", ".join(
+                f"({seqid!r}, {strand!r}, first source order {order})"
+                for seqid, strand, order, _is_authored, _authored_id in locations
+            )
+            raise SynthesisConflictError(
+                f"cannot synthesize {parent_type} {raw_id!r}: {attribute} occurs "
+                f"in {len(locations)} (seqid, strand) groups: {rendered}. "
+                'Use merge_strategy="create_unique" to split the inferred parent '
+                "deterministically."
+            )
+        if (
+            len(locations) > 1
+            and merge_strategy == "create_unique"
+            and not synthesize_missing
+            and any(not location[3] for location in locations)
+        ):
+            raise SynthesisConflictError(
+                f"cannot split {parent_type} {raw_id!r} across "
+                f"{len(locations)} (seqid, strand) groups because {parent_type} "
+                "inference is disabled and at least one group has no authored parent. "
+                f"Enable {parent_type} inference or correct the conflicting {attribute} values."
+            )
+
+        authored_locations = [index for index, location in enumerate(locations) if location[3]]
+        canonical_index = authored_locations[0] if authored_locations else 0
+        for rank, (seqid, strand, first_file_order, is_authored, authored_id) in enumerate(
+            locations
+        ):
+            if is_authored:
+                resolved_id = authored_id or raw_id
+            elif rank == canonical_index and not raw_id_collision:
+                resolved_id = raw_id
+            else:
+                resolved_id = IdSpecResolver._autoincrement(raw_id, autoinc)
+                while resolved_id in taken or resolved_id in reserved:
+                    resolved_id = IdSpecResolver._autoincrement(raw_id, autoinc)
+            taken.add(resolved_id)
+            mapping_rows.append((parent_type, raw_id, seqid, strand, resolved_id, first_file_order))
+            if len(locations) > 1 or raw_id_collision:
+                if raw_id_collision:
+                    detail = (
+                        f"{attribute}={raw_id!r} collides with an existing wrong-type feature; "
+                        f"inferred {parent_type} is ({seqid!r}, {strand!r})"
+                    )
+                else:
+                    detail = (
+                        f"{attribute} spans {len(locations)} genomic groups; "
+                        f"group {rank + 1} is ({seqid!r}, {strand!r})"
+                    )
+                conflict_rows.append(
+                    (raw_id, resolved_id, "gtf_synthesis_split", first_file_order, detail)
+                )
+
+    if mapping_rows:
+        con.executemany(
+            "INSERT INTO __gtf_parent_map "
+            "(parent_type, raw_id, seqid, strand, resolved_id, first_file_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            mapping_rows,
+        )
+    if conflict_rows:
+        con.executemany(
+            "INSERT INTO id_conflicts "
+            "(raw_id, resolved_id, kind, file_order, detail) VALUES (?, ?, ?, ?, ?)",
+            conflict_rows,
+        )
 
 
 def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid_to_y, fmt):
@@ -1166,14 +1352,6 @@ def _build_database(
     # stamp a synthesized row's seqid_y and bbox.
     _persist_seqid_map(con, seqid_to_y)
 
-    # `autoincrements` records the counters so a later `update()` does not
-    # reissue an id this build already handed out.
-    if autoinc:
-        ai_tbl = pa.table({"base": list(autoinc.keys()), "n": [int(v) for v in autoinc.values()]})
-        con.register("__staging_autoinc", ai_tbl)
-        con.execute("INSERT INTO autoincrements (base, n) SELECT base, n FROM __staging_autoinc")
-        con.unregister("__staging_autoinc")
-
     dialect = it.dialect()
     directives = list(it.directives())
     fmt = (dialect or {}).get("fmt", "gff3")
@@ -1190,8 +1368,27 @@ def _build_database(
     n_synth_g = 0
 
     if fmt == "gtf":
+        _create_gtf_parent_map(con)
+        _prepare_gtf_parent_map(
+            con,
+            parent_type="transcript",
+            attribute="transcript_id",
+            child_types=(gtf_subfeature,),
+            merge_strategy=options.merge_strategy,
+            autoinc=autoinc,
+            synthesize_missing=not disable_infer_transcripts,
+        )
         if not disable_infer_transcripts:
             n_synth_t = _synthesize_transcripts(con, gtf_subfeature)
+        _prepare_gtf_parent_map(
+            con,
+            parent_type="gene",
+            attribute="gene_id",
+            child_types=("transcript", gtf_subfeature),
+            merge_strategy=options.merge_strategy,
+            autoinc=autoinc,
+            synthesize_missing=not disable_infer_genes,
+        )
         if not disable_infer_genes:
             n_synth_g = _synthesize_genes(con, gtf_subfeature)
         con.execute(EDGES_FROM_GTF)
@@ -1218,6 +1415,16 @@ def _build_database(
             )
     else:
         con.execute(EDGES_FROM_PARENT)
+
+    # Persist after synthesis: create_unique parent splitting and a custom
+    # synthesized-row id_spec may advance the same counters as the streaming
+    # duplicate pass.  Writing earlier let a subsequent update reissue one of
+    # those late IDs.
+    if autoinc:
+        ai_tbl = pa.table({"base": list(autoinc.keys()), "n": [int(v) for v in autoinc.values()]})
+        con.register("__staging_autoinc", ai_tbl)
+        con.execute("INSERT INTO autoincrements (base, n) SELECT base, n FROM __staging_autoinc")
+        con.unregister("__staging_autoinc")
 
     # Closure via recursive CTE.
     con.execute(CLOSURE_RECURSIVE_CTE, [max_depth])
@@ -1256,6 +1463,19 @@ def _build_database(
     con.execute(SEGMENTS_ALL_VIEW)
     con.execute(COMPAT_VIEWS_SQL)
 
+    # Write the configured traversal budget before strict validation. INV-11
+    # recomputes the closure from ``edges`` and needs the promised max depth;
+    # inferring it from the possibly-corrupt closure is exactly what would let
+    # a missing deepest row escape detection.
+    _write_meta(
+        con,
+        dialect,
+        fmt,
+        rtree_built=rtree_built,
+        max_depth=max_depth,
+        resolved_mode=options.resolved_mode,
+    )
+
     # Strict mode validates what it just built. The failure these catch is not
     # a crash but a database that answers plausibly and wrongly -- a fused
     # feature whose envelope is narrower than its segments simply stops being
@@ -1271,17 +1491,6 @@ def _build_database(
     n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
     n_edges = scalar(con, "SELECT COUNT(*) FROM edges")
     n_closure = scalar(con, "SELECT COUNT(*) FROM closure")
-
-    # Meta — record dialect, fmt, and the rtree availability so a re-opened
-    # DB can route queries correctly without probing.
-    _write_meta(
-        con,
-        dialect,
-        fmt,
-        rtree_built=rtree_built,
-        max_depth=max_depth,
-        resolved_mode=options.resolved_mode,
-    )
 
     return con, IngestStats(
         n_features_raw=n_raw,

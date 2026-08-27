@@ -359,7 +359,7 @@ class Feature:
         fmt = (self.dialect or {}).get("fmt", "gff3")
         if isinstance(attributes, _LazyAttributes):
             self.attributes = attributes
-        elif isinstance(attributes, (bytes, bytearray)):
+        elif isinstance(attributes, bytes | bytearray):
             self._attributes_blob = bytes(attributes)
             self.attributes = _LazyAttributes(blob=self._attributes_blob, dialect_fmt=fmt)
         elif attributes is None:
@@ -369,7 +369,7 @@ class Feature:
 
         if extra is None:
             self.extra = []
-        elif isinstance(extra, (bytes, bytearray)):
+        elif isinstance(extra, bytes | bytearray):
             text = extra.decode("utf-8", errors="replace")
             self.extra = text.split("\t") if text else []
         elif isinstance(extra, str):

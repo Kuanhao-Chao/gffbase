@@ -16,8 +16,8 @@
 # ---------------------------------------------------------------------------
 """Version, under the name gffutils exposes it.
 
-The single source of truth is `gffbase.__version__`, a literal in
-`__init__.py`. This module re-reads it rather than restating it, so the two
+The single source of truth is `gffbase._version.__version__`. This module
+re-exports the public package value rather than restating it, so the two
 cannot drift -- `tests/test_release_hygiene.py` already pins that literal
 against `pyproject.toml` and `Cargo.toml`.
 
@@ -29,6 +29,6 @@ parity manifest pins its oracle by git commit rather than by version string.
 
 from __future__ import annotations
 
-from gffbase import __version__ as version
+from gffbase._version import __version__ as version
 
 __all__ = ["version"]

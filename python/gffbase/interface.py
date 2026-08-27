@@ -154,7 +154,7 @@ def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
         names = ["file_order"]
     elif isinstance(order_by, str):
         names = [part.strip() for part in order_by.split(",") if part.strip()]
-    elif isinstance(order_by, (tuple, list)):
+    elif isinstance(order_by, tuple | list):
         names = [str(part).strip() for part in order_by]
     else:
         raise TypeError(
@@ -323,7 +323,7 @@ class FeatureDB:
             self.dbfn = ":existing-connection:"
             self.warnings = list(getattr(dbfn[1], "warnings", []) or [])
             self._owns_conn = True if _own_conn is None else bool(_own_conn)
-        elif isinstance(dbfn, (str, os.PathLike)):
+        elif isinstance(dbfn, str | os.PathLike):
             # `os.PathLike`, not just `str`: the error below says "dbfn must be
             # a path" and this branch used to reject an actual `pathlib.Path`,
             # which is what a caller reaches for first. `create_db` already
@@ -1026,7 +1026,7 @@ class FeatureDB:
             where.append("strand = ?")
             params.append(strand)
         if featuretype is not None:
-            if isinstance(featuretype, (list, tuple, set)):
+            if isinstance(featuretype, list | tuple | set):
                 placeholders = ",".join("?" * len(featuretype))
                 where.append(f"featuretype IN ({placeholders})")
                 params.extend(featuretype)
@@ -1122,7 +1122,7 @@ class FeatureDB:
             where.append("strand = ?")
             params.append(strand)
         if featuretype is not None:
-            if isinstance(featuretype, (list, tuple, set)):
+            if isinstance(featuretype, list | tuple | set):
                 ph = ",".join("?" * len(featuretype))
                 where.append(f"featuretype IN ({ph})")
                 params.extend(featuretype)
@@ -1189,7 +1189,7 @@ class FeatureDB:
             where.append("strand = ?")
             params.append(strand)
         if featuretype is not None:
-            if isinstance(featuretype, (list, tuple, set)):
+            if isinstance(featuretype, list | tuple | set):
                 ph = ",".join("?" * len(featuretype))
                 where.append(f"featuretype IN ({ph})")
                 params.extend(featuretype)
@@ -2115,7 +2115,7 @@ class FeatureDB:
     def _featuretype_filter(featuretype, *, qualifier: str = "f"):
         if featuretype is None:
             return [], []
-        if isinstance(featuretype, (list, tuple, set)):
+        if isinstance(featuretype, list | tuple | set):
             ph = ",".join("?" * len(featuretype))
             return [f"{qualifier}.featuretype IN ({ph})"], list(featuretype)
         return [f"{qualifier}.featuretype = ?"], [featuretype]
@@ -2562,7 +2562,7 @@ class FeatureDB:
 
         if merge_criteria is None:
             merge_criteria = (mc.seqid, mc.overlap_end_inclusive, mc.strand, mc.feature_type)
-        elif not isinstance(merge_criteria, (list, tuple)):
+        elif not isinstance(merge_criteria, list | tuple):
             merge_criteria = [merge_criteria]
 
         accum: Feature | None = None

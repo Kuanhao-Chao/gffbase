@@ -25,15 +25,22 @@
 use crate::dialect::{Dialect, Format};
 use crate::escape::unescape;
 
+pub type AttributePairs = Vec<(String, String, i32)>;
+pub type ParsedAttributes = (AttributePairs, Dialect);
+
 /// Parse a single feature's column-9 string and return:
 ///   - the list of (key, value, multivalue_index) triples
 ///   - per-line dialect observations to feed `dialect::choose`
-pub fn parse_attributes(blob: &str) -> (Vec<(String, String, u16)>, Dialect) {
-    let mut out: Vec<(String, String, u16)> = Vec::new();
+pub fn parse_attributes(
+    blob: &str,
+    decode_url_escapes: bool,
+    compat_whole_value_quotes: bool,
+) -> Result<ParsedAttributes, String> {
+    let mut out: AttributePairs = Vec::new();
     let mut obs = Dialect::default();
 
     if blob.is_empty() {
-        return (out, obs);
+        return Ok((out, obs));
     }
 
     // Detect leading / trailing semicolons.
@@ -51,13 +58,15 @@ pub fn parse_attributes(blob: &str) -> (Vec<(String, String, u16)>, Dialect) {
     // `key value` (space separator). The first non-empty record decides per-line.
     let segments = split_top_level_semicolons(blob, &mut obs);
 
-    let mut keys_seen: std::collections::HashMap<String, u16> = std::collections::HashMap::new();
+    let mut keys_seen: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
     let mut order: Vec<String> = Vec::new();
     let mut detected_fmt: Option<Format> = None;
 
-    for seg in segments {
-        let seg = seg.trim();
-        if seg.is_empty() {
+    for raw_seg in segments {
+        // Leading inter-attribute whitespace is separator spelling.  The
+        // remainder, especially GFF3 bytes after '=', is literal value data.
+        let seg = raw_seg.trim_start();
+        if seg.trim().is_empty() {
             continue;
         }
 
@@ -80,7 +89,15 @@ pub fn parse_attributes(blob: &str) -> (Vec<(String, String, u16)>, Dialect) {
         }
 
         // Quoted GTF value handling.
-        let (clean_val, was_quoted) = strip_quotes(raw_val);
+        let (clean_val, was_quoted) = if local_fmt == Format::Gff3 {
+            if compat_whole_value_quotes {
+                strip_quotes(raw_val)
+            } else {
+                (raw_val, false)
+            }
+        } else {
+            strip_quotes(raw_val)
+        };
         if was_quoted {
             obs.quoted_gff2_values = true;
         }
@@ -103,35 +120,50 @@ pub fn parse_attributes(blob: &str) -> (Vec<(String, String, u16)>, Dialect) {
         }
 
         for v in multi_values {
-            let decoded = if local_fmt == Format::Gff3 {
+            let decoded = if local_fmt == Format::Gff3 && decode_url_escapes {
                 unescape(v).into_owned()
             } else {
                 v.to_string()
             };
             out.push((key.to_string(), decoded, *counter));
-            *counter += 1;
+            increment_attribute_index(counter)?;
         }
     }
 
     obs.fmt = detected_fmt.unwrap_or(Format::Gff3);
     obs.keyval_separator = if obs.fmt == Format::Gtf { ' ' } else { '=' };
     obs.order = order;
-    (out, obs)
+    Ok((out, obs))
+}
+
+fn increment_attribute_index(index: &mut i32) -> Result<(), String> {
+    *index = index
+        .checked_add(1)
+        .ok_or_else(|| "attribute idx exceeds signed 32-bit INTEGER range".to_string())?;
+    Ok(())
 }
 
 /// Split a column-9 string on top-level semicolons, honoring quoted ranges.
 fn split_top_level_semicolons<'a>(blob: &'a str, obs: &mut Dialect) -> Vec<&'a str> {
-    let bytes = blob.as_bytes();
     let mut out: Vec<&str> = Vec::new();
     let mut start = 0;
     let mut in_quotes = false;
-    for (i, &b) in bytes.iter().enumerate() {
-        if b == b'"' {
+    let mut escaped = false;
+    for (i, ch) in blob.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
             in_quotes = !in_quotes;
-        } else if b == b';' && !in_quotes {
+        } else if ch == ';' && !in_quotes {
             out.push(&blob[start..i]);
             start = i + 1;
-        } else if b == b';' && in_quotes {
+        } else if ch == ';' && in_quotes {
             obs.semicolon_in_quotes = true;
         }
     }
@@ -144,16 +176,43 @@ fn split_top_level_semicolons<'a>(blob: &'a str, obs: &mut Dialect) -> Vec<&'a s
 /// Split `key<sep>value` where sep is `=` (GFF3) or whitespace (GTF).
 /// Returns (key, value, separator_char).
 fn split_keyval(seg: &str) -> (&str, &str, char) {
-    if let Some(eq) = seg.find('=') {
+    if let Some(eq) = find_unescaped_top_level(seg, Some('=')) {
         let (k, v) = seg.split_at(eq);
-        return (k.trim(), v[1..].trim(), '=');
+        return (k.trim(), &v[1..], '=');
     }
     // GTF-style: split on first whitespace.
-    if let Some(ws) = seg.find(|c: char| c.is_whitespace()) {
+    if let Some(ws) = find_unescaped_top_level(seg, None) {
         let (k, v) = seg.split_at(ws);
         return (k.trim(), v.trim_start().trim(), ' ');
     }
     (seg.trim(), "", '=')
+}
+
+fn find_unescaped_top_level(text: &str, delimiter: Option<char>) -> Option<usize> {
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for (index, ch) in text.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
+            in_quotes = !in_quotes;
+            continue;
+        }
+        let matches = delimiter.map_or_else(
+            || ch.is_whitespace() && !ch.is_control(),
+            |wanted| ch == wanted,
+        );
+        if !in_quotes && matches {
+            return Some(index);
+        }
+    }
+    None
 }
 
 fn strip_quotes(s: &str) -> (&str, bool) {
@@ -166,14 +225,19 @@ fn strip_quotes(s: &str) -> (&str, bool) {
 
 /// Split on commas that are not inside double quotes.
 fn split_unquoted_commas(s: &str) -> Vec<&str> {
-    let bytes = s.as_bytes();
     let mut out: Vec<&str> = Vec::new();
     let mut start = 0;
     let mut in_quotes = false;
-    for (i, &b) in bytes.iter().enumerate() {
-        match b {
-            b'"' => in_quotes = !in_quotes,
-            b',' if !in_quotes => {
+    let mut escaped = false;
+    for (i, ch) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '"' => in_quotes = !in_quotes,
+            ',' if !in_quotes => {
                 out.push(&s[start..i]);
                 start = i + 1;
             }
@@ -190,7 +254,7 @@ mod tests {
 
     #[test]
     fn gff3_simple() {
-        let (pairs, dialect) = parse_attributes("ID=g1;Name=foo;Parent=p1");
+        let (pairs, dialect) = parse_attributes("ID=g1;Name=foo;Parent=p1", true, false).unwrap();
         assert_eq!(pairs.len(), 3);
         assert_eq!(pairs[0], ("ID".into(), "g1".into(), 0));
         assert_eq!(dialect.fmt, Format::Gff3);
@@ -198,7 +262,7 @@ mod tests {
 
     #[test]
     fn gff3_multivalue() {
-        let (pairs, _) = parse_attributes("Parent=a,b,c");
+        let (pairs, _) = parse_attributes("Parent=a,b,c", true, false).unwrap();
         assert_eq!(pairs.len(), 3);
         assert_eq!(pairs[0].2, 0);
         assert_eq!(pairs[1].2, 1);
@@ -207,7 +271,8 @@ mod tests {
 
     #[test]
     fn gtf_quoted() {
-        let (pairs, dialect) = parse_attributes(r#"gene_id "ENSG"; transcript_id "ENST";"#);
+        let (pairs, dialect) =
+            parse_attributes(r#"gene_id "ENSG"; transcript_id "ENST";"#, true, false).unwrap();
         assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0].0, "gene_id");
         assert_eq!(pairs[0].1, "ENSG");
@@ -218,7 +283,7 @@ mod tests {
 
     #[test]
     fn semicolon_in_quotes() {
-        let (pairs, dialect) = parse_attributes(r#"note "a;b";ID=g1"#);
+        let (pairs, dialect) = parse_attributes(r#"note "a;b";ID=g1"#, true, false).unwrap();
         assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0].1, "a;b");
         assert!(dialect.semicolon_in_quotes);
@@ -226,7 +291,88 @@ mod tests {
 
     #[test]
     fn percent_escapes() {
-        let (pairs, _) = parse_attributes("Note=hello%20world%2C%20you");
+        let (pairs, _) = parse_attributes("Note=hello%20world%2C%20you", true, false).unwrap();
         assert_eq!(pairs[0].1, "hello world, you");
+    }
+
+    #[test]
+    fn delimiters_inside_quotes_or_escape_sequences_are_data() {
+        let blob = r#"gene_id "G=雪"; note "quoted \"value\" and escaped\;semicolon %3B";"#;
+        let (pairs, dialect) = parse_attributes(blob, true, false).unwrap();
+        assert_eq!(dialect.fmt, Format::Gtf);
+        assert_eq!(
+            pairs,
+            vec![
+                ("gene_id".into(), "G=雪".into(), 0),
+                (
+                    "note".into(),
+                    r#"quoted \"value\" and escaped\;semicolon %3B"#.into(),
+                    0,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn escaped_semicolon_does_not_split_gff3_attribute() {
+        let (pairs, dialect) = parse_attributes(
+            r#"ID=x;Note=left\;right;Encoded=%E9%9B%AA%3Bdone"#,
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(dialect.fmt, Format::Gff3);
+        assert_eq!(
+            pairs,
+            vec![
+                ("ID".into(), "x".into(), 0),
+                ("Note".into(), r#"left\;right"#.into(), 0),
+                ("Encoded".into(), "雪;done".into(), 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn preserves_gff3_whitespace_after_equals() {
+        let (pairs, _) = parse_attributes("ID=x;Note= ", true, false).unwrap();
+        assert_eq!(pairs[1], ("Note".into(), " ".into(), 0));
+    }
+
+    #[test]
+    fn url_escape_decoding_can_be_disabled() {
+        let (pairs, _) = parse_attributes("Note=ok%20bad%3Btail", false, false).unwrap();
+        assert_eq!(pairs[0].1, "ok%20bad%3Btail");
+    }
+
+    #[test]
+    fn attribute_indices_exceed_unsigned_16_bit_without_wrapping() {
+        let values = (0..=65_536)
+            .map(|index| format!("p{index}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let (pairs, _) = parse_attributes(&format!("Parent={values}"), true, false).unwrap();
+        assert_eq!(pairs.last().unwrap().2, 65_536);
+    }
+
+    #[test]
+    fn attribute_index_overflow_is_explicit() {
+        let mut index = i32::MAX;
+        let error = increment_attribute_index(&mut index).unwrap_err();
+        assert!(error.contains("signed 32-bit INTEGER"));
+    }
+
+    #[test]
+    fn compatibility_strips_whole_quoted_gff3_values_before_splitting() {
+        let (pairs, dialect) = parse_attributes(r#"ID="001";types="a,b,c""#, true, true).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("ID".into(), "001".into(), 0),
+                ("types".into(), "a".into(), 0),
+                ("types".into(), "b".into(), 1),
+                ("types".into(), "c".into(), 2),
+            ]
+        );
+        assert!(dialect.quoted_gff2_values);
     }
 }

@@ -243,6 +243,10 @@ def _split_keyvals(keyval_str, dialect=None):
     from gffbase.dialect import default_dialect
     from gffbase.feature import _LazyAttributes
 
-    pairs, observed = parse_attributes(keyval_str or "")
+    # This legacy gffutils entry point recognizes a whole quoted value even
+    # when the separator is ``=`` (for example ``types=\"a,b\"``).  File
+    # parsing deliberately does not: strict GFF3 keeps bytes after ``=``
+    # literal and lets NCBI validation diagnose noncanonical quoting.
+    pairs, observed = parse_attributes(keyval_str or "", compat_whole_value_quotes=True)
     resolved = dict(dialect) if dialect else {**default_dialect(), **observed}
     return _LazyAttributes(initial=pairs), resolved
