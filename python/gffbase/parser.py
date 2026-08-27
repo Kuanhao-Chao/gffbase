@@ -120,6 +120,14 @@ def _resolve_engine(engine: str | None) -> str:
     return engine
 
 
+def _resolve_validation(validation: str) -> str:
+    if validation in {"ncbi", "strict"}:
+        return "ncbi"
+    if validation in {"gffutils", "compat"}:
+        return "gffutils"
+    raise ValueError(f"validation must be 'gffutils' or 'ncbi'; got {validation!r}")
+
+
 def parse_gff(
     path: str,
     *,
@@ -150,7 +158,10 @@ def parse_gff(
         rejected, so this only affects lines that cannot be parsed at all.
     """
     eng = _resolve_engine(engine)
+    validation = _resolve_validation(validation)
     if eng == "rust":
+        from gffbase import constants
+
         it = _rust.parse_file(
             path,
             checklines=checklines,
@@ -158,6 +169,7 @@ def parse_gff(
             force_gff=force_gff,
             strict=strict,
             validation=validation,
+            ignore_url_escape_characters=constants.ignore_url_escape_characters,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_file(
@@ -182,7 +194,10 @@ def parse_bytes(
     engine: str | None = "auto",
 ) -> _Iterator:
     eng = _resolve_engine(engine)
+    validation = _resolve_validation(validation)
     if eng == "rust":
+        from gffbase import constants
+
         it = _rust.parse_bytes(
             data,
             checklines=checklines,
@@ -190,6 +205,7 @@ def parse_bytes(
             force_gff=force_gff,
             strict=strict,
             validation=validation,
+            ignore_url_escape_characters=constants.ignore_url_escape_characters,
         )
         return _Iterator(it, native=True)
     it = _pyparser.parse_bytes(

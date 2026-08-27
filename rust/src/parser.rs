@@ -31,7 +31,7 @@ use memchr::memchr;
 use crate::attributes::parse_attributes;
 use crate::dialect::{self, Dialect};
 use crate::validate::{
-    validate_attributes_pairs, validate_fields, ErrorKind, GffError, ValidationProfile,
+    validate_attributes_pairs, validate_field_errors, ErrorKind, GffError, ValidationProfile,
 };
 
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ pub struct Record {
     pub strand: String,
     pub frame: String,
     pub attributes_blob: Vec<u8>,
-    pub attributes_pairs: Vec<(String, String, u16)>,
+    pub attributes_pairs: Vec<(String, String, i32)>,
     pub extra: Vec<String>,
 }
 
@@ -64,6 +64,7 @@ pub struct ParseOptions {
     /// records a warning; `Ncbi` rejects it (raising or dropping per
     /// `strict`). See `validate::ValidationProfile`.
     pub profile: ValidationProfile,
+    pub decode_url_escapes: bool,
 }
 
 /// A simple text source: either a Vec<u8> we own or a Read trait object.
@@ -105,6 +106,7 @@ pub struct RecordIter {
     line_no: usize,
     strict: bool,
     profile: ValidationProfile,
+    decode_url_escapes: bool,
     warnings: Vec<GffError>,
 }
 
@@ -127,6 +129,7 @@ impl RecordIter {
             line_no: 0,
             strict: opts.strict,
             profile: opts.profile,
+            decode_url_escapes: opts.decode_url_escapes,
             warnings: Vec::new(),
         };
         iter.peek_dialect(&opts);
@@ -154,6 +157,7 @@ impl RecordIter {
         let saved_line = self.line_no;
         let saved_directives = self.directives.clone();
         let saved_fasta = self.fasta_reached;
+        let saved_warnings = self.warnings.len();
 
         let mut samples: Vec<Dialect> = Vec::new();
         let limit = if opts.force_dialect_check {
@@ -165,8 +169,11 @@ impl RecordIter {
             match self.next_raw_record() {
                 Some(Ok((_, _, _, _, _, _, _, _, blob, _))) => {
                     let blob_str = std::str::from_utf8(&blob).unwrap_or("");
-                    let (_pairs, obs) = parse_attributes(blob_str);
-                    samples.push(obs);
+                    if let Ok((_pairs, obs)) =
+                        parse_attributes(blob_str, opts.decode_url_escapes, !opts.profile.rejects())
+                    {
+                        samples.push(obs);
+                    }
                 }
                 Some(Err(_)) => break,
                 None => break,
@@ -179,6 +186,7 @@ impl RecordIter {
         self.line_no = saved_line;
         self.directives = saved_directives;
         self.fasta_reached = saved_fasta;
+        self.warnings.truncate(saved_warnings);
 
         // force_gff overrides format detection.
         if opts.force_gff {
@@ -187,7 +195,7 @@ impl RecordIter {
         }
     }
 
-    /// Read the next non-comment, non-blank line as 9-or-more tab fields.
+    /// Read the next non-comment, non-blank line as tab-separated fields.
     /// Returns the raw fields plus the attributes blob (col 9 raw bytes).
     /// Errors are structured `GffError` values carrying the offending
     /// line number; `lib.rs` converts them to Python `GFFFormatError`s.
@@ -275,29 +283,49 @@ impl RecordIter {
             // Tab split. (`line` was \r-trimmed above, before any path
             // inspected it.)
             let mut fields = split_tabs(line);
-            if fields.len() < 9 {
-                let err = GffError::new(
-                    cur_line_no,
-                    ErrorKind::TooFewFields,
-                    format!(
-                        "expected at least 9 tab-separated fields, found {}",
-                        fields.len()
-                    ),
-                );
-                if self.profile.rejects() {
-                    return Some(Err(err));
+            match fields.len().cmp(&9) {
+                std::cmp::Ordering::Less => {
+                    let err = GffError::new(
+                        cur_line_no,
+                        ErrorKind::TooFewFields,
+                        format!(
+                            "expected at least 9 tab-separated fields, found {}",
+                            fields.len()
+                        ),
+                    );
+                    if self.profile.rejects() {
+                        return Some(Err(err));
+                    }
+                    // Compat: gffutils never errors here. `feature_from_line`
+                    // splits on tab and `zip(_gffkeys, fields)` truncates, so a
+                    // space-delimited line becomes one feature whose seqid is the
+                    // whole line and whose remaining columns take their defaults.
+                    // Reproducing that is deliberate -- refusing a file the oracle
+                    // reads is worse for a drop-in -- and the warning is what
+                    // makes it safe.
+                    self.warnings.push(err);
+                    while fields.len() < 9 {
+                        fields.push(if fields.len() == 8 { b"" } else { b"." });
+                    }
                 }
-                // Compat: gffutils never errors here. `feature_from_line`
-                // splits on tab and `zip(_gffkeys, fields)` truncates, so a
-                // space-delimited line becomes one feature whose seqid is the
-                // whole line and whose remaining columns take their defaults.
-                // Reproducing that is deliberate -- refusing a file the oracle
-                // reads is worse for a drop-in -- and the warning is what
-                // makes it safe.
-                self.warnings.push(err);
-                while fields.len() < 9 {
-                    fields.push(if fields.len() == 8 { b"" } else { b"." });
+                std::cmp::Ordering::Greater => {
+                    let err = GffError::new(
+                        cur_line_no,
+                        ErrorKind::TooManyFields,
+                        format!(
+                            "expected exactly 9 tab-separated fields, found {}",
+                            fields.len()
+                        ),
+                    );
+                    if self.profile.rejects() {
+                        return Some(Err(err));
+                    }
+                    // Compatibility mode preserves the extra columns because
+                    // gffutils exposes them on Feature.extra, but surfaces the
+                    // standards violation to callers.
+                    self.warnings.push(err);
                 }
+                std::cmp::Ordering::Equal => {}
             }
             let seqid = bytes_to_string(fields[0]);
             let source = bytes_to_string(fields[1]);
@@ -391,8 +419,23 @@ impl Iterator for RecordIter {
             };
             let (seqid, source, featuretype, start, end, score, strand, frame, blob, extra) = raw;
 
-            let is_gtf = matches!(self.dialect.fmt, crate::dialect::Format::Gtf);
-            if let Err(e) = validate_fields(
+            let blob_str = std::str::from_utf8(&blob).unwrap_or("");
+            let (pairs, obs) = match parse_attributes(
+                blob_str,
+                self.decode_url_escapes,
+                !self.profile.rejects(),
+            ) {
+                Ok(parsed) => parsed,
+                Err(message) => {
+                    return Some(Err(GffError::new(
+                        self.line_no,
+                        ErrorKind::InvalidAttribute,
+                        message,
+                    )));
+                }
+            };
+            let is_gtf = matches!(obs.fmt, crate::dialect::Format::Gtf);
+            let field_errors = validate_field_errors(
                 self.line_no, // line we just consumed
                 &seqid,
                 &featuretype,
@@ -403,22 +446,19 @@ impl Iterator for RecordIter {
                 &frame,
                 &blob,
                 is_gtf,
-            ) {
+            );
+            if let Some(e) = field_errors.first() {
                 if self.profile.rejects() {
                     if self.strict {
-                        return Some(Err(e));
+                        return Some(Err(e.clone()));
                     }
-                    self.warnings.push(e);
+                    self.warnings.push(e.clone());
                     continue;
                 }
-                // Compat: annotate, keep the record.
-                self.warnings.push(e);
+                // Compat: annotate every applicable rule, then keep the record.
+                self.warnings.extend(field_errors);
             }
 
-            // Safe: the whole line was UTF-8 validated before any field was
-            // read, so the blob -- a slice of it -- is valid too.
-            let blob_str = std::str::from_utf8(&blob).unwrap_or("");
-            let (pairs, _obs) = parse_attributes(blob_str);
             // Post-parse attribute structure check (handles both GFF3 and
             // GTF correctly because it inspects what the parser produced).
             if let Err(e) = validate_attributes_pairs(self.line_no, pairs.len(), &blob, is_gtf) {

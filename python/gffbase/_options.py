@@ -146,7 +146,7 @@ class IdSpecResolver:
                 _is_callable(v) or (not isinstance(v, str) and any(map(_is_callable, v)))
                 for v in id_spec.values()
             )
-        if isinstance(id_spec, (list, tuple)):
+        if isinstance(id_spec, list | tuple):
             return any(map(_is_callable, id_spec))
         return False
 

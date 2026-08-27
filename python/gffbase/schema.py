@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS attributes (
     feature_id      VARCHAR NOT NULL,   -- LOGICAL id
     key             VARCHAR NOT NULL,
     value           VARCHAR NOT NULL,
-    idx             SMALLINT NOT NULL DEFAULT 0,  -- multivalue index (v1 meaning)
+    idx             INTEGER NOT NULL DEFAULT 0,   -- multivalue index (v1 meaning)
     -- v2. Owning physical line. Rows with seg_idx > 0 exist only where that
     -- segment's blob differs from segment 0's.
     seg_idx         INTEGER NOT NULL DEFAULT 0,
@@ -177,7 +177,8 @@ CREATE TABLE IF NOT EXISTS duplicates (
 -- v2, gffbase-native. The full record `duplicates` cannot hold without
 -- breaking oracle compatibility: every id resolution, with its reason.
 -- `kind` is one of multipart / create_unique / merge / merge_fallback /
--- warning_dropped / replaced / strict_split.
+-- warning_dropped / replaced / strict_split / gtf_synthesis_split /
+-- synthesized_id_spec / parent_cycle.
 CREATE TABLE IF NOT EXISTS id_conflicts (
     raw_id          VARCHAR NOT NULL,
     resolved_id     VARCHAR NOT NULL,
@@ -251,69 +252,91 @@ WHERE a.key = 'Parent';
 # identical edges and therefore duplicate closure rows.
 
 # 2. Edges from GTF gene_id / transcript_id (after gene/transcript rows have
-#    been synthesized). The transcript->child edge is for any feature with a
-#    transcript_id attribute. The gene->transcript edge is for any feature with
-#    featuretype='transcript'.
+#    been synthesized). ``__gtf_parent_map`` is an ingest-local table that
+#    resolves a raw parent attribute in the context of the child's seqid and
+#    strand.  It is normally the identity map; under an explicitly requested
+#    ``create_unique`` split it is what routes each child to the right inferred
+#    parent without rewriting the child's raw attributes.
 EDGES_FROM_GTF = """
 INSERT INTO edges (parent, child)
-SELECT a.value AS parent, a.feature_id AS child
+SELECT DISTINCT COALESCE(m.resolved_id, a.value) AS parent, a.feature_id AS child
 FROM attributes a
 JOIN features f ON f.id = a.feature_id
+LEFT JOIN __gtf_parent_map m
+       ON m.parent_type = 'transcript'
+      AND m.raw_id = a.value
+      AND m.seqid = f.seqid
+      AND m.strand IS NOT DISTINCT FROM f.strand
 WHERE a.key = 'transcript_id'
-  AND f.featuretype <> 'transcript'
-  AND a.value <> f.id        -- guard: don't create self-loops
-  AND EXISTS (SELECT 1 FROM features p WHERE p.id = a.value)
+  AND f.featuretype NOT IN ('gene', 'transcript')
+  AND COALESCE(m.resolved_id, a.value) <> f.id
+  AND EXISTS (SELECT 1 FROM features p
+              WHERE p.id = COALESCE(m.resolved_id, a.value)
+                AND p.featuretype = 'transcript')
 UNION ALL
-SELECT a.value AS parent, a.feature_id AS child
+SELECT DISTINCT COALESCE(m.resolved_id, a.value) AS parent, a.feature_id AS child
 FROM attributes a
 JOIN features f ON f.id = a.feature_id
+LEFT JOIN __gtf_parent_map m
+       ON m.parent_type = 'gene'
+      AND m.raw_id = a.value
+      AND m.seqid = f.seqid
+      AND m.strand IS NOT DISTINCT FROM f.strand
 WHERE a.key = 'gene_id'
   AND f.featuretype = 'transcript'
-  AND a.value <> f.id
-  AND EXISTS (SELECT 1 FROM features p WHERE p.id = a.value);
+  AND COALESCE(m.resolved_id, a.value) <> f.id
+  AND EXISTS (SELECT 1 FROM features p
+              WHERE p.id = COALESCE(m.resolved_id, a.value)
+                AND p.featuretype = 'gene');
 """
 
 
-# 3. GTF transcript synthesis. One scan with GROUP BY transcript_id over the
-#    subfeature rows (typically 'exon'). Replaces 250k+ MIN/MAX queries from
-#    the legacy gffutils with a single vectorized aggregation.
+# 3. GTF transcript synthesis. The temporary parent map makes the grouping
+#    key location-aware without changing schema v2 or the raw child rows.
 GTF_SYNTHESIZE_TRANSCRIPTS = """
 INSERT INTO features (id, seqid, source, featuretype, start, "end",
                       score, strand, frame,
                       attributes_blob, extra_blob, file_order, is_synthetic,
                       raw_id)
 SELECT
-    a.value                    AS id,
-    ANY_VALUE(f.seqid)         AS seqid,
+    m.resolved_id              AS id,
+    m.seqid                    AS seqid,
     'gffbase_derived'        AS source,
     'transcript'               AS featuretype,
     MIN(f.start)               AS start,
     MAX(f."end")               AS "end",
     '.'                        AS score,
-    ANY_VALUE(f.strand)        AS strand,
+    m.strand                   AS strand,
     '.'                        AS frame,
     NULL                       AS attributes_blob,
     NULL                       AS extra_blob,
-    NULL                       AS file_order,
+    m.first_file_order         AS file_order,
     TRUE                       AS is_synthetic,
     -- A synthesized row's id came from a `transcript_id`/`gene_id`
     -- attribute, so raw_id is that same value; leaving it NULL would
     -- make the multipart resolve pass group every synthetic feature
     -- together.
-    a.value                    AS raw_id
+    m.raw_id                   AS raw_id
 FROM features f
 JOIN attributes a ON a.feature_id = f.id AND a.key = 'transcript_id'
+JOIN __gtf_parent_map m
+  ON m.parent_type = 'transcript'
+ AND m.raw_id = a.value
+ AND m.seqid = f.seqid
+ AND m.strand IS NOT DISTINCT FROM f.strand
 WHERE f.featuretype = ?                          -- subfeature, e.g. 'exon'
-  AND a.value NOT IN (SELECT id FROM features)
-GROUP BY a.value;
+  AND m.resolved_id NOT IN (SELECT id FROM features)
+GROUP BY m.resolved_id, m.raw_id, m.seqid, m.strand, m.first_file_order;
 """
 
 # 3b. Mirror the synthesized transcript_id back into the attributes table so
 #     subsequent gene synthesis sees them.
 GTF_SYNTHESIZE_TRANSCRIPT_ATTRS = """
 INSERT INTO attributes (feature_id, key, value, idx)
-SELECT f.id, 'transcript_id', f.id, 0
+SELECT f.id, 'transcript_id', m.resolved_id, 0
 FROM features f
+JOIN __gtf_parent_map m
+  ON m.parent_type = 'transcript' AND m.resolved_id = f.id
 WHERE f.featuretype = 'transcript' AND f.is_synthetic = TRUE;
 """
 
@@ -327,14 +350,20 @@ GTF_PROPAGATE_GENE_ID = """
 INSERT INTO attributes (feature_id, key, value, idx)
 WITH pairs AS (
     SELECT
-        tid.value AS transcript_id,
+        m.resolved_id AS transcript_id,
         gid.value AS gene_id,
         COUNT(*) AS cnt
     FROM attributes tid
     JOIN attributes gid ON gid.feature_id = tid.feature_id
+    JOIN features child ON child.id = tid.feature_id
+    JOIN __gtf_parent_map m
+      ON m.parent_type = 'transcript'
+     AND m.raw_id = tid.value
+     AND m.seqid = child.seqid
+     AND m.strand IS NOT DISTINCT FROM child.strand
     WHERE tid.key = 'transcript_id'
       AND gid.key = 'gene_id'
-    GROUP BY tid.value, gid.value
+    GROUP BY m.resolved_id, gid.value
 ),
 ranked AS (
     SELECT
@@ -362,11 +391,17 @@ WHERE t.featuretype = 'transcript' AND t.is_synthetic = TRUE;
 GTF_PROPAGATE_ATTRIBUTE = """
 INSERT INTO attributes (feature_id, key, value, idx)
 WITH pairs AS (
-    SELECT g.value AS group_value, a.value AS carried, COUNT(*) AS cnt
+    SELECT m.resolved_id AS group_value, a.value AS carried, COUNT(*) AS cnt
     FROM attributes g
     JOIN attributes a ON a.feature_id = g.feature_id
+    JOIN features child ON child.id = g.feature_id
+    JOIN __gtf_parent_map m
+      ON m.parent_type = ?
+     AND m.raw_id = g.value
+     AND m.seqid = child.seqid
+     AND m.strand IS NOT DISTINCT FROM child.strand
     WHERE g.key = ? AND a.key = ?
-    GROUP BY g.value, a.value
+    GROUP BY m.resolved_id, a.value
 ),
 ranked AS (
     SELECT group_value, carried,
@@ -382,38 +417,41 @@ WHERE f.featuretype = ? AND f.is_synthetic = TRUE
 """
 
 
-# 4. GTF gene synthesis. Same shape as transcript synthesis, but groups over
-#    all rows whose featuretype IN ('transcript', subfeature) carrying a
-#    gene_id attribute.
+# 4. GTF gene synthesis. Same location-aware shape as transcript synthesis.
 GTF_SYNTHESIZE_GENES = """
 INSERT INTO features (id, seqid, source, featuretype, start, "end",
                       score, strand, frame,
                       attributes_blob, extra_blob, file_order, is_synthetic,
                       raw_id)
 SELECT
-    a.value                    AS id,
-    ANY_VALUE(f.seqid)         AS seqid,
+    m.resolved_id              AS id,
+    m.seqid                    AS seqid,
     'gffbase_derived'        AS source,
     'gene'                     AS featuretype,
     MIN(f.start)               AS start,
     MAX(f."end")               AS "end",
     '.'                        AS score,
-    ANY_VALUE(f.strand)        AS strand,
+    m.strand                   AS strand,
     '.'                        AS frame,
     NULL                       AS attributes_blob,
     NULL                       AS extra_blob,
-    NULL                       AS file_order,
+    m.first_file_order         AS file_order,
     TRUE                       AS is_synthetic,
     -- A synthesized row's id came from a `transcript_id`/`gene_id`
     -- attribute, so raw_id is that same value; leaving it NULL would
     -- make the multipart resolve pass group every synthetic feature
     -- together.
-    a.value                    AS raw_id
+    m.raw_id                   AS raw_id
 FROM features f
 JOIN attributes a ON a.feature_id = f.id AND a.key = 'gene_id'
+JOIN __gtf_parent_map m
+  ON m.parent_type = 'gene'
+ AND m.raw_id = a.value
+ AND m.seqid = f.seqid
+ AND m.strand IS NOT DISTINCT FROM f.strand
 WHERE f.featuretype IN ('transcript', ?)        -- transcript + subfeature
-  AND a.value NOT IN (SELECT id FROM features)
-GROUP BY a.value;
+  AND m.resolved_id NOT IN (SELECT id FROM features)
+GROUP BY m.resolved_id, m.raw_id, m.seqid, m.strand, m.first_file_order;
 """
 
 
@@ -449,33 +487,21 @@ CREATE OR REPLACE VIEW relations_compat AS
 # ---------------------------------------------------------------------------
 CLOSURE_RECURSIVE_CTE = """
 INSERT INTO closure (ancestor, descendant, depth)
-WITH RECURSIVE walk(ancestor, descendant, depth, seen) AS (
-    SELECT parent, child, 1 AS depth, [parent, child] AS seen FROM edges
-    UNION ALL
-    SELECT w.ancestor, e.child, w.depth + 1, list_append(w.seen, e.child)
+WITH RECURSIVE walk(ancestor, descendant, depth) AS (
+    SELECT DISTINCT parent, child, 1 AS depth FROM edges
+    UNION
+    SELECT w.ancestor, e.child, w.depth + 1
     FROM walk w
     JOIN edges e ON e.parent = w.descendant
-    -- Cycle-safe: a node never appears twice on one path, so a cyclic
-    -- `Parent` graph terminates at the cycle instead of re-entering it once
-    -- per level. GFF3 does not forbid writing one, and without this a
-    -- two-feature cycle made `children()` return 64 rows -- the same handful
-    -- of features over and over, one copy per lap.
-    --
-    -- Free on well-formed data: in a DAG no node can repeat on a path, so the
-    -- filter never fires. Verified identical on the FlyBase 50k corpus (31 230
-    -- closure rows either way) for 17 ms more over 19 746 edges.
-    WHERE w.depth < ? AND NOT list_contains(w.seen, e.child)
+    WHERE w.depth < ? AND w.ancestor <> e.child
 )
-SELECT DISTINCT ancestor, descendant, depth FROM walk;
+SELECT ancestor, descendant, MIN(depth) AS depth
+FROM walk
+GROUP BY ancestor, descendant;
 """
-# DISTINCT on the final projection, not on the recursive step, which must stay
-# UNION ALL to terminate. GFF3 permits a DAG -- a feature may name several
-# `Parent`s -- so the same descendant can be reachable by two paths of equal
-# length, and `UNION ALL` emitted one closure row per path. `children(g, level=2)`
-# then returned five features where only three were distinct.
-#
-# gffutils never had this: its `relations` table declares
-# PRIMARY KEY (parent, child, level), so it deduplicates by construction.
+# UNION deduplicates the recursive frontier by (ancestor, descendant, depth),
+# preventing a layered DAG from enumerating every distinct path.  MIN(depth)
+# then gives each reachable pair one canonical, shortest relationship.
 
 
 # ---------------------------------------------------------------------------
