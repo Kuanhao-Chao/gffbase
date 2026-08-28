@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 import textwrap
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -406,6 +407,19 @@ def test_subprocess_states_are_authoritative_and_censored():
         assert "wall_seconds_lower_bound" not in censored
 
 
+def test_timed_out_subprocess_with_parseable_stdout_still_uses_timeout_diagnostics():
+    from benchmarks.common import run_subprocess
+
+    timed_out = run_subprocess(
+        'import json, time; print(json.dumps({"wall_seconds": 0.1})); time.sleep(2)',
+        label="parseable-before-timeout",
+        timeout=1,
+    )
+
+    assert timed_out["state"] == "timed_out"
+    assert timed_out["stdout_parse_error"] == "invalid final JSON object"
+
+
 def test_failed_subprocess_payloads_never_retain_private_stdout():
     """Portable evidence may identify a parse failure, never echo child output."""
     from benchmarks.common import run_subprocess
@@ -447,13 +461,8 @@ def test_schema3_renderer_censors_timeouts_and_rejects_speedup_floors():
 def test_schema3_renderer_rejects_forged_candidate_speedup_evidence():
     from tools import gen_benchmark_tables as tables
 
-    row = {
-        "key": "gencode-gtf",
-        "gffbase": _candidate(),
-        "legacy": _comparator(),
-        "ingest_speedup": 999.0,
-    }
-    data = {"schema_version": "3", "corpora": {"gencode-gtf": row}}
+    data = _publishable_payload()
+    data["corpora"]["gencode-gtf"]["ingest_speedup"] = 999.0
 
     with pytest.raises(tables.Stale, match="speedup"):
         tables.render_corpus_table(data)
@@ -510,6 +519,147 @@ def test_complete_benchmark_environment_is_recorded_and_portable(monkeypatch):
     for key in ("python_module", "native_module"):
         if key in install:
             assert "/" not in install[key]
+
+
+def test_actual_environment_without_candidate_wheel_is_prepublication_only(monkeypatch):
+    from benchmarks.common import benchmark_env, benchmark_results_evidence_error, environment
+
+    monkeypatch.delenv("GFFBASE_BENCH_WHEEL", raising=False)
+    monkeypatch.delenv("GFFBASE_BENCH_WHEEL_SHA256", raising=False)
+    payload = _publishable_payload()
+    payload["environment"] = environment(benchmark_controls=benchmark_env(4))
+
+    assert payload["environment"]["artifact"] == {"wheel": None, "wheel_sha256": None}
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def _write_test_candidate_wheel(
+    path,
+    *,
+    metadata_name="gffbase",
+    metadata_version="0.2.0rc1",
+    wheel_tags=("cp310-abi3-manylinux_2_28_x86_64",),
+    native_members=(("gffbase/_native.abi3.so", b"candidate-native"),),
+):
+    dist_info = "gffbase-0.2.0rc1.dist-info"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            f"{dist_info}/METADATA",
+            f"Metadata-Version: 2.4\nName: {metadata_name}\nVersion: {metadata_version}\n",
+        )
+        archive.writestr(
+            f"{dist_info}/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: focused-test\nRoot-Is-Purelib: false\n"
+            + "".join(f"Tag: {tag}\n" for tag in wheel_tags),
+        )
+        for member, content in native_members:
+            archive.writestr(member, content)
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _installed_candidate_identity(*, native_sha256):
+    return {
+        "distribution_version": "0.2.0rc1",
+        "python_version": "0.2.0rc1",
+        "python_module": "__init__.py",
+        "native_version": "0.2.0rc1",
+        "native_module": "_native.abi3.so",
+        "native_sha256": native_sha256,
+    }
+
+
+def test_environment_binds_installed_native_to_authoritative_wheel_evidence(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel)
+    native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+    monkeypatch.setattr(
+        common,
+        "_installed_gffbase",
+        lambda: _installed_candidate_identity(native_sha256=native_sha256),
+    )
+
+    artifact = common.environment(benchmark_controls=common.benchmark_env(4))["artifact"]
+
+    assert artifact == {
+        "wheel": wheel.name,
+        "wheel_sha256": wheel_sha256,
+        "metadata": {"name": "gffbase", "version": "0.2.0rc1"},
+        "wheel_tags": ["cp310-abi3-manylinux_2_28_x86_64"],
+        "native": {
+            "member": "gffbase/_native.abi3.so",
+            "sha256": native_sha256,
+        },
+    }
+    assert str(tmp_path) not in json.dumps(artifact)
+
+
+@pytest.mark.parametrize("configured_hash", ["0" * 64, None])
+def test_environment_rejects_missing_or_mismatched_configured_wheel_hash(
+    tmp_path, monkeypatch, configured_hash
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    if configured_hash is None:
+        monkeypatch.delenv("GFFBASE_BENCH_WHEEL_SHA256", raising=False)
+    else:
+        monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", configured_hash)
+
+    with pytest.raises(ValueError, match="wheel SHA-256"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+@pytest.mark.parametrize(
+    ("wheel_options", "installed_native_sha256", "message"),
+    [
+        ({"metadata_name": "forged"}, hashlib.sha256(b"candidate-native").hexdigest(), "metadata"),
+        (
+            {"metadata_version": "9.9.9"},
+            hashlib.sha256(b"candidate-native").hexdigest(),
+            "metadata",
+        ),
+        (
+            {"wheel_tags": ("cp311-abi3-manylinux_2_28_x86_64",)},
+            hashlib.sha256(b"candidate-native").hexdigest(),
+            "WHEEL Tag",
+        ),
+        ({"native_members": ()}, hashlib.sha256(b"candidate-native").hexdigest(), "native member"),
+        (
+            {
+                "native_members": (
+                    ("gffbase/_native.abi3.so", b"candidate-native"),
+                    ("gffbase/_native.extra.so", b"other"),
+                )
+            },
+            hashlib.sha256(b"candidate-native").hexdigest(),
+            "native member",
+        ),
+        ({}, hashlib.sha256(b"different-installed-native").hexdigest(), "installed native"),
+    ],
+)
+def test_environment_rejects_forged_or_unbound_wheel_evidence(
+    tmp_path, monkeypatch, wheel_options, installed_native_sha256, message
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, **wheel_options)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+    monkeypatch.setattr(
+        common,
+        "_installed_gffbase",
+        lambda: _installed_candidate_identity(native_sha256=installed_native_sha256),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        common.environment(benchmark_controls=common.benchmark_env(4))
 
 
 def test_candidate_without_rtree_is_not_eligible_for_spatial_work():
@@ -594,39 +744,113 @@ def test_shared_publisher_gate_rejects_failed_forged_and_private_schema3_rows():
 
 
 def _publishable_payload(*, threads: int = 4) -> dict:
-    """A real-shaped schema-v3 payload, assembled without production gates."""
-    from benchmarks.common import benchmark_env, environment
+    """A real-shaped schema-v3 payload, assembled without production helpers."""
+
+    controls = {
+        "GFFBASE_THREADS": str(threads),
+        "GFFUTILS2_THREADS": str(threads),
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "BLIS_NUM_THREADS": "1",
+        "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+        "PYTHONUNBUFFERED": "1",
+    }
+    corpora_contract = {
+        "mane": (
+            "MANE v1.5 (Ensembl IDs)",
+            "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+            "gff3",
+            10_349_746,
+            "69089bbc84d1d3c3ce31c2ed3f85b6c3169fb8836d092a082623c59a43fd22ef",
+        ),
+        "chess": (
+            "CHESS 3.1.3",
+            "chess3.1.3.GRCh38.gff.gz",
+            "gff3",
+            20_435_645,
+            "28da847be976780fe38162a7c244749fdc7a0b446741ca8da2b64019c1606e03",
+        ),
+        "refseq": (
+            "RefSeq GRCh38.p14",
+            "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+            "gff3",
+            78_190_483,
+            "4920f0eae7e2197c50b67a201e06d657387137b49dd60f474b4f1d5b29334051",
+        ),
+        "gencode-gtf": (
+            "GENCODE v49 (GTF)",
+            "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+            "gtf",
+            70_588_995,
+            "576dddae36169ad648afbe706535361309786e549ad7daf529cca7674fb0058f",
+        ),
+        "gencode-gff3": (
+            "GENCODE v49 (GFF3)",
+            "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+            "gff3",
+            89_385_177,
+            "22ffa691aac993603f7f21effacf19848262bec74545bd979863e7af602e5a1d",
+        ),
+    }
+    checked_ids = [
+        "INV-1",
+        "INV-2",
+        "INV-3",
+        "INV-4",
+        "INV-5",
+        "INV-6",
+        "INV-7",
+        "INV-9",
+        "INV-10",
+        "INV-11",
+        "INV-11b",
+        "INV-13",
+        "INV-14",
+        "INV-15",
+        "INV-15a",
+        "INV-16",
+        "INV-11-exact",
+        "INV-12",
+    ]
 
     candidate = {
         **_candidate(),
-        "label": "gffbase ingest(input.gff3)",
-        "peak_rss_bytes": 1,
-        "peak_rss_mb": 1 / (1024 * 1024),
-        "benchmark_env": benchmark_env(threads),
+        "label": "gffbase ingest(input.gff3.gz)",
+        "peak_rss_bytes": 1_048_576,
+        "peak_rss_mb": 1.0,
+        "benchmark_env": controls,
         "cap_seconds": 10,
         "disk_bytes": 1,
         "fmt": "gff3",
     }
+    candidate["validation"] = {
+        **candidate["validation"],
+        "checked": [f"{stable_id} checked" for stable_id in checked_ids],
+        "checked_ids": checked_ids,
+    }
     legacy = {
         **_comparator(),
-        "label": "gffutils ingest(input.gff3)",
-        "peak_rss_bytes": 1,
-        "peak_rss_mb": 1 / (1024 * 1024),
-        "benchmark_env": benchmark_env(threads),
+        "label": "legacy gffutils ingest(input.gff3.gz)",
+        "peak_rss_bytes": 2_097_152,
+        "peak_rss_mb": 2.0,
+        "benchmark_env": controls,
         "cap_seconds": 10,
         "disk_bytes": 1,
     }
     row = {
-        "name": "MANE",
+        "name": "MANE v1.5 (Ensembl IDs)",
         "key": "mane",
         "measured": {
             "timestamp_utc": "2026-08-27T00:00:00+00:00",
             "git_commit": "a" * 40,
             "git_dirty": False,
         },
-        "input": "benchmarks/data/input.gff3.gz",
-        "input_bytes": 1,
-        "input_sha256": "a" * 64,
+        "input": "benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+        "input_bytes": 10_349_746,
+        "input_sha256": "69089bbc84d1d3c3ce31c2ed3f85b6c3169fb8836d092a082623c59a43fd22ef",
         "feature_lines": 1000,
         "gffbase": candidate,
         "legacy": legacy,
@@ -648,14 +872,80 @@ def _publishable_payload(*, threads: int = 4) -> dict:
             "gtf_arm": None,
             "infer_gtf_parents": None,
             "validation_sample": "all",
-            "benchmark_env": benchmark_env(threads),
+            "benchmark_env": controls,
         },
     }
-    env = environment(benchmark_controls=benchmark_env(threads))
-    corpora = {
-        key: {**row, "key": key, "name": key}
-        for key in ("mane", "chess", "refseq", "gencode-gtf", "gencode-gff3")
+    env = {
+        "timestamp_utc": "2026-08-27T01:02:03Z",
+        "git_commit": "a" * 40,
+        "git_dirty": False,
+        "hostname": "benchmark-host",
+        "platform": "Linux-6.12-x86_64",
+        "machine": "x86_64",
+        "cpu_model": "Example CPU",
+        "cpu_cores_physical": 4,
+        "cpu_cores_logical": 8,
+        "total_ram_bytes": 17_179_869_184,
+        "free_disk_bytes": 8_589_934_592,
+        "cpu_affinity": [0, 1, 2, 3],
+        "python": {
+            "version": "3.13.5",
+            "implementation": "CPython",
+            "executable": "python",
+        },
+        "rustc_version": "rustc 1.90.0 (example 2026-01-01)",
+        "packages": {
+            "gffbase": "0.2.0rc1",
+            "duckdb": "1.5.3",
+            "pyarrow": "21.0.0",
+            "pandas": "2.3.2",
+            "polars": "1.32.3",
+            "gffutils": "0.14",
+            "psutil": "7.0.0",
+        },
+        "gffbase_install": {
+            "distribution_version": "0.2.0rc1",
+            "python_version": "0.2.0rc1",
+            "python_module": "__init__.py",
+            "native_version": "0.2.0rc1",
+            "native_module": "_native.abi3.so",
+            "native_sha256": "b" * 64,
+        },
+        "artifact": {
+            "wheel": "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl",
+            "wheel_sha256": "c" * 64,
+            "metadata": {"name": "gffbase", "version": "0.2.0rc1"},
+            "wheel_tags": ["cp310-abi3-manylinux_2_28_x86_64"],
+            "native": {
+                "member": "gffbase/_native.abi3.so",
+                "sha256": "b" * 64,
+            },
+        },
+        "env": controls,
     }
+    corpora = {}
+    for key, (name, filename, fmt, input_bytes, input_sha256) in corpora_contract.items():
+        item = json.loads(json.dumps(row))
+        item.update(
+            {
+                "key": key,
+                "name": name,
+                "input": f"benchmarks/data/{filename}",
+                "input_bytes": input_bytes,
+                "input_sha256": input_sha256,
+            }
+        )
+        item["gffbase"]["label"] = f"gffbase ingest({filename})"
+        item["gffbase"]["fmt"] = fmt
+        item["legacy"]["label"] = f"legacy gffutils ingest({filename})"
+        item["db_paths"] = {
+            "gffbase": f"benchmarks/out/{key}.duckdb",
+            "legacy": f"benchmarks/out/{key}_legacy.sqlite",
+        }
+        if key == "gencode-gtf":
+            item["params"]["gtf_arm"] = "no-infer"
+            item["params"]["infer_gtf_parents"] = False
+        corpora[key] = item
     return {"schema_version": "3", "environment": env, "corpora": corpora}
 
 
@@ -672,6 +962,626 @@ def test_shared_gate_rejects_query_shape_leaks_and_thread_mismatch():
     mismatch = json.loads(json.dumps(payload))
     mismatch["environment"]["env"]["GFFBASE_THREADS"] = "1"
     assert "environment" in benchmark_results_evidence_error(mismatch)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("environment", "artifact", "wheel"), "/home/private/candidate.whl"),
+        (("environment", "git_dirty"), True),
+        (("environment", "git_commit"), "not-a-commit"),
+        (("environment", "timestamp_utc"), ""),
+        (("environment", "cpu_cores_physical"), True),
+        (("environment", "total_ram_bytes"), float("inf")),
+        (("environment", "cpu_affinity"), [True]),
+        (("environment", "python", "executable"), ""),
+        (("environment", "packages", "gffbase"), None),
+        (("environment", "gffbase_install"), {}),
+        (("environment", "artifact", "wheel_sha256"), "forged"),
+        (("corpora", "mane", "measured", "git_dirty"), True),
+        (("corpora", "mane", "measured", "git_commit"), "d" * 40),
+        (
+            ("corpora", "mane", "gffbase", "label"),
+            "gffbase ingest(/home/private/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
+        ),
+    ],
+)
+def test_full_gate_rejects_forged_environment_and_measured_identity(path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    target = payload
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("artifact", "metadata", "name"), "forged"),
+        (("artifact", "metadata", "version"), "9.9.9"),
+        (("artifact", "wheel_tags"), []),
+        (
+            ("artifact", "wheel_tags"),
+            [
+                "cp310-abi3-manylinux_2_28_x86_64",
+                "cp310-abi3-manylinux_2_28_aarch64",
+            ],
+        ),
+        (("artifact", "wheel_tags", 0), "cp311-abi3-manylinux_2_28_x86_64"),
+        (("artifact", "native", "member"), "gffbase/_native.other.so"),
+        (("artifact", "native", "sha256"), "d" * 64),
+        (("gffbase_install", "native_sha256"), "d" * 64),
+    ],
+)
+def test_full_gate_rejects_forged_wheel_archive_crosslinks(path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    target = payload["environment"]
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "note,/home/private/secret",
+        "note;/home/private/secret",
+        "note</home/private/secret>",
+    ],
+)
+def test_full_gate_rejects_punctuation_delimited_private_paths(reason):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["corpora"]["mane"]["spatial"]["reason"] = reason
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_requires_fixed_candidate_and_comparator_versions():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    candidate = _publishable_payload()
+    env = candidate["environment"]
+    env["packages"]["gffbase"] = "9.9.9"
+    for key in ("distribution_version", "python_version", "native_version"):
+        env["gffbase_install"][key] = "9.9.9"
+    env["artifact"]["wheel"] = "gffbase-9.9.9-cp313-cp313-manylinux_2_28_x86_64.whl"
+    assert benchmark_results_evidence_error(candidate) is not None
+
+    comparator = _publishable_payload()
+    comparator["environment"]["packages"]["gffutils"] = "0.13"
+    assert benchmark_results_evidence_error(comparator) is not None
+
+
+@pytest.mark.parametrize(
+    "wheel",
+    [
+        "gffbase-0.2.0rc1-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "gffbase-0.2.0rc1-cp313-cp312-manylinux_2_28_x86_64.whl",
+        "gffbase-0.2.0rc1-cp313-cp39-manylinux_2_28_x86_64.whl",
+        "gffbase-0.2.0rc1-cp313-none-manylinux_2_28_x86_64.whl",
+    ],
+)
+def test_full_gate_cross_checks_wheel_tag_and_abi_with_python_runtime(wheel):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = wheel
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("wheel", "native_module"),
+    [
+        (
+            "gffbase-0.2.0rc1-cp313-cp313-win_amd64.whl",
+            "_native.cp313-win_amd64.pyd",
+        ),
+        (
+            "gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_aarch64.whl",
+            "_native.cpython-313-aarch64-linux-gnu.so",
+        ),
+        (
+            "gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_x86_64.whl",
+            "_native.cpython-312-x86_64-linux-gnu.so",
+        ),
+    ],
+)
+def test_full_gate_cross_checks_artifact_and_native_platform_identity(wheel, native_module):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = wheel
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("machine", "wheel_arch", "native_arch"),
+    [
+        ("AMD64", "x86_64", "x86_64"),
+        ("arm64", "aarch64", "aarch64"),
+    ],
+)
+def test_full_gate_accepts_normalized_linux_artifact_architectures(
+    machine, wheel_arch, native_arch
+):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["machine"] = machine
+    wheel = f"gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_{wheel_arch}.whl"
+    wheel_tag = f"cp313-cp313-manylinux_2_28_{wheel_arch}"
+    native_module = f"_native.cpython-313-{native_arch}-linux-gnu.so"
+    payload["environment"]["artifact"]["wheel"] = wheel
+    payload["environment"]["artifact"]["wheel_tags"] = [wheel_tag]
+    payload["environment"]["artifact"]["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+@pytest.mark.parametrize(
+    ("machine", "wheel_arch", "native_arch"),
+    [
+        ("AMD64", "amd64", "amd64"),
+        ("aarch64", "arm64", "arm64"),
+    ],
+)
+def test_full_gate_accepts_normalized_windows_artifact_architectures(
+    machine, wheel_arch, native_arch
+):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["platform"] = "Windows-11-10.0.26100-SP0"
+    payload["environment"]["machine"] = machine
+    wheel = f"gffbase-0.2.0rc1-cp313-cp313-win_{wheel_arch}.whl"
+    wheel_tag = f"cp313-cp313-win_{wheel_arch}"
+    native_module = f"_native.cp313-win_{native_arch}.pyd"
+    payload["environment"]["artifact"]["wheel"] = wheel
+    payload["environment"]["artifact"]["wheel_tags"] = [wheel_tag]
+    payload["environment"]["artifact"]["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+def test_full_gate_accepts_valid_wheel_build_tag():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = (
+        "gffbase-0.2.0rc1-1+cuda-cp310-abi3-manylinux_2_28_x86_64.whl"
+    )
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+@pytest.mark.parametrize("build_tag", ["strict", "1-bad"])
+def test_full_gate_rejects_invalid_wheel_build_tag(build_tag):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = (
+        f"gffbase-0.2.0rc1-{build_tag}-cp310-abi3-manylinux_2_28_x86_64.whl"
+    )
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "machine", "wheel_platform", "native_module"),
+    [
+        (
+            "Linux-6.12-x86_64",
+            "x86_64",
+            "manylinux_2_28_x86_64",
+            "_native.abi3.so",
+        ),
+        ("Windows-11-10.0.26100-SP0", "AMD64", "win_amd64", "_native.pyd"),
+        ("macOS-15.6-arm64-arm-64bit-Mach-O", "arm64", "macosx_11_0_arm64", "_native.abi3.so"),
+    ],
+)
+def test_full_gate_accepts_configured_abi3_artifact(
+    platform_name, machine, wheel_platform, native_module
+):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["platform"] = platform_name
+    payload["environment"]["machine"] = machine
+    wheel = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    payload["environment"]["artifact"]["wheel"] = wheel
+    payload["environment"]["artifact"]["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
+    payload["environment"]["artifact"]["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+def test_full_gate_rejects_wrong_candidate_abi3_floor():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = (
+        "gffbase-0.2.0rc1-cp39-abi3-manylinux_2_28_x86_64.whl"
+    )
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("wheel_platform", "native_libc"),
+    [
+        ("manylinux_2_28_x86_64", "musl"),
+        ("musllinux_1_2_x86_64", "gnu"),
+    ],
+)
+def test_full_gate_cross_checks_wheel_and_native_linux_libc(wheel_platform, native_libc):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    wheel = f"gffbase-0.2.0rc1-cp313-cp313-{wheel_platform}.whl"
+    native_module = f"_native.cpython-313-x86_64-linux-{native_libc}.so"
+    artifact = payload["environment"]["artifact"]
+    artifact["wheel"] = wheel
+    artifact["wheel_tags"] = [f"cp313-cp313-{wheel_platform}"]
+    artifact["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_cross_checks_measured_timestamp_with_environment():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["corpora"]["mane"]["measured"]["timestamp_utc"] = "2026-08-27T02:00:00Z"
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_rejects_noncanonical_timestamp_chronology():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["timestamp_utc"] = "2026-9-30T01:02:03Z"
+    payload["corpora"]["mane"]["measured"]["timestamp_utc"] = "2026-10-01T00:00:00Z"
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize("python_version", ["3.9.19", "3.15.0", "3.99.1", "3.013.5"])
+def test_full_gate_requires_canonical_supported_python_runtime(python_version):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["python"]["version"] = python_version
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "machine", "wheel_platform", "native_module"),
+    [
+        (
+            "Solaris-11.4-x86_64",
+            "x86_64",
+            "manylinux_2_28_x86_64",
+            "_native.cpython-313-x86_64-linux-gnu.so",
+        ),
+        (
+            "Linux-6.12-mips64",
+            "mips64",
+            "manylinux_2_28_x86_64",
+            "_native.cpython-313-x86_64-linux-gnu.so",
+        ),
+        (
+            "Linux-6.12-x86_64",
+            "x86_64",
+            "manylinux_2_28_x86_64.manylinux_2_28_aarch64",
+            "_native.cpython-313-x86_64-linux-gnu.so",
+        ),
+        (
+            "Linux-6.12-x86_64",
+            "x86_64",
+            "manylinux_2_28_x86_64",
+            "_native.abi3.so",
+        ),
+    ],
+)
+def test_full_gate_rejects_unknown_or_ambiguous_runtime_identity(
+    platform_name, machine, wheel_platform, native_module
+):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["platform"] = platform_name
+    payload["environment"]["machine"] = machine
+    payload["environment"]["artifact"]["wheel"] = (
+        f"gffbase-0.2.0rc1-cp313-cp313-{wheel_platform}.whl"
+    )
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize("engine", ["gffbase", "legacy"])
+def test_full_gate_requires_exact_ingest_labels(engine):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["corpora"]["mane"][engine]["label"] = (
+        "forged " + payload["corpora"]["mane"][engine]["label"]
+    )
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_requires_affinity_ids_within_logical_cpu_universe():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["cpu_affinity"] = [999]
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_schema_v3_type_is_literal_and_renderers_reject_unknown_schemas():
+    from benchmarks.common import benchmark_results_evidence_error
+    from tools import gen_benchmark_tables as tables
+
+    numeric = _publishable_payload()
+    numeric["schema_version"] = 3
+    assert benchmark_results_evidence_error(numeric) is not None
+    with pytest.raises(tables.Stale, match="unsupported benchmark schema"):
+        tables.render_provenance(numeric)
+
+    unknown = _publishable_payload()
+    unknown["schema_version"] = "4"
+    with pytest.raises(tables.Stale, match="unsupported benchmark schema"):
+        tables.render_provenance(unknown)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("gffbase", "peak_rss_bytes"), "forged"),
+        (("gffbase", "peak_rss_mb"), 99.0),
+        (("gffbase", "disk_bytes"), True),
+        (("gffbase", "exit_code"), 0.0),
+        (("gffbase", "label"), ""),
+        (("gffbase", "fmt"), "bed"),
+        (("gffbase", "validation", "checked"), []),
+        (("gffbase", "validation", "warnings"), ["forged"]),
+        (("legacy", "peak_rss_bytes"), "forged"),
+        (("legacy", "peak_rss_mb"), 99.0),
+        (("legacy", "disk_bytes"), True),
+        (("legacy", "exit_code"), 0.0),
+        (("legacy", "n_features"), 1000.0),
+        (("legacy", "label"), ""),
+    ],
+)
+def test_full_gate_rejects_forged_completed_ingest_values(path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    target = payload["corpora"]["mane"]
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_rejects_nonfinite_numbers_nested_in_validation_evidence():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["corpora"]["mane"]["gffbase"]["validation"]["warnings"] = [
+        {
+            "invariant": "INV-X",
+            "name": "example",
+            "severity": "warning",
+            "count": 1,
+            "detail": "example warning",
+            "examples": [float("nan")],
+        }
+    ]
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def _payload_with_timed_out_comparator() -> dict:
+    payload = _publishable_payload()
+    row = payload["corpora"]["mane"]
+    old = row["legacy"]
+    row["legacy"] = {
+        "label": old["label"],
+        "peak_rss_bytes": old["peak_rss_bytes"],
+        "peak_rss_mb": old["peak_rss_mb"],
+        "exit_code": -9,
+        "state": "timed_out",
+        "benchmark_env": old["benchmark_env"],
+        "cap_seconds": old["cap_seconds"],
+        "wall_seconds": None,
+        "disk_bytes": 0,
+        "stdout_bytes": 0,
+        "stdout_sha256": hashlib.sha256(b"").hexdigest(),
+        "stdout_parse_error": "invalid final JSON object",
+    }
+    row["ingest_speedup"] = None
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("stdout_bytes", True),
+        ("stdout_bytes", -1),
+        ("stdout_sha256", "forged"),
+        ("stdout_parse_error", "some parser detail"),
+        ("peak_rss_mb", float("nan")),
+    ],
+)
+def test_full_gate_requires_strict_timeout_diagnostics(field, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _payload_with_timed_out_comparator()
+    assert benchmark_results_evidence_error(payload) is None
+    payload["corpora"]["mane"]["legacy"][field] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_requires_complete_timeout_diagnostics_and_no_completed_fields():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    missing = _payload_with_timed_out_comparator()
+    missing["corpora"]["mane"]["legacy"].pop("stdout_parse_error")
+    assert benchmark_results_evidence_error(missing) is not None
+
+    completed_leak = _payload_with_timed_out_comparator()
+    completed_leak["corpora"]["mane"]["legacy"]["n_features"] = 1000
+    assert benchmark_results_evidence_error(completed_leak) is not None
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("legacy_cap_seconds",), -7),
+        (("n_spatial",), True),
+        (("n_batched",), 0),
+        (("repeats",), True),
+        (("region_seed",), 20260502),
+        (("validation_sample",), "10000"),
+        (("gtf_arm",), "default"),
+        (("infer_gtf_parents",), True),
+    ],
+)
+def test_full_gate_rejects_forged_or_inconsistent_params(path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    row = payload["corpora"]["gencode-gtf"]
+    target = row["params"]
+    target[path[-1]] = value
+    if path[-1] == "legacy_cap_seconds":
+        row["legacy"]["cap_seconds"] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def _payload_with_completed_queries() -> dict:
+    payload = _publishable_payload()
+    row = payload["corpora"]["mane"]
+    candidate = row["gffbase"]
+    candidate["rtree_built"] = True
+    candidate["validation"]["skipped"] = []
+    candidate["validation"]["checked_ids"].insert(7, "INV-8")
+    candidate["validation"]["checked"].insert(7, "INV-8 checked")
+    row["params"].update({"n_spatial": 6, "n_batched": 5, "repeats": 3})
+    row["spatial"] = {
+        "state": "completed",
+        "n_queries": 6,
+        "wall_seconds": 2.0,
+        "qps": 3.0,
+        "total_features_returned": 11,
+        "timing": {
+            "median": 2.0,
+            "min": 1.0,
+            "max": 3.0,
+            "values": [1.0, 3.0, 2.0],
+            "n": 3,
+        },
+    }
+    row["batched"] = {
+        "state": "completed",
+        "n_anchors": 5,
+        "n_descendants": 11,
+        "wall_seconds": 0.6,
+        "qps": 5 / 0.6,
+        "timing": {
+            "median": 0.6,
+            "min": 0.5,
+            "max": 0.7,
+            "values": [0.5, 0.7, 0.6],
+            "n": 3,
+        },
+    }
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("section", "path", "value"),
+    [
+        ("spatial", ("timing", "min"), 0.75),
+        ("spatial", ("timing", "max"), 4.0),
+        ("spatial", ("timing", "n"), 2),
+        ("spatial", ("n_queries",), 5),
+        ("spatial", ("total_features_returned",), True),
+        ("batched", ("timing", "median"), 0.61),
+        ("batched", ("n_anchors",), 6),
+        ("batched", ("n_descendants",), True),
+        ("batched", ("qps",), float("inf")),
+    ],
+)
+def test_full_gate_recomputes_completed_query_evidence(section, path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _payload_with_completed_queries()
+    assert benchmark_results_evidence_error(payload) is None
+    target = payload["corpora"]["mane"][section]
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_requires_nonempty_skipped_query_reason():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["corpora"]["mane"]["spatial"]["reason"] = "  "
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("name",), "Almost MANE"),
+        (("input",), "benchmarks/data/not-mane.gff.gz"),
+        (("input_bytes",), True),
+        (("input_bytes",), 1),
+        (("input_sha256",), "d" * 64),
+        (("feature_lines",), True),
+        (("gffbase", "fmt"), "gtf"),
+    ],
+)
+def test_full_gate_requires_canonical_corpus_identity_and_format(path, value):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    target = payload["corpora"]["mane"]
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    assert benchmark_results_evidence_error(payload) is not None
 
 
 def test_shared_gate_requires_exact_primary_corpora_and_closed_shapes():
@@ -731,11 +1641,34 @@ def test_external_benchmark_out_purge_uses_actual_run_paths(tmp_path, monkeypatc
     assert not candidate.exists() and not legacy.exists()
 
 
-def test_renderer_reads_nested_python_provenance_version():
+def test_renderer_reads_schema_v3_nested_python_provenance_version():
     from tools import gen_benchmark_tables as tables
 
-    rendered = tables.render_provenance({"environment": {"python": {"version": "3.12.3"}}})
-    assert "Python 3.12.3" in rendered
+    payload = _publishable_payload()
+    assert "Python 3.13.5" in tables.render_provenance(payload)
+
+
+def test_renderer_reads_actual_schema_v2_top_level_python_version():
+    from tools import gen_benchmark_tables as tables
+
+    historical = json.loads(RESULTS.read_text(encoding="utf-8"))
+    rendered = tables.render_provenance(historical)
+
+    assert "Python 3.13.5" in rendered
+    assert "Python ?" not in rendered
+
+
+@pytest.mark.parametrize(
+    "renderer_name", ["render_corpus_table", "render_provenance", "render_tradeoffs"]
+)
+def test_every_schema_v3_renderer_routes_through_the_complete_payload_gate(renderer_name):
+    from tools import gen_benchmark_tables as tables
+
+    payload = _publishable_payload()
+    payload["environment"]["artifact"]["wheel"] = "/home/private/candidate.whl"
+
+    with pytest.raises(tables.Stale, match="invalid schema-v3 evidence"):
+        getattr(tables, renderer_name)(payload)
 
 
 def test_both_engines_are_given_the_same_duplicate_id_policy():

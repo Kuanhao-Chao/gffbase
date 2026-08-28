@@ -35,17 +35,22 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
+import math
 import os
 import platform
+import re
 import shutil
 import statistics
 import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +83,8 @@ LEGACY_DB = OUT / "gencode-gff3_legacy.sqlite"
 #: Results schema. Bump when the shape changes so a stale file is detectable
 #: rather than silently misread.
 SCHEMA_VERSION = "3"
+_CANDIDATE_VERSION = "0.2.0rc1"
+_COMPARATOR_VERSION = "0.14"
 
 # These are applied to every ingest child.  Keeping the complete set in the
 # top-level provenance lets a controller reject a run that would otherwise
@@ -115,6 +122,44 @@ FULL_VALIDATION_IDS = (
     "INV-11-exact",
     "INV-12",
 )
+
+_PRIMARY_CORPORA = {
+    "mane": {
+        "name": "MANE v1.5 (Ensembl IDs)",
+        "filename": "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+        "fmt": "gff3",
+        "bytes": 10_349_746,
+        "sha256": "69089bbc84d1d3c3ce31c2ed3f85b6c3169fb8836d092a082623c59a43fd22ef",
+    },
+    "chess": {
+        "name": "CHESS 3.1.3",
+        "filename": "chess3.1.3.GRCh38.gff.gz",
+        "fmt": "gff3",
+        "bytes": 20_435_645,
+        "sha256": "28da847be976780fe38162a7c244749fdc7a0b446741ca8da2b64019c1606e03",
+    },
+    "refseq": {
+        "name": "RefSeq GRCh38.p14",
+        "filename": "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+        "fmt": "gff3",
+        "bytes": 78_190_483,
+        "sha256": "4920f0eae7e2197c50b67a201e06d657387137b49dd60f474b4f1d5b29334051",
+    },
+    "gencode-gtf": {
+        "name": "GENCODE v49 (GTF)",
+        "filename": "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+        "fmt": "gtf",
+        "bytes": 70_588_995,
+        "sha256": "576dddae36169ad648afbe706535361309786e549ad7daf529cca7674fb0058f",
+    },
+    "gencode-gff3": {
+        "name": "GENCODE v49 (GFF3)",
+        "filename": "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+        "fmt": "gff3",
+        "bytes": 89_385_177,
+        "sha256": "22ffa691aac993603f7f21effacf19848262bec74545bd979863e7af602e5a1d",
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +304,86 @@ def _installed_gffbase() -> dict:
     return info
 
 
+def _candidate_wheel_artifact(install: dict) -> dict:
+    """Inspect and bind the configured candidate wheel to the installed native."""
+
+    configured_path = os.environ.get("GFFBASE_BENCH_WHEEL")
+    configured_sha256 = os.environ.get("GFFBASE_BENCH_WHEEL_SHA256")
+    if configured_path is None and configured_sha256 is None:
+        return {"wheel": None, "wheel_sha256": None}
+    if configured_path is None or not isinstance(configured_sha256, str):
+        raise ValueError("candidate wheel SHA-256 and path must both be configured")
+    if not re.fullmatch(r"[0-9a-f]{64}", configured_sha256):
+        raise ValueError("candidate wheel SHA-256 is invalid")
+
+    wheel_path = Path(configured_path)
+    if not wheel_path.is_file():
+        raise ValueError("candidate wheel path is not a file")
+    try:
+        wheel_bytes = wheel_path.read_bytes()
+    except OSError as exc:
+        raise ValueError("candidate wheel could not be read") from exc
+    actual_sha256 = hashlib.sha256(wheel_bytes).hexdigest()
+    if actual_sha256 != configured_sha256:
+        raise ValueError("candidate wheel SHA-256 differs from the configured digest")
+    wheel_name = wheel_path.name
+    filename_tags = _candidate_wheel_tags(wheel_name)
+    if filename_tags is None:
+        raise ValueError("candidate wheel filename is invalid")
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(wheel_bytes)) as archive:
+            members = archive.namelist()
+            metadata_members = [name for name in members if name.endswith(".dist-info/METADATA")]
+            wheel_members = [name for name in members if name.endswith(".dist-info/WHEEL")]
+            native_members = [
+                name
+                for name in members
+                if name.count("/") == 1
+                and name.startswith("gffbase/")
+                and name.rsplit("/", 1)[-1].startswith("_native.")
+                and name.endswith((".so", ".pyd"))
+            ]
+            if len(metadata_members) != 1 or len(wheel_members) != 1:
+                raise ValueError("candidate wheel metadata members are not unique")
+            if metadata_members[0].rsplit("/", 1)[0] != wheel_members[0].rsplit("/", 1)[0]:
+                raise ValueError("candidate wheel metadata members disagree")
+            if len(native_members) != 1:
+                raise ValueError("candidate wheel must contain exactly one native member")
+            metadata = BytesParser().parsebytes(archive.read(metadata_members[0]))
+            wheel_metadata = BytesParser().parsebytes(archive.read(wheel_members[0]))
+            native_member = native_members[0]
+            native_sha256 = hashlib.sha256(archive.read(native_member)).hexdigest()
+    except zipfile.BadZipFile as exc:
+        raise ValueError("candidate wheel is not a valid ZIP archive") from exc
+
+    metadata_names = metadata.get_all("Name") or []
+    metadata_versions = metadata.get_all("Version") or []
+    if metadata_names != ["gffbase"] or metadata_versions != [_CANDIDATE_VERSION]:
+        raise ValueError("candidate wheel metadata identity is invalid")
+    metadata_name = metadata_names[0]
+    metadata_version = metadata_versions[0]
+    wheel_tags = wheel_metadata.get_all("Tag") or []
+    expected_tag = "-".join(filename_tags)
+    if wheel_tags != [expected_tag]:
+        raise ValueError("candidate WHEEL Tag differs from its filename")
+    native_name = native_member.rsplit("/", 1)[-1]
+    if native_name != install.get("native_module") or native_sha256 != install.get("native_sha256"):
+        raise ValueError("candidate wheel does not contain the installed native binary")
+    if any(
+        install.get(key) != _CANDIDATE_VERSION
+        for key in ("distribution_version", "python_version", "native_version")
+    ):
+        raise ValueError("installed native identity differs from candidate metadata")
+    return {
+        "wheel": wheel_name,
+        "wheel_sha256": actual_sha256,
+        "metadata": {"name": metadata_name, "version": metadata_version},
+        "wheel_tags": wheel_tags,
+        "native": {"member": native_member, "sha256": native_sha256},
+    }
+
+
 def environment(*, benchmark_controls: dict[str, str] | None = None) -> dict:
     """Everything needed to reproduce or fairly compare a run.
 
@@ -283,6 +408,7 @@ def environment(*, benchmark_controls: dict[str, str] | None = None) -> dict:
         benchmark_controls = benchmark_env(max(threads, 1))
     if set(benchmark_controls) != set(_BENCHMARK_ENV_KEYS):
         raise ValueError("benchmark_controls must contain the complete bounded environment")
+    install = _installed_gffbase()
     return {
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "git_commit": _cmd("git", "-C", str(ROOT), "rev-parse", "HEAD"),
@@ -306,15 +432,8 @@ def environment(*, benchmark_controls: dict[str, str] | None = None) -> dict:
             name: _pkg_version(name)
             for name in ("gffbase", "duckdb", "pyarrow", "pandas", "polars", "gffutils", "psutil")
         },
-        "gffbase_install": _installed_gffbase(),
-        "artifact": {
-            "wheel": (
-                Path(os.environ["GFFBASE_BENCH_WHEEL"]).name
-                if os.environ.get("GFFBASE_BENCH_WHEEL")
-                else None
-            ),
-            "wheel_sha256": os.environ.get("GFFBASE_BENCH_WHEEL_SHA256"),
-        },
+        "gffbase_install": install,
+        "artifact": _candidate_wheel_artifact(install),
         # Do not snapshot an arbitrary parent shell.  These are the actual
         # bounded controls applied by ``run_subprocess`` for a harness run.
         "env": dict(benchmark_controls),
@@ -491,8 +610,7 @@ def run_subprocess(
         # text.  Keep bounded diagnostic evidence without serializing it.
         info["stdout_bytes"] = len(out)
         info["stdout_sha256"] = hashlib.sha256(out).hexdigest()
-        if parse_error is not None:
-            info["stdout_parse_error"] = "invalid final JSON object"
+        info["stdout_parse_error"] = "invalid final JSON object"
     if state != "completed":
         # A killed or failed process has no completed ingest wall.  Never let
         # a partial child payload turn the cap into a measurement.
@@ -799,6 +917,14 @@ def _is_sha256(value: object) -> bool:
     )
 
 
+def _is_git_commit(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
 def validate_database_signature(signature: dict | None) -> bool:
     """Return whether *signature* is a complete, internally consistent v3.
 
@@ -983,7 +1109,36 @@ def signatures_match(left: dict | None, right: dict | None) -> bool | None:
 
 
 def _positive_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
+def _nonnegative_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _positive_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _nonempty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _numbers_equal(left: object, right: object) -> bool:
+    return (
+        isinstance(left, (int, float))
+        and not isinstance(left, bool)
+        and isinstance(right, (int, float))
+        and not isinstance(right, bool)
+        and math.isfinite(left)
+        and math.isfinite(right)
+        and math.isclose(left, right, rel_tol=1e-12, abs_tol=1e-12)
+    )
 
 
 def candidate_evidence_is_valid(
@@ -1062,17 +1217,74 @@ def _contains_private_path(value: object) -> bool:
     """Return whether a portable result recursively carries an absolute path."""
 
     if isinstance(value, dict):
-        return any(_contains_private_path(item) for item in value.values())
+        return any(
+            _contains_private_path(key) or _contains_private_path(item)
+            for key, item in value.items()
+        )
     if isinstance(value, (list, tuple)):
         return any(_contains_private_path(item) for item in value)
-    return isinstance(value, str) and (
-        value.startswith(("/", "\\\\"))
-        or (len(value) > 2 and value[1] == ":" and value[2] in "/\\")
+    if not isinstance(value, str):
+        return False
+    if "file://" in value or "~/" in value or "~\\" in value:
+        return True
+    if any(
+        char in "/\\" and (index == 0 or not value[index - 1].isalnum())
+        for index, char in enumerate(value)
+    ):
+        return True
+    return any(
+        value[index].isalpha() and value[index + 1] == ":" and value[index + 2] in "/\\"
+        for index in range(len(value) - 2)
     )
+
+
+def _contains_nonfinite_number(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            _contains_nonfinite_number(key) or _contains_nonfinite_number(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nonfinite_number(item) for item in value)
+    return isinstance(value, float) and not math.isfinite(value)
 
 
 def _exact_keys(value: object, keys: set[str]) -> bool:
     return isinstance(value, dict) and set(value) == keys
+
+
+def _portable_relative_path(value: object) -> bool:
+    if not _nonempty_string(value) or not isinstance(value, str):
+        return False
+    if _contains_private_path(value) or "\\" in value or "://" in value or "\x00" in value:
+        return False
+    return all(part not in {"", ".", ".."} for part in value.split("/"))
+
+
+def _portable_filename(value: object) -> bool:
+    return (
+        _portable_relative_path(value)
+        and isinstance(value, str)
+        and "/" not in value
+        and value not in {".", ".."}
+    )
+
+
+def _normalized_utc_timestamp(value: object) -> str | None:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|\+00:00)", value
+    ):
+        return None
+    normalized = value[:-6] + "Z" if value.endswith("+00:00") else value
+    try:
+        time.strptime(normalized, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+    return normalized if value.endswith(("Z", "+00:00")) else None
+
+
+def _utc_timestamp_is_valid(value: object) -> bool:
+    return _normalized_utc_timestamp(value) is not None
 
 
 def _bounded_env_is_valid(value: object, *, threads: int | None = None) -> bool:
@@ -1085,17 +1297,17 @@ def _bounded_env_is_valid(value: object, *, threads: int | None = None) -> bool:
     return all(value[key] == "1" for key in _BENCHMARK_ENV_KEYS[2:])
 
 
-def _timing_is_valid(timing: object, wall_seconds: object) -> bool:
+def _timing_is_valid(timing: object, wall_seconds: object, *, repeats: int) -> bool:
     if not isinstance(timing, dict) or not _positive_number(wall_seconds):
         return False
     count = timing.get("n")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+    if not _positive_int(count) or count != repeats:
         return False
     if count == 1:
         return (
             set(timing) == {"value", "n"}
             and _positive_number(timing.get("value"))
-            and timing["value"] == wall_seconds
+            and _numbers_equal(timing["value"], wall_seconds)
         )
     values = timing.get("values")
     return (
@@ -1106,16 +1318,18 @@ def _timing_is_valid(timing: object, wall_seconds: object) -> bool:
         and _positive_number(timing.get("min"))
         and _positive_number(timing.get("median"))
         and _positive_number(timing.get("max"))
-        and timing["min"] <= timing["median"] <= timing["max"]
-        and timing["median"] == wall_seconds
+        and _numbers_equal(timing["min"], min(values))
+        and _numbers_equal(timing["median"], statistics.median(values))
+        and _numbers_equal(timing["max"], max(values))
+        and _numbers_equal(timing["median"], wall_seconds)
     )
 
 
-def _query_evidence_error(section: str, value: object, candidate: dict) -> str | None:
+def _query_evidence_error(section: str, value: object, candidate: dict, params: dict) -> str | None:
     if not isinstance(value, dict):
         return f"{section} is not an object"
     if value.get("state") == "skipped":
-        if not _exact_keys(value, {"state", "reason"}) or not isinstance(value.get("reason"), str):
+        if not _exact_keys(value, {"state", "reason"}) or not _nonempty_string(value.get("reason")):
             return f"{section} skipped shape is invalid"
         return None
     if value.get("state") != "completed":
@@ -1142,22 +1356,255 @@ def _query_evidence_error(section: str, value: object, candidate: dict) -> str |
         return f"{section} count is invalid"
     if section == "spatial":
         returned = value.get("total_features_returned")
-        if not isinstance(returned, int) or isinstance(returned, bool) or returned < 0:
+        if not _nonnegative_int(returned):
             return "spatial returned count is invalid"
-    elif not isinstance(value.get("n_descendants"), int) or value["n_descendants"] < 0:
-        return "batched descendant count is invalid"
+        if count != params["n_spatial"]:
+            return "spatial query count differs from params"
+    else:
+        if not _nonnegative_int(value.get("n_descendants")):
+            return "batched descendant count is invalid"
+        if count > params["n_batched"]:
+            return "batched anchor count exceeds params"
     wall = value.get("wall_seconds")
-    if not _timing_is_valid(value.get("timing"), wall):
+    if not _timing_is_valid(value.get("timing"), wall, repeats=params["repeats"]):
         return f"{section} timing is invalid"
     qps = value.get("qps")
     if (
         not isinstance(wall, (int, float))
-        or not isinstance(qps, (int, float))
+        or isinstance(wall, bool)
+        or not _positive_number(wall)
         or not _positive_number(qps)
-        or abs(qps - count / wall) > 1e-12
     ):
         return f"{section} qps is invalid"
+    if not _numbers_equal(qps, count / float(wall)):
+        return f"{section} qps is invalid"
     return None
+
+
+def _rss_is_valid(value: dict, *, allow_zero: bool) -> bool:
+    rss_bytes = value.get("peak_rss_bytes")
+    rss_mb = value.get("peak_rss_mb")
+    bytes_ok = _nonnegative_int(rss_bytes) if allow_zero else _positive_int(rss_bytes)
+    return (
+        bytes_ok
+        and isinstance(rss_bytes, int)
+        and _numbers_equal(rss_mb, rss_bytes / (1024 * 1024))
+    )
+
+
+def _validation_warning_is_valid(value: object) -> bool:
+    expected = {"invariant", "name", "severity", "count", "detail", "examples"}
+    return (
+        _exact_keys(value, expected)
+        and isinstance(value, dict)
+        and all(_nonempty_string(value.get(key)) for key in ("invariant", "name", "detail"))
+        and value.get("severity") == "warning"
+        and _positive_int(value.get("count"))
+        and isinstance(value.get("examples"), list)
+        and len(value["examples"]) <= 5
+    )
+
+
+def _python_runtime_version(value: object) -> tuple[int, int] | None:
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"3\.(10|11|12|13|14)\.(?:0|[1-9]\d*)", value)
+    if not match:
+        return None
+    return 3, int(match.group(1))
+
+
+def _normalized_architecture(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    aliases = {
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
+    }
+    return aliases.get(value.casefold().replace("-", "_"))
+
+
+def _runtime_platform_identity(platform_name: object, machine: object) -> tuple[str, str] | None:
+    if not isinstance(platform_name, str):
+        return None
+    operating_system = {
+        "linux": "linux",
+        "windows": "windows",
+        "macos": "macos",
+    }.get(platform_name.partition("-")[0].casefold())
+    architecture = _normalized_architecture(machine)
+    if operating_system is None or architecture is None:
+        return None
+    return operating_system, architecture
+
+
+def _wheel_platform_identity(tag: str) -> tuple[str, str] | None:
+    linux = re.fullmatch(
+        r"(?:manylinux(?:_\d+_\d+|1|2010|2014)|musllinux_\d+_\d+|linux)"
+        r"_(x86_64|aarch64)",
+        tag,
+    )
+    if linux:
+        return "linux", "x86_64" if linux.group(1) == "x86_64" else "aarch64"
+    windows = re.fullmatch(r"win_(amd64|arm64)", tag)
+    if windows:
+        return "windows", "x86_64" if windows.group(1) == "amd64" else "aarch64"
+    macos = re.fullmatch(r"macosx_\d+_\d+_(x86_64|arm64)", tag)
+    if macos:
+        return "macos", "x86_64" if macos.group(1) == "x86_64" else "aarch64"
+    return None
+
+
+def _native_module_matches_runtime(
+    native_module: object,
+    *,
+    operating_system: str,
+    architecture: str,
+    runtime_tag: str,
+    wheel_abi_tag: str,
+    wheel_platform_tag: str,
+) -> bool:
+    if not isinstance(native_module, str):
+        return False
+    if wheel_abi_tag == "abi3":
+        # Stable-ABI module suffixes omit architecture. The already-validated
+        # singleton wheel platform supplies OS/architecture; the module name
+        # must independently identify the same ABI and native library family.
+        if operating_system in {"linux", "macos"}:
+            return native_module == "_native.abi3.so"
+        if operating_system == "windows":
+            return native_module == "_native.pyd"
+        return False
+    if operating_system == "linux":
+        match = re.fullmatch(
+            r"_native\.cpython-(3\d+)-(x86_64|aarch64)-linux-(gnu|musl)\.so",
+            native_module,
+        )
+        if not match:
+            return False
+        native_libc = match.group(3)
+        libc_matches = not (
+            (wheel_platform_tag.startswith("manylinux") and native_libc != "gnu")
+            or (wheel_platform_tag.startswith("musllinux") and native_libc != "musl")
+        )
+        return (
+            f"cp{match.group(1)}" == runtime_tag
+            and _normalized_architecture(match.group(2)) == architecture
+            and libc_matches
+        )
+    if operating_system == "windows":
+        match = re.fullmatch(r"_native\.cp(3\d+)-win_(amd64|arm64)\.pyd", native_module)
+        if not match:
+            return False
+        return f"cp{match.group(1)}" == runtime_tag and (
+            _normalized_architecture(match.group(2)) == architecture
+        )
+    if operating_system == "macos":
+        match = re.fullmatch(r"_native\.cpython-(3\d+)-darwin\.so", native_module)
+        return bool(match and f"cp{match.group(1)}" == runtime_tag)
+    return False
+
+
+def _candidate_wheel_tags(wheel: object) -> tuple[str, str, str] | None:
+    if not isinstance(wheel, str) or not wheel.endswith(".whl"):
+        return None
+    wheel_stem = wheel.removesuffix(".whl")
+    filename_parts = wheel_stem.rsplit("-", 3)
+    if len(filename_parts) != 4 or wheel_stem.count("-") not in {4, 5}:
+        return None
+    distribution_version, python_tag, abi_tag, platform_tag = filename_parts
+    distribution_version_prefix = f"gffbase-{_CANDIDATE_VERSION}"
+    if distribution_version != distribution_version_prefix:
+        build_prefix = f"{distribution_version_prefix}-"
+        if not distribution_version.startswith(build_prefix) or not re.fullmatch(
+            r"[0-9][^\r\n]*", distribution_version.removeprefix(build_prefix)
+        ):
+            return None
+    # Compressed tag sets are valid wheel syntax, but ambiguous provenance:
+    # this record must identify the one ABI and platform actually measured.
+    if any("." in tag for tag in (python_tag, abi_tag, platform_tag)):
+        return None
+    return python_tag, abi_tag, platform_tag
+
+
+def _artifact_matches_runtime(
+    wheel: object,
+    native_module: object,
+    python_version: object,
+    platform_name: object,
+    machine: object,
+) -> bool:
+    runtime = _python_runtime_version(python_version)
+    platform_identity = _runtime_platform_identity(platform_name, machine)
+    filename_tags = _candidate_wheel_tags(wheel)
+    if runtime is None or platform_identity is None or filename_tags is None:
+        return False
+    python_tag, abi_tag, platform_tag = filename_tags
+    runtime_tag = f"cp{runtime[0]}{runtime[1]}"
+    if abi_tag == "abi3":
+        python_abi_matches = python_tag == "cp310" and runtime >= (3, 10)
+    else:
+        python_abi_matches = python_tag == runtime_tag and abi_tag == runtime_tag
+    if not python_abi_matches or _wheel_platform_identity(platform_tag) != platform_identity:
+        return False
+    return _native_module_matches_runtime(
+        native_module,
+        operating_system=platform_identity[0],
+        architecture=platform_identity[1],
+        runtime_tag=runtime_tag,
+        wheel_abi_tag=abi_tag,
+        wheel_platform_tag=platform_tag,
+    )
+
+
+def _artifact_evidence_is_valid(
+    artifact: dict,
+    install: dict,
+    python: dict,
+    *,
+    platform_name: object,
+    machine: object,
+) -> bool:
+    if not _exact_keys(artifact, {"wheel", "wheel_sha256", "metadata", "wheel_tags", "native"}):
+        return False
+    wheel = artifact.get("wheel")
+    metadata = artifact.get("metadata")
+    wheel_tags = artifact.get("wheel_tags")
+    native = artifact.get("native")
+    filename_tags = _candidate_wheel_tags(wheel)
+    if (
+        not isinstance(wheel, str)
+        or not _portable_filename(wheel)
+        or filename_tags is None
+        or not _is_sha256(artifact.get("wheel_sha256"))
+        or not _exact_keys(metadata, {"name", "version"})
+        or not isinstance(metadata, dict)
+        or metadata.get("name") != "gffbase"
+        or metadata.get("version") != _CANDIDATE_VERSION
+        or wheel_tags != ["-".join(filename_tags)]
+        or not _exact_keys(native, {"member", "sha256"})
+        or not isinstance(native, dict)
+    ):
+        return False
+    native_member = native.get("member")
+    native_module = install.get("native_module")
+    return (
+        isinstance(native_member, str)
+        and isinstance(native_module, str)
+        and _portable_relative_path(native_member)
+        and native_member == f"gffbase/{native_module}"
+        and _is_sha256(native.get("sha256"))
+        and native.get("sha256") == install.get("native_sha256")
+        and _artifact_matches_runtime(
+            wheel,
+            native_module,
+            python.get("version"),
+            platform_name,
+            machine,
+        )
+    )
 
 
 def _candidate_shape_is_valid(candidate: dict) -> bool:
@@ -1189,15 +1636,37 @@ def _candidate_shape_is_valid(candidate: dict) -> bool:
         "sample_checked",
         "checked_ids",
     }
+    validation = candidate.get("validation")
+    if not isinstance(validation, dict):
+        return False
+    checked_ids = validation.get("checked_ids")
+    checked = validation.get("checked")
+    warnings = validation.get("warnings")
+    expected_checked = len(FULL_VALIDATION_IDS) + int(candidate.get("rtree_built") is True)
     return (
         _exact_keys(candidate, expected)
-        and _positive_number(candidate.get("cap_seconds"))
-        and isinstance(candidate.get("disk_bytes"), int)
-        and candidate["disk_bytes"] >= 0
-        and isinstance(candidate.get("fmt"), str)
-        and _exact_keys(candidate.get("validation"), validation_keys)
-        and isinstance(candidate["validation"].get("checked"), list)
-        and isinstance(candidate["validation"].get("warnings"), list)
+        and _nonempty_string(candidate.get("label"))
+        and _rss_is_valid(candidate, allow_zero=False)
+        and isinstance(candidate.get("exit_code"), int)
+        and not isinstance(candidate.get("exit_code"), bool)
+        and candidate["exit_code"] == 0
+        and candidate.get("state") == "completed"
+        and _positive_int(candidate.get("cap_seconds"))
+        and _positive_number(candidate.get("wall_seconds"))
+        and _positive_int(candidate.get("n_features"))
+        and _positive_int(candidate.get("disk_bytes"))
+        and candidate.get("fmt") in {"gff3", "gtf"}
+        and _exact_keys(validation, validation_keys)
+        and isinstance(checked, list)
+        and len(checked) == expected_checked
+        and all(_nonempty_string(item) for item in checked)
+        and isinstance(checked_ids, list)
+        and len(checked_ids) == expected_checked
+        and isinstance(warnings, list)
+        and all(_validation_warning_is_valid(item) for item in warnings)
+        and validation.get("errors") == []
+        and _nonnegative_int(validation.get("sample_eligible"))
+        and _nonnegative_int(validation.get("sample_checked"))
     )
 
 
@@ -1216,17 +1685,32 @@ def _legacy_shape_is_valid(legacy: dict) -> bool:
     if legacy.get("state") == "completed":
         return (
             _exact_keys(legacy, base | {"n_features", "correctness_signature"})
-            and legacy.get("exit_code") == 0
+            and _nonempty_string(legacy.get("label"))
+            and _rss_is_valid(legacy, allow_zero=False)
+            and isinstance(legacy.get("exit_code"), int)
+            and not isinstance(legacy.get("exit_code"), bool)
+            and legacy["exit_code"] == 0
+            and _positive_int(legacy.get("cap_seconds"))
             and _positive_number(legacy.get("wall_seconds"))
+            and _positive_int(legacy.get("disk_bytes"))
+            and _positive_int(legacy.get("n_features"))
+            and validate_database_signature(legacy.get("correctness_signature"))
         )
     if legacy.get("state") == "timed_out":
-        optional_stdout = {"stdout_bytes", "stdout_sha256", "stdout_parse_error"}
+        diagnostics = {"stdout_bytes", "stdout_sha256", "stdout_parse_error"}
         return (
-            set(legacy).issubset(base | optional_stdout)
-            and base.issubset(legacy)
+            _exact_keys(legacy, base | diagnostics)
+            and _nonempty_string(legacy.get("label"))
+            and _rss_is_valid(legacy, allow_zero=True)
+            and isinstance(legacy.get("exit_code"), int)
+            and not isinstance(legacy.get("exit_code"), bool)
             and legacy.get("exit_code") != 0
+            and _positive_int(legacy.get("cap_seconds"))
             and legacy.get("wall_seconds") is None
-            and not {"n_features", "correctness_signature"}.intersection(legacy)
+            and _nonnegative_int(legacy.get("disk_bytes"))
+            and _nonnegative_int(legacy.get("stdout_bytes"))
+            and _is_sha256(legacy.get("stdout_sha256"))
+            and legacy.get("stdout_parse_error") == "invalid final JSON object"
         )
     return False
 
@@ -1255,14 +1739,80 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
     if not isinstance(value, dict) or not _exact_keys(value, required):
         return False
     python = value.get("python")
-    if not isinstance(python, dict):
+    packages = value.get("packages")
+    install = value.get("gffbase_install")
+    artifact = value.get("artifact")
+    if (
+        not isinstance(python, dict)
+        or not isinstance(packages, dict)
+        or not isinstance(install, dict)
+        or not isinstance(artifact, dict)
+    ):
         return False
+    package_keys = {"gffbase", "duckdb", "pyarrow", "pandas", "polars", "gffutils", "psutil"}
+    install_keys = {
+        "distribution_version",
+        "python_version",
+        "python_module",
+        "native_version",
+        "native_module",
+        "native_sha256",
+    }
+    affinity = value.get("cpu_affinity")
+    physical = value.get("cpu_cores_physical")
+    logical = value.get("cpu_cores_logical")
     return (
-        _exact_keys(python, {"version", "implementation", "executable"})
+        _utc_timestamp_is_valid(value.get("timestamp_utc"))
+        and _is_git_commit(value.get("git_commit"))
+        and value.get("git_dirty") is False
         and all(
-            isinstance(python.get(key), str) for key in ("version", "implementation", "executable")
+            _nonempty_string(value.get(key))
+            for key in ("hostname", "platform", "machine", "cpu_model", "rustc_version")
         )
-        and "/" not in python["executable"]
+        and _positive_int(physical)
+        and _positive_int(logical)
+        and isinstance(logical, int)
+        and isinstance(physical, int)
+        and logical >= physical
+        and _positive_int(value.get("total_ram_bytes"))
+        and _positive_int(value.get("free_disk_bytes"))
+        and isinstance(affinity, list)
+        and bool(affinity)
+        and all(_nonnegative_int(cpu) for cpu in affinity)
+        and len(affinity) == len(set(affinity))
+        and len(affinity) <= logical
+        and all(cpu < logical for cpu in affinity)
+        and _exact_keys(python, {"version", "implementation", "executable"})
+        and _nonempty_string(python.get("version"))
+        and python.get("implementation") == "CPython"
+        and _portable_filename(python.get("executable"))
+        and isinstance(python.get("executable"), str)
+        and python["executable"].startswith("python")
+        and _exact_keys(packages, package_keys)
+        and all(_nonempty_string(packages.get(key)) for key in package_keys)
+        and packages.get("gffbase") == _CANDIDATE_VERSION
+        and packages.get("gffutils") == _COMPARATOR_VERSION
+        and _exact_keys(install, install_keys)
+        and all(
+            _nonempty_string(install.get(key))
+            for key in ("distribution_version", "python_version", "native_version")
+        )
+        and install["distribution_version"] == _CANDIDATE_VERSION
+        and install["python_version"] == _CANDIDATE_VERSION
+        and install["native_version"] == _CANDIDATE_VERSION
+        and install.get("python_module") == "__init__.py"
+        and _portable_filename(install.get("native_module"))
+        and isinstance(install.get("native_module"), str)
+        and install["native_module"].startswith("_native.")
+        and install["native_module"].endswith((".so", ".pyd"))
+        and _is_sha256(install.get("native_sha256"))
+        and _artifact_evidence_is_valid(
+            artifact,
+            install,
+            python,
+            platform_name=value.get("platform"),
+            machine=value.get("machine"),
+        )
         and _bounded_env_is_valid(value.get("env"), threads=threads)
     )
 
@@ -1297,6 +1847,22 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
         return "row shape is invalid"
     if _contains_private_path(row):
         return "row contains an absolute path"
+    key = row.get("key")
+    corpus = _PRIMARY_CORPORA.get(key) if isinstance(key, str) else None
+    if corpus is None:
+        return "row is not a canonical primary corpus"
+    if row.get("name") != corpus["name"]:
+        return "row name differs from the canonical corpus"
+    input_path = row.get("input")
+    if (
+        not _portable_relative_path(input_path)
+        or not isinstance(input_path, str)
+        or input_path.rsplit("/", 1)[-1] != corpus["filename"]
+        or row.get("input_bytes") != corpus["bytes"]
+        or row.get("input_sha256") != corpus["sha256"]
+        or not _positive_int(row.get("feature_lines"))
+    ):
+        return "row source identity is invalid"
     candidate = row.get("gffbase")
     if not candidate_evidence_is_valid(candidate, require_exhaustive=True):
         return "candidate is incomplete or invalid"
@@ -1323,41 +1889,63 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
     ):
         return "params shape is invalid"
     threads = params.get("threads")
-    if not isinstance(threads, int) or isinstance(threads, bool) or threads < 1:
+    if not _positive_int(threads):
         return "params threads are invalid"
+    for name in (
+        "legacy_cap_seconds",
+        "gffbase_cap_seconds",
+        "n_spatial",
+        "n_batched",
+        "repeats",
+    ):
+        if not _positive_int(params.get(name)):
+            return f"params {name} is invalid"
+    if params.get("region_seed") != 20260501:
+        return "params region seed is invalid"
+    if params.get("validation_sample") != "all":
+        return "params validation sample is not exhaustive"
+    if key == "gencode-gtf":
+        if params.get("gtf_arm") != "no-infer" or params.get("infer_gtf_parents") is not False:
+            return "GENCODE GTF arm is not the canonical no-infer comparison"
+    elif params.get("gtf_arm") is not None or params.get("infer_gtf_parents") is not None:
+        return "non-GTF corpus carries GTF controls"
     if not _bounded_env_is_valid(params.get("benchmark_env"), threads=threads):
         return "params benchmark environment is invalid"
     if candidate.get("benchmark_env") != params["benchmark_env"]:
         return "candidate benchmark environment differs from params"
     if candidate.get("cap_seconds") != params.get("gffbase_cap_seconds"):
         return "candidate cap differs from params"
-    for name in ("n_spatial", "n_batched", "repeats", "region_seed"):
-        if not isinstance(params.get(name), int) or params[name] < 1:
-            return f"params {name} is invalid"
+    if candidate.get("fmt") != corpus["fmt"]:
+        return "candidate format differs from corpus"
+    if candidate["validation"].get("requested_sample") != params["validation_sample"]:
+        return "candidate validation sample differs from params"
+    if candidate["label"] != f"gffbase ingest({corpus['filename']})":
+        return "candidate label does not identify the corpus"
     measured = row.get("measured")
     if not _exact_keys(measured, {"timestamp_utc", "git_commit", "git_dirty"}):
         return "measured shape is invalid"
+    if (
+        not isinstance(measured, dict)
+        or not _utc_timestamp_is_valid(measured.get("timestamp_utc"))
+        or not _is_git_commit(measured.get("git_commit"))
+        or measured.get("git_dirty") is not False
+    ):
+        return "measured identity is invalid"
     db_paths = row.get("db_paths")
     if (
         not isinstance(db_paths, dict)
         or not _exact_keys(db_paths, {"gffbase", "legacy"})
-        or not all(
-            isinstance(path, str) and not _contains_private_path(path) for path in db_paths.values()
-        )
+        or not all(_portable_relative_path(path) for path in db_paths.values())
+        or not isinstance(db_paths.get("gffbase"), str)
+        or not isinstance(db_paths.get("legacy"), str)
+        or db_paths["gffbase"].rsplit("/", 1)[-1] != f"{key}.duckdb"
+        or db_paths["legacy"].rsplit("/", 1)[-1] != f"{key}_legacy.sqlite"
     ):
         return "database paths are invalid"
-    for name in ("name", "key", "input", "input_sha256"):
-        if not isinstance(row.get(name), str):
-            return f"row {name} is invalid"
-    if not _is_sha256(row.get("input_sha256")) or not all(
-        isinstance(row.get(name), int) and row[name] >= 0
-        for name in ("input_bytes", "feature_lines")
-    ):
-        return "row input evidence is invalid"
-    spatial_error = _query_evidence_error("spatial", row.get("spatial"), candidate)
+    spatial_error = _query_evidence_error("spatial", row.get("spatial"), candidate, params)
     if spatial_error:
         return spatial_error
-    batched_error = _query_evidence_error("batched", row.get("batched"), candidate)
+    batched_error = _query_evidence_error("batched", row.get("batched"), candidate, params)
     if batched_error:
         return batched_error
     legacy = row.get("legacy")
@@ -1369,11 +1957,13 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
         return "comparator benchmark environment differs from params"
     if legacy.get("cap_seconds") != params.get("legacy_cap_seconds"):
         return "comparator cap differs from params"
+    if legacy["label"] != f"legacy gffutils ingest({corpus['filename']})":
+        return "comparator label does not identify the corpus"
     speedup = row.get("ingest_speedup")
     if legacy.get("state") == "timed_out":
         if (
             legacy.get("wall_seconds") is not None
-            or not _positive_number(legacy.get("cap_seconds"))
+            or not _positive_int(legacy.get("cap_seconds"))
             or speedup is not None
         ):
             return "timed-out comparator is not censored"
@@ -1384,7 +1974,14 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
         return "comparator has no completed wall time"
     legacy_wall = legacy.get("wall_seconds")
     candidate_wall = candidate.get("wall_seconds")
-    if not isinstance(legacy_wall, (int, float)) or not isinstance(candidate_wall, (int, float)):
+    if (
+        not isinstance(legacy_wall, (int, float))
+        or isinstance(legacy_wall, bool)
+        or not isinstance(candidate_wall, (int, float))
+        or isinstance(candidate_wall, bool)
+        or not _positive_number(legacy_wall)
+        or not _positive_number(candidate_wall)
+    ):
         return "completed wall time is invalid"
     if (
         signatures_match(
@@ -1395,12 +1992,8 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
         return "candidate and comparator signatures differ"
     if candidate.get("n_features") != legacy.get("n_features"):
         return "candidate and comparator feature counts differ"
-    expected = legacy_wall / candidate_wall
-    if (
-        not _positive_number(speedup)
-        or not isinstance(speedup, (int, float))
-        or abs(speedup - expected) > max(1e-12, abs(expected) * 1e-12)
-    ):
+    expected = float(legacy_wall) / float(candidate_wall)
+    if not _positive_number(speedup) or not _numbers_equal(speedup, expected):
         return "ingest speedup does not match completed evidence"
     return None
 
@@ -1408,12 +2001,16 @@ def benchmark_row_evidence_error(row: dict | None) -> str | None:
 def benchmark_results_evidence_error(data: dict | None) -> str | None:
     """Return why a complete schema-v3 result payload is unpublishable."""
 
-    if not isinstance(data, dict) or str(data.get("schema_version")) != SCHEMA_VERSION:
+    if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
         return "unsupported benchmark schema"
     if set(data) != {"schema_version", "environment", "corpora"}:
         return "result shape is invalid"
+    if _contains_private_path(data):
+        return "result contains an absolute path or private file URI"
+    if _contains_nonfinite_number(data):
+        return "result contains a nonfinite number"
     corpora = data.get("corpora")
-    primary = {"mane", "chess", "refseq", "gencode-gtf", "gencode-gff3"}
+    primary = set(_PRIMARY_CORPORA)
     if not isinstance(corpora, dict) or set(corpora) != primary:
         return "result must contain exactly the primary corpora"
     threads = None
@@ -1428,10 +2025,30 @@ def benchmark_results_evidence_error(data: dict | None) -> str | None:
             threads = row_threads
         elif threads != row_threads:
             return "corpus thread controls differ"
+    environment_value = data.get("environment")
     if not isinstance(threads, int) or not _environment_is_valid(
-        data.get("environment"), threads=threads
+        environment_value, threads=threads
     ):
         return "environment is invalid or differs from row controls"
+    if not isinstance(environment_value, dict):  # narrowed by the validator above
+        return "environment is invalid"
+    for key, row in corpora.items():
+        measured = row["measured"]
+        params = row["params"]
+        measured_timestamp = _normalized_utc_timestamp(measured["timestamp_utc"])
+        environment_timestamp = _normalized_utc_timestamp(environment_value["timestamp_utc"])
+        if (
+            measured_timestamp is None
+            or environment_timestamp is None
+            or measured_timestamp > environment_timestamp
+        ):
+            return f"{key}: measured timestamp is later than environment"
+        if measured["git_commit"] != environment_value["git_commit"]:
+            return f"{key}: measured commit differs from environment"
+        if measured["git_dirty"] is not False or environment_value["git_dirty"] is not False:
+            return f"{key}: dirty benchmark evidence is not publishable"
+        if params["benchmark_env"] != environment_value["env"]:
+            return f"{key}: measured controls differ from environment"
     return None
 
 

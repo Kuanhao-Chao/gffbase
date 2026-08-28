@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from benchmarks.common import benchmark_row_evidence_error  # noqa: E402
+from benchmarks.common import benchmark_results_evidence_error  # noqa: E402
 
 RESULTS = ROOT / "benchmarks" / "results"
 MEGA = RESULTS / "06_mega.json"
@@ -174,9 +174,21 @@ def _check_no_invented_numbers(row: dict, schema_version: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _require_publishable_schema_v3(data: dict) -> None:
+    schema_version = data.get("schema_version")
+    if schema_version == "2":
+        return
+    if schema_version != "3":
+        raise Stale(f"unsupported benchmark schema {schema_version!r}")
+    evidence_error = benchmark_results_evidence_error(data)
+    if evidence_error:
+        raise Stale(f"invalid schema-v3 evidence: {evidence_error}")
+
+
 def render_corpus_table(data: dict) -> str:
+    _require_publishable_schema_v3(data)
     corpora = data.get("corpora") or {}
-    schema_version = str(data.get("schema_version"))
+    schema_version = data.get("schema_version")
     lines = [
         "| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |",
         "| --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -186,10 +198,6 @@ def render_corpus_table(data: dict) -> str:
         if not row or "error" in row:
             continue
         _check_no_invented_numbers(row, schema_version)
-        if schema_version == "3":
-            evidence_error = benchmark_row_evidence_error(row)
-            if evidence_error:
-                raise Stale(f"{key}: invalid speedup evidence: {evidence_error}")
         g = row.get("gffbase") or {}
         spatial = row.get("spatial") or {}
         batched = row.get("batched") or {}
@@ -216,6 +224,7 @@ def render_corpus_table(data: dict) -> str:
 
 
 def render_provenance(data: dict) -> str:
+    _require_publishable_schema_v3(data)
     env = data.get("environment") or {}
     pkgs = env.get("packages") or {}
     ram = env.get("total_ram_bytes")
@@ -235,9 +244,14 @@ def render_provenance(data: dict) -> str:
     commit = (env.get("git_commit") or "")[:12]
     stamp = env.get("timestamp_utc", "")
     dirty = " (working tree dirty)" if env.get("git_dirty") else ""
+    python_version = (
+        env.get("python_version")
+        if data.get("schema_version") == "2"
+        else (env.get("python") or {}).get("version")
+    )
     return (
         f"{line1}  \n"
-        f"**Versions:** Python {(env.get('python') or {}).get('version', '?')} · {versions}  \n"
+        f"**Versions:** Python {python_version or '?'} · {versions}  \n"
         f"**Commit:** `{commit}`{dirty} · **Run:** {stamp}  \n"
         f"*Generated from `benchmarks/results/06_mega.json` by "
         f"`tools/gen_benchmark_tables.py`. Do not edit by hand.*"
@@ -255,6 +269,7 @@ def render_tradeoffs(data: dict) -> str:
     Rows the harness cannot measure -- "is a point query comparable?" -- stay
     qualitative, and stay out of here.
     """
+    _require_publishable_schema_v3(data)
     corpora = data.get("corpora") or {}
     rows = [r for r in corpora.values() if r and "error" not in r]
 
