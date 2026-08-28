@@ -234,10 +234,11 @@ start a corpus it cannot finish. Set `GFFBASE_BENCH_OUT` to use another volume.
 `tools/gen_benchmark_tables.py --check` runs in the test suite and will fail.
 
 **Never write a number that was not measured.** A run killed at the safety
-valve reports `wall_seconds: null` plus `wall_seconds_lower_bound`, and renders
-as `> N`. The generator refuses to publish a capped run that carries a wall
-time. This is not a style preference — the previous harness multiplied a
-timeout by two and that invented figure became a headline claim.
+valve reports `state: timed_out`, `wall_seconds: null`, and `cap_seconds`; it
+renders as censored and produces no speedup or speedup floor. The generator
+refuses current results that revive the old lower-bound fields or pair a
+timeout with a wall. This is not a style preference — the previous harness
+multiplied a timeout by two and that invented figure became a headline claim.
 
 ---
 

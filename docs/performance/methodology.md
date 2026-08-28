@@ -84,10 +84,15 @@ reasonable time — GTF has no explicit parents, so every gene and transcript ro
 has to be invented, one Python↔SQLite round trip at a time. The harness caps it
 with `--legacy-timeout` (default 90 minutes).
 
-**A capped run yields a lower bound, never an estimate.** In the results file
-`wall_seconds` is `null`, `wall_seconds_lower_bound` carries the cap, and the
-speedup appears as `ingest_speedup_lower_bound`. The rendered table prints
-`> 90 min` and `> N×`.
+**A capped run is censored, not measured.** In a current result its state is
+`timed_out`, `cap_seconds` records the safety valve, and `wall_seconds` is
+`null`. It produces neither a speedup nor a speedup floor. Tables render only
+`censored at 90 min` in the comparator column.
+
+The preserved 2026-08-15 Mac artifact predates this contract and uses schema
+v2 names such as `wall_seconds_lower_bound`. Its bytes remain historical
+evidence, but the renderer treats those fields only as censoring metadata and
+never repeats the old `> N×` claim.
 
 This replaced a hardcoded `wall_seconds = timeout × 2.0`. That factor had no
 measurement behind it, and it was the sole source of the previously published
@@ -126,12 +131,17 @@ result file reports `n = 1` it carries a `value` key and deliberately **no**
 
 ### Equal work, or no ratio
 
-A speedup is only recorded when both engines report the **same feature
-count**. Each count was always measured; nothing compared them, so a corpus
-where they diverged — a differing duplicate-ID policy, a parent-synthesis
-difference on GTF — would have published a headline number comparing two
-different jobs. A mismatch now prints a warning and suppresses the speedup
-rather than quietly averaging over it.
+A speedup is recorded only when both completed databases have the same strict
+`database-signature-v3`. The signature covers every logical segment,
+canonicalized per-segment attributes (including empty flags and value order),
+direct relationships, minimum-depth closure, feature counts, and the
+feature-type histogram. Feature counts remain a useful diagnostic but are not
+accepted as a correctness proof by themselves.
+
+Attribute **key** order is deliberately canonicalized lexically because GFF/GTF
+key order is non-semantic and engines may expose inferred attributes
+differently. Value order is retained within each key, so reordering values
+changes the signature while reordering keys does not.
 
 ---
 
