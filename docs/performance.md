@@ -28,15 +28,15 @@ measurements are taken — and what they do and do not claim — is on the
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
 | --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | > 1 hr 30 min | **> 22.0×** | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | censored at 1 hr 30 min | — | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
 | **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **3 min 1 s** | 3 min 37 s | **1.20×** | 4.73 GB | **1,188** | 352 ms / 999 k desc |
 | **CHESS 3.1.3** | GFF3 | 2,761,061 | **48.4 s** | 1 min 9 s | **1.43×** | 2.43 GB | **1,893** | 96 ms / 161 k desc |
 | **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **19.8 s** | 26.5 s | **1.34×** | 1.61 GB | **2,086** | 80 ms / 156 k desc |
 <!-- END GENERATED: corpus-table -->
 
-A `>` in the legacy column means that run was **killed at the safety valve
-without finishing**, so both its wall time and the speedup are floors. No value
-in this table is extrapolated; see
+“Censored at” means that comparator was **killed at the safety valve without
+finishing**. The cap is shown as censoring evidence; no wall or speedup is
+derived from it. See
 [Capped runs](performance/methodology.md#capped-runs-and-why-there-are-no-extrapolated-numbers).
 
 !!! note "GENCODE v49 GFF3 is missing from this run"
@@ -142,7 +142,7 @@ The rest of the ledger is qualitative, and stays that way:
 
 | | gffbase | legacy `gffutils` |
 | --- | --- | --- |
-| **Ingest wall** | faster on every corpus measured | — |
+| **Ingest wall** | faster in each completed, comparable corpus | — |
 | **Single-feature point query** | comparable | comparable |
 | **Row-by-row loop over many IDs** | **slower** | faster |
 | **Bulk batched extraction** | one query, zero `Feature` objects | not available |

@@ -271,10 +271,11 @@ everything from scratch.
   measurement behind it, whose own comment conceded there was no way to observe
   `gffutils`' progress. It was the sole source of the published "≥ 2 hr 30 min"
   legacy wall and the "≥ 32×" headline. A capped run now reports
-  `wall_seconds: null` plus `wall_seconds_lower_bound`, the speedup becomes
-  `ingest_speedup_lower_bound`, and tables render `> 90 min` / `> N×`. The
-  renderer refuses outright to publish a row whose capped run still carries a
-  wall time.
+  `state: timed_out`, `wall_seconds: null`, and the observed `cap_seconds`.
+  Timed-out comparators produce neither a ratio nor a ratio floor; tables label
+  them as censored. The preserved schema-v2 Mac artifact retains its original
+  lower-bound field names, but the renderer never presents them as a current
+  performance claim.
 
 - **Every result carries its provenance.** CPU model, physical and logical core
   count, RAM, OS, Python, DuckDB, PyArrow, `gffutils`, `gffbase` and `rustc`
