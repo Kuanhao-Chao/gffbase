@@ -35,19 +35,23 @@ from __future__ import annotations
 
 import gzip
 import hashlib
-import io
 import json
+import lzma
 import math
 import os
 import platform
 import re
 import shutil
+import stat
 import statistics
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import zipfile
+import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from email.parser import BytesParser
@@ -85,6 +89,15 @@ LEGACY_DB = OUT / "gencode-gff3_legacy.sqlite"
 SCHEMA_VERSION = "3"
 _CANDIDATE_VERSION = "0.2.0rc1"
 _COMPARATOR_VERSION = "0.14"
+_MAX_CANDIDATE_WHEEL_BYTES = 256 << 20
+_MAX_CANDIDATE_WHEEL_MEMBERS = 4096
+_MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES = 512 << 20
+_MAX_CANDIDATE_NATIVE_BYTES = 128 << 20
+_MAX_CANDIDATE_METADATA_BYTES = 1 << 20
+_ZIP_EOCD_SIZE = 22
+_ZIP64_LOCATOR_SIZE = 20
+_ZIP64_EOCD_MIN_SIZE = 56
+_ZIP_CENTRAL_HEADER_SIZE = 46
 
 # These are applied to every ingest child.  Keeping the complete set in the
 # top-level provenance lets a controller reject a run that would otherwise
@@ -196,6 +209,23 @@ def _cpu_model() -> str | None:
     return platform.processor() or None
 
 
+def _runtime_libc_identity() -> dict[str, str | None]:
+    """Return a closed, portable libc identity from standard-library evidence."""
+
+    if not sys.platform.startswith("linux"):
+        return {"family": None, "version": None}
+    raw_family, raw_version = platform.libc_ver()
+    family = {
+        "glibc": "glibc",
+        "gnu libc": "glibc",
+        "musl": "musl",
+    }.get(raw_family.casefold(), "unknown")
+    if family == "unknown" or not re.fullmatch(r"\d+(?:\.\d+)+", raw_version):
+        return {"family": family, "version": None}
+    version = ".".join(str(int(component)) for component in raw_version.split("."))
+    return {"family": family, "version": version}
+
+
 def sha256_file(path: Path, *, chunk_size: int = 1 << 20) -> str:
     """Hash *path* without loading a benchmark corpus into memory."""
 
@@ -304,6 +334,217 @@ def _installed_gffbase() -> dict:
     return info
 
 
+def _zip_directory_metadata(path: Path) -> tuple[int, int, int]:
+    """Return ``(entry_count, central_offset, central_size)`` without ``ZipFile``.
+
+    ``zipfile.ZipFile`` materializes the complete central directory in memory.
+    Read the bounded end records first so an archive claiming an excessive
+    number of members is rejected before that allocation. Wheels are required
+    to be single-disk ZIP files without trailing bytes.
+    """
+
+    path = Path(path)
+    try:
+        size = path.stat().st_size
+        if size < _ZIP_EOCD_SIZE:
+            raise ValueError("candidate wheel central directory is missing")
+        tail_size = min(size, _ZIP_EOCD_SIZE + 0xFFFF + _ZIP64_LOCATOR_SIZE)
+        with path.open("rb") as handle:
+            tail_offset = size - tail_size
+            handle.seek(tail_offset)
+            tail = handle.read(tail_size)
+
+            relative = tail.rfind(b"PK\x05\x06")
+            while relative >= 0:
+                if relative + _ZIP_EOCD_SIZE <= len(tail):
+                    comment_size = struct.unpack_from("<H", tail, relative + 20)[0]
+                    absolute = tail_offset + relative
+                    if absolute + _ZIP_EOCD_SIZE + comment_size == size:
+                        break
+                relative = tail.rfind(b"PK\x05\x06", 0, relative)
+            if relative < 0:
+                raise ValueError("candidate wheel central directory is missing")
+
+            eocd_offset = tail_offset + relative
+            (
+                signature,
+                disk_number,
+                central_disk,
+                entries_on_disk,
+                entry_count,
+                central_size,
+                central_offset,
+                _comment_size,
+            ) = struct.unpack_from("<4s4H2IH", tail, relative)
+            if signature != b"PK\x05\x06" or disk_number != 0 or central_disk != 0:
+                raise ValueError("candidate wheel central directory is not single-disk")
+
+            uses_zip64 = (
+                entries_on_disk == 0xFFFF
+                or entry_count == 0xFFFF
+                or central_size == 0xFFFFFFFF
+                or central_offset == 0xFFFFFFFF
+            )
+            if not uses_zip64:
+                if entries_on_disk != entry_count:
+                    raise ValueError("candidate wheel central directory counts disagree")
+                if central_offset + central_size != eocd_offset:
+                    raise ValueError("candidate wheel central directory bounds are invalid")
+                return int(entry_count), int(central_offset), int(central_size)
+
+            locator_offset = eocd_offset - _ZIP64_LOCATOR_SIZE
+            if locator_offset < 0:
+                raise ValueError("candidate wheel ZIP64 central directory is missing")
+            handle.seek(locator_offset)
+            locator = handle.read(_ZIP64_LOCATOR_SIZE)
+            if len(locator) != _ZIP64_LOCATOR_SIZE:
+                raise ValueError("candidate wheel ZIP64 central directory is truncated")
+            locator_signature, zip64_disk, zip64_offset, total_disks = struct.unpack(
+                "<4sIQI", locator
+            )
+            if (
+                locator_signature != b"PK\x06\x07"
+                or zip64_disk != 0
+                or total_disks != 1
+                or zip64_offset + _ZIP64_EOCD_MIN_SIZE > locator_offset
+            ):
+                raise ValueError("candidate wheel ZIP64 central directory is invalid")
+
+            handle.seek(zip64_offset)
+            zip64_record = handle.read(_ZIP64_EOCD_MIN_SIZE)
+            if len(zip64_record) != _ZIP64_EOCD_MIN_SIZE:
+                raise ValueError("candidate wheel ZIP64 central directory is truncated")
+            (
+                zip64_signature,
+                record_size,
+                _made_by,
+                _needed,
+                zip64_disk_number,
+                zip64_central_disk,
+                zip64_entries_on_disk,
+                zip64_entry_count,
+                zip64_central_size,
+                zip64_central_offset,
+            ) = struct.unpack("<4sQ2H2I4Q", zip64_record)
+            if (
+                zip64_signature != b"PK\x06\x06"
+                or record_size < 44
+                or zip64_offset + 12 + record_size != locator_offset
+                or zip64_disk_number != 0
+                or zip64_central_disk != 0
+                or zip64_entries_on_disk != zip64_entry_count
+                or zip64_central_offset + zip64_central_size != zip64_offset
+                or (entries_on_disk != 0xFFFF and entries_on_disk != zip64_entries_on_disk)
+                or (entry_count != 0xFFFF and entry_count != zip64_entry_count)
+                or (central_size != 0xFFFFFFFF and central_size != zip64_central_size)
+                or (central_offset != 0xFFFFFFFF and central_offset != zip64_central_offset)
+            ):
+                raise ValueError("candidate wheel ZIP64 central directory is invalid")
+            return (
+                int(zip64_entry_count),
+                int(zip64_central_offset),
+                int(zip64_central_size),
+            )
+    except OSError as exc:
+        raise ValueError("candidate wheel central directory could not be read") from exc
+
+
+def _zip_entry_count_before_open(path: Path) -> int:
+    """Return the declared ZIP entry count before ``ZipFile`` materializes it."""
+
+    return _zip_directory_metadata(Path(path))[0]
+
+
+def _raw_central_directory_names(
+    path: Path, *, entry_count: int, central_offset: int, central_size: int
+) -> list[str]:
+    """Decode member names directly so embedded NUL bytes cannot be hidden."""
+
+    names: list[str] = []
+    try:
+        with Path(path).open("rb") as handle:
+            handle.seek(central_offset)
+            central_end = central_offset + central_size
+            for _ in range(entry_count):
+                header = handle.read(_ZIP_CENTRAL_HEADER_SIZE)
+                if len(header) != _ZIP_CENTRAL_HEADER_SIZE:
+                    raise ValueError("candidate wheel central directory is truncated")
+                fields = struct.unpack("<4s6H3I5H2I", header)
+                if fields[0] != b"PK\x01\x02":
+                    raise ValueError("candidate wheel central directory entry is invalid")
+                flags = fields[3]
+                name_size, extra_size, comment_size = fields[10:13]
+                raw_name = handle.read(name_size)
+                if len(raw_name) != name_size:
+                    raise ValueError("candidate wheel central directory name is truncated")
+                if b"\x00" in raw_name:
+                    raise ValueError("candidate wheel member name contains NUL")
+                encoding = "utf-8" if flags & 0x800 else "cp437"
+                try:
+                    name = raw_name.decode(encoding)
+                except UnicodeDecodeError as exc:
+                    raise ValueError("candidate wheel member path is not decodable") from exc
+                names.append(name)
+                handle.seek(extra_size + comment_size, os.SEEK_CUR)
+                if handle.tell() > central_end:
+                    raise ValueError("candidate wheel central directory bounds are invalid")
+            if handle.tell() != central_end:
+                raise ValueError(
+                    "candidate wheel central directory count differs from its contents"
+                )
+    except OSError as exc:
+        raise ValueError("candidate wheel central directory could not be read") from exc
+    return names
+
+
+def _validate_wheel_member_names(names: list[str]) -> None:
+    """Reject non-portable names and aliases before reading archive members."""
+
+    canonical_keys: set[str] = set()
+    for name in names:
+        key = unicodedata.normalize("NFC", name).casefold()
+        if key in canonical_keys:
+            raise ValueError("candidate wheel contains ambiguous member paths")
+        canonical_keys.add(key)
+
+    namespace: dict[str, bool] = {}
+    for name in names:
+        normalized = unicodedata.normalize("NFC", name)
+        is_directory = name.endswith("/")
+        body = name[:-1] if is_directory else name
+        parts = body.split("/")
+        if (
+            not body
+            or name != normalized
+            or name.startswith("/")
+            or "\\" in name
+            or re.match(r"^[A-Za-z]:", name)
+            or any(part in {"", ".", ".."} for part in parts)
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        ):
+            raise ValueError("candidate wheel member path is not canonical and portable")
+        namespace_key = body.casefold()
+        if namespace_key in namespace:
+            raise ValueError("candidate wheel contains an ambiguous file/directory namespace")
+        namespace[namespace_key] = is_directory
+
+    regular_files = {key for key, is_directory in namespace.items() if not is_directory}
+    for key in namespace:
+        parts = key.split("/")
+        if any("/".join(parts[:index]) in regular_files for index in range(1, len(parts))):
+            raise ValueError("candidate wheel contains a file/directory namespace conflict")
+
+
+def _wheel_member_type_is_safe(member: zipfile.ZipInfo) -> bool:
+    """Return whether a member is a regular file/directory or has no POSIX type."""
+
+    mode = (member.external_attr >> 16) & 0xFFFF if member.create_system == 3 else 0
+    file_type = stat.S_IFMT(mode)
+    if member.is_dir():
+        return file_type in {0, stat.S_IFDIR}
+    return file_type in {0, stat.S_IFREG}
+
+
 def _candidate_wheel_artifact(install: dict) -> dict:
     """Inspect and bind the configured candidate wheel to the installed native."""
 
@@ -319,43 +560,148 @@ def _candidate_wheel_artifact(install: dict) -> dict:
     wheel_path = Path(configured_path)
     if not wheel_path.is_file():
         raise ValueError("candidate wheel path is not a file")
-    try:
-        wheel_bytes = wheel_path.read_bytes()
-    except OSError as exc:
-        raise ValueError("candidate wheel could not be read") from exc
-    actual_sha256 = hashlib.sha256(wheel_bytes).hexdigest()
-    if actual_sha256 != configured_sha256:
-        raise ValueError("candidate wheel SHA-256 differs from the configured digest")
     wheel_name = wheel_path.name
     filename_tags = _candidate_wheel_tags(wheel_name)
     if filename_tags is None:
         raise ValueError("candidate wheel filename is invalid")
 
-    try:
-        with zipfile.ZipFile(io.BytesIO(wheel_bytes)) as archive:
-            members = archive.namelist()
-            metadata_members = [name for name in members if name.endswith(".dist-info/METADATA")]
-            wheel_members = [name for name in members if name.endswith(".dist-info/WHEEL")]
-            native_members = [
-                name
-                for name in members
-                if name.count("/") == 1
-                and name.startswith("gffbase/")
-                and name.rsplit("/", 1)[-1].startswith("_native.")
-                and name.endswith((".so", ".pyd"))
-            ]
-            if len(metadata_members) != 1 or len(wheel_members) != 1:
-                raise ValueError("candidate wheel metadata members are not unique")
-            if metadata_members[0].rsplit("/", 1)[0] != wheel_members[0].rsplit("/", 1)[0]:
-                raise ValueError("candidate wheel metadata members disagree")
-            if len(native_members) != 1:
-                raise ValueError("candidate wheel must contain exactly one native member")
-            metadata = BytesParser().parsebytes(archive.read(metadata_members[0]))
-            wheel_metadata = BytesParser().parsebytes(archive.read(wheel_members[0]))
-            native_member = native_members[0]
-            native_sha256 = hashlib.sha256(archive.read(native_member)).hexdigest()
-    except zipfile.BadZipFile as exc:
-        raise ValueError("candidate wheel is not a valid ZIP archive") from exc
+    with tempfile.TemporaryDirectory(prefix=".gffbase-wheel-") as directory:
+        snapshot = Path(directory) / wheel_name
+        digest = hashlib.sha256()
+        copied = 0
+        try:
+            with wheel_path.open("rb") as source, snapshot.open("wb") as target:
+                while chunk := source.read(1 << 20):
+                    copied += len(chunk)
+                    if copied > _MAX_CANDIDATE_WHEEL_BYTES:
+                        raise ValueError("candidate wheel exceeds the compressed size limit")
+                    digest.update(chunk)
+                    target.write(chunk)
+        except OSError as exc:
+            raise ValueError("candidate wheel could not be read") from exc
+        actual_sha256 = digest.hexdigest()
+        if actual_sha256 != configured_sha256:
+            raise ValueError("candidate wheel SHA-256 differs from the configured digest")
+
+        entry_count, central_offset, central_size = _zip_directory_metadata(snapshot)
+        if entry_count > _MAX_CANDIDATE_WHEEL_MEMBERS:
+            raise ValueError("candidate wheel exceeds the member-count limit")
+        raw_names = _raw_central_directory_names(
+            snapshot,
+            entry_count=entry_count,
+            central_offset=central_offset,
+            central_size=central_size,
+        )
+        _validate_wheel_member_names(raw_names)
+
+        try:
+            with zipfile.ZipFile(snapshot) as archive:
+                members = archive.infolist()
+                names = [member.filename for member in members]
+                if len(members) != entry_count or names != raw_names:
+                    raise ValueError("candidate wheel central directory decoding is ambiguous")
+                if any(not _wheel_member_type_is_safe(member) for member in members):
+                    raise ValueError("candidate wheel members must be regular files or directories")
+                if any(member.flag_bits & 0x1 for member in members):
+                    raise ValueError("candidate wheel must not contain encrypted members")
+                if sum(member.file_size for member in members) > (
+                    _MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES
+                ):
+                    raise ValueError("candidate wheel exceeds the uncompressed size limit")
+                expected_dist_info = f"gffbase-{_CANDIDATE_VERSION}.dist-info"
+                dist_info_roots = {
+                    name.split("/", 1)[0]
+                    for name in names
+                    if name.split("/", 1)[0].casefold().endswith(".dist-info")
+                }
+                if dist_info_roots != {expected_dist_info}:
+                    raise ValueError("candidate wheel dist-info tree is invalid")
+                metadata_members = [
+                    member for member in members if member.filename.endswith(".dist-info/METADATA")
+                ]
+                wheel_members = [
+                    member for member in members if member.filename.endswith(".dist-info/WHEEL")
+                ]
+                native_members = [
+                    member
+                    for member in members
+                    if member.filename.count("/") == 1
+                    and member.filename.startswith("gffbase/")
+                    and member.filename.rsplit("/", 1)[-1].startswith("_native.")
+                    and member.filename.endswith((".so", ".pyd"))
+                ]
+                if len(metadata_members) != 1 or len(wheel_members) != 1:
+                    raise ValueError("candidate wheel metadata members are not unique")
+                if (
+                    metadata_members[0].filename != f"{expected_dist_info}/METADATA"
+                    or wheel_members[0].filename != f"{expected_dist_info}/WHEEL"
+                ):
+                    raise ValueError("candidate wheel dist-info directory is invalid")
+                if len(native_members) != 1:
+                    raise ValueError("candidate wheel must contain exactly one native member")
+                if any(
+                    member.file_size > _MAX_CANDIDATE_METADATA_BYTES
+                    for member in (metadata_members[0], wheel_members[0])
+                ):
+                    raise ValueError("candidate wheel metadata exceeds the size limit")
+                native_info = native_members[0]
+                if native_info.file_size > _MAX_CANDIDATE_NATIVE_BYTES:
+                    raise ValueError("candidate wheel native member exceeds the size limit")
+                native_member = native_info.filename
+                native_digest = hashlib.sha256()
+                metadata_bytes = bytearray()
+                wheel_bytes = bytearray()
+                actual_total = 0
+                for member in members:
+                    member_bytes = 0
+                    with archive.open(member) as member_handle:
+                        while chunk := member_handle.read(1 << 20):
+                            member_bytes += len(chunk)
+                            actual_total += len(chunk)
+                            if actual_total > _MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES:
+                                raise ValueError(
+                                    "candidate wheel exceeds the uncompressed size limit"
+                                )
+                            if member is metadata_members[0]:
+                                if member_bytes > _MAX_CANDIDATE_METADATA_BYTES:
+                                    raise ValueError(
+                                        "candidate wheel metadata exceeds the size limit"
+                                    )
+                                metadata_bytes.extend(chunk)
+                            elif member is wheel_members[0]:
+                                if member_bytes > _MAX_CANDIDATE_METADATA_BYTES:
+                                    raise ValueError(
+                                        "candidate wheel metadata exceeds the size limit"
+                                    )
+                                wheel_bytes.extend(chunk)
+                            elif member is native_info:
+                                if member_bytes > _MAX_CANDIDATE_NATIVE_BYTES:
+                                    raise ValueError(
+                                        "candidate wheel native member exceeds the size limit"
+                                    )
+                                native_digest.update(chunk)
+                    if member_bytes != member.file_size:
+                        raise ValueError("candidate wheel member size differs from its header")
+                    if member in (metadata_members[0], wheel_members[0]) and (
+                        member_bytes > _MAX_CANDIDATE_METADATA_BYTES
+                    ):
+                        raise ValueError("candidate wheel metadata exceeds the size limit")
+                    if member is native_info and member_bytes > _MAX_CANDIDATE_NATIVE_BYTES:
+                        raise ValueError("candidate wheel native member exceeds the size limit")
+                metadata = BytesParser().parsebytes(bytes(metadata_bytes))
+                wheel_metadata = BytesParser().parsebytes(bytes(wheel_bytes))
+                native_sha256 = native_digest.hexdigest()
+        except (
+            zipfile.BadZipFile,
+            zipfile.LargeZipFile,
+            NotImplementedError,
+            RuntimeError,
+            EOFError,
+            OSError,
+            lzma.LZMAError,
+            zlib.error,
+        ) as exc:
+            raise ValueError("candidate wheel is not a valid ZIP archive") from exc
 
     metadata_names = metadata.get_all("Name") or []
     metadata_versions = metadata.get_all("Version") or []
@@ -416,6 +762,7 @@ def environment(*, benchmark_controls: dict[str, str] | None = None) -> dict:
         "hostname": platform.node(),
         "platform": platform.platform(),
         "machine": platform.machine(),
+        "libc": _runtime_libc_identity(),
         "cpu_model": _cpu_model(),
         "cpu_cores_physical": psutil.cpu_count(logical=False),
         "cpu_cores_logical": psutil.cpu_count(logical=True),
@@ -777,11 +1124,6 @@ def _gffutils_signature_components(
                     values = json.loads(raw or "{}")
                     logical = str(dbid)
                     seqid, source, featuretype, start, end, score, strand, frame = columns
-                    # The projects use different reserved source labels for
-                    # the same inferred GTF parents.  Treat both labels as one
-                    # engine-neutral semantic source.
-                    if source in {"gffbase_derived", "gffutils_derived"}:
-                        source = "derived"
                     stages.append(
                         (
                             rowid,
@@ -808,6 +1150,37 @@ def _gffutils_signature_components(
             cursor = con.execute("SELECT parent, child, level FROM relations")
             while rows := cursor.fetchmany(10_000):
                 norm.executemany("INSERT INTO relations VALUES (?, ?, ?)", rows)
+            if is_gtf:
+                # gffutils has no persisted synthetic flag.  Explicit GTF
+                # parent rows do have attribute-backed relation artifacts,
+                # including create_unique cases such as gene ``g_1`` with a
+                # raw ``g -> g_1`` depth-2 relation.  Preserve those authored
+                # rows and normalize only reserved-source parents for which
+                # no such evidence exists.
+                norm.execute(
+                    """
+                    CREATE TABLE authored_parent_artifacts AS
+                    SELECT DISTINCT r.parent, r.child, r.depth
+                    FROM relations r
+                    JOIN stage s ON s.dbid = r.child
+                    JOIN attrs a ON a.dbid = s.dbid
+                    WHERE (s.featuretype = 'gene' AND r.depth = 2
+                           AND a.key = 'gene_id' AND a.value = r.parent)
+                       OR (s.featuretype = 'transcript' AND r.depth = 1
+                           AND a.key = 'transcript_id' AND a.value = r.parent)
+                    """
+                )
+                norm.execute(
+                    """
+                    UPDATE stage AS s SET source = 'derived'
+                    WHERE s.source IN ('gffbase_derived', 'gffutils_derived')
+                      AND s.featuretype IN ('gene', 'transcript')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM authored_parent_artifacts a
+                          WHERE a.child = s.dbid
+                      )
+                    """
+                )
             norm.commit()
             norm.executescript(
                 """
@@ -847,7 +1220,9 @@ def _gffutils_signature_components(
                 "LEFT JOIN mappings mc ON mc.dbid = r.child " + endpoint_filter
             )
             semantic_relation_filter = (
-                "COALESCE(mp.logical, r.parent) <> COALESCE(mc.logical, r.child)"
+                "NOT EXISTS (SELECT 1 FROM authored_parent_artifacts artifact "
+                "WHERE artifact.parent = r.parent AND artifact.child = r.child "
+                "AND artifact.depth = r.depth)"
                 if is_gtf
                 else "1 = 1"
             )
@@ -901,6 +1276,7 @@ _SIGNATURE_COMPONENTS = (
     ("direct_relationships", "direct_relationship_count"),
     ("closure", "closure_count"),
 )
+_EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 
 def _signature_digest(payload: dict) -> str:
@@ -987,6 +1363,26 @@ def validate_database_signature(signature: dict | None) -> bool:
         total += entry[1]
     if total != signature["feature_count"]:
         return False
+    if signature["segment_count"] < signature["feature_count"]:
+        return False
+    if signature["closure_count"] < signature["direct_relationship_count"]:
+        return False
+    if any(entry[1] <= 0 for entry in histogram):
+        return False
+    if not histogram and signature["feature_count"] != 0:
+        return False
+    component_counts = [signature[count_name] for _, count_name in _SIGNATURE_COMPONENTS]
+    if signature["feature_count"] == 0 and any(component_counts):
+        return False
+    if signature["segment_count"] == 0 and signature["attribute_count"] != 0:
+        return False
+    if (signature["direct_relationship_count"] == 0) != (signature["closure_count"] == 0):
+        return False
+    if any(
+        (signature[count_name] == 0) != (signature[f"{component}_sha256"] == _EMPTY_SHA256)
+        for component, count_name in _SIGNATURE_COMPONENTS
+    ):
+        return False
     payload = {key: value for key, value in signature.items() if key != "combined_sha256"}
     return _signature_digest(payload) == signature["combined_sha256"]
 
@@ -1007,10 +1403,16 @@ def database_signature(path: Path, *, engine: str) -> dict:
         con = duckdb.connect(str(path), read_only=True)
         fmt_row = con.execute("SELECT value FROM meta WHERE key = 'fmt'").fetchone()
         is_gtf = bool(fmt_row and fmt_row[0] == "gtf")
-        segment_sql = """
+        source_sql = (
+            "CASE WHEN is_synthetic = TRUE "
+            "AND source IN ('gffbase_derived', 'gffutils_derived') "
+            "THEN 'derived' ELSE source END"
+            if is_gtf
+            else "source"
+        )
+        segment_sql = f"""
             SELECT feature_id, seg_idx, seqid,
-                   CASE WHEN source IN ('gffbase_derived', 'gffutils_derived')
-                        THEN 'derived' ELSE source END,
+                   {source_sql},
                    featuretype, start, "end", score, strand, frame
             FROM segments_all ORDER BY feature_id, seg_idx
         """
@@ -1440,14 +1842,40 @@ def _runtime_platform_identity(platform_name: object, machine: object) -> tuple[
     return operating_system, architecture
 
 
+def _libc_identity_is_valid(value: object, *, operating_system: str) -> bool:
+    if not _exact_keys(value, {"family", "version"}) or not isinstance(value, dict):
+        return False
+    family = value.get("family")
+    version = value.get("version")
+    if operating_system != "linux":
+        return family is None and version is None
+    return (
+        family in {"glibc", "musl"}
+        and isinstance(version, str)
+        and bool(re.fullmatch(r"(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))+", version))
+    )
+
+
 def _wheel_platform_identity(tag: str) -> tuple[str, str] | None:
     linux = re.fullmatch(
-        r"(?:manylinux(?:_\d+_\d+|1|2010|2014)|musllinux_\d+_\d+|linux)"
-        r"_(x86_64|aarch64)",
+        r"(?P<policy>manylinux(?:_\d+_\d+|1|2010|2014)|musllinux_\d+_\d+|linux)"
+        r"_(?P<arch>x86_64|aarch64)",
         tag,
     )
     if linux:
-        return "linux", "x86_64" if linux.group(1) == "x86_64" else "aarch64"
+        policy = linux.group("policy")
+        versioned = re.fullmatch(r"(manylinux|musllinux)_(\d+)_(\d+)", policy)
+        if versioned:
+            family, major, minor = (
+                versioned.group(1),
+                int(versioned.group(2)),
+                int(versioned.group(3)),
+            )
+            if (family == "manylinux" and (major != 2 or minor < 5)) or (
+                family == "musllinux" and (major != 1 or minor < 1)
+            ):
+                return None
+        return "linux", "x86_64" if linux.group("arch") == "x86_64" else "aarch64"
     windows = re.fullmatch(r"win_(amd64|arm64)", tag)
     if windows:
         return "windows", "x86_64" if windows.group(1) == "amd64" else "aarch64"
@@ -1465,6 +1893,7 @@ def _native_module_matches_runtime(
     runtime_tag: str,
     wheel_abi_tag: str,
     wheel_platform_tag: str,
+    runtime_libc: object,
 ) -> bool:
     if not isinstance(native_module, str):
         return False
@@ -1485,6 +1914,12 @@ def _native_module_matches_runtime(
         if not match:
             return False
         native_libc = match.group(3)
+        libc_family = runtime_libc.get("family") if isinstance(runtime_libc, dict) else None
+        expected_native_libc = (
+            {"glibc": "gnu", "musl": "musl"}.get(libc_family)
+            if isinstance(libc_family, str)
+            else None
+        )
         libc_matches = not (
             (wheel_platform_tag.startswith("manylinux") and native_libc != "gnu")
             or (wheel_platform_tag.startswith("musllinux") and native_libc != "musl")
@@ -1492,6 +1927,7 @@ def _native_module_matches_runtime(
         return (
             f"cp{match.group(1)}" == runtime_tag
             and _normalized_architecture(match.group(2)) == architecture
+            and native_libc == expected_native_libc
             and libc_matches
         )
     if operating_system == "windows":
@@ -1529,12 +1965,52 @@ def _candidate_wheel_tags(wheel: object) -> tuple[str, str, str] | None:
     return python_tag, abi_tag, platform_tag
 
 
+def _linux_wheel_matches_libc(platform_tag: str, libc: object) -> bool:
+    if not isinstance(libc, dict):
+        return False
+    family = libc.get("family")
+    version = libc.get("version")
+    if not isinstance(version, str):
+        return False
+    runtime_version = tuple(int(component) for component in version.split("."))
+    if platform_tag.startswith("linux_"):
+        return family in {"glibc", "musl"}
+    legacy_manylinux = {
+        "manylinux1": (2, 5),
+        "manylinux2010": (2, 12),
+        "manylinux2014": (2, 17),
+    }
+    prefix = platform_tag.rsplit("_", 2)[0]
+    if prefix in legacy_manylinux:
+        return family == "glibc" and runtime_version >= legacy_manylinux[prefix]
+    manylinux = re.fullmatch(r"manylinux_(\d+)_(\d+)_(?:x86_64|aarch64)", platform_tag)
+    if manylinux:
+        required = (int(manylinux.group(1)), int(manylinux.group(2)))
+        return (
+            required[0] == 2
+            and required[1] >= 5
+            and family == "glibc"
+            and runtime_version >= required
+        )
+    musllinux = re.fullmatch(r"musllinux_(\d+)_(\d+)_(?:x86_64|aarch64)", platform_tag)
+    if musllinux:
+        required = (int(musllinux.group(1)), int(musllinux.group(2)))
+        return (
+            required[0] == 1
+            and required[1] >= 1
+            and family == "musl"
+            and runtime_version >= required
+        )
+    return False
+
+
 def _artifact_matches_runtime(
     wheel: object,
     native_module: object,
     python_version: object,
     platform_name: object,
     machine: object,
+    libc: object,
 ) -> bool:
     runtime = _python_runtime_version(python_version)
     platform_identity = _runtime_platform_identity(platform_name, machine)
@@ -1549,6 +2025,8 @@ def _artifact_matches_runtime(
         python_abi_matches = python_tag == runtime_tag and abi_tag == runtime_tag
     if not python_abi_matches or _wheel_platform_identity(platform_tag) != platform_identity:
         return False
+    if platform_identity[0] == "linux" and not _linux_wheel_matches_libc(platform_tag, libc):
+        return False
     return _native_module_matches_runtime(
         native_module,
         operating_system=platform_identity[0],
@@ -1556,6 +2034,7 @@ def _artifact_matches_runtime(
         runtime_tag=runtime_tag,
         wheel_abi_tag=abi_tag,
         wheel_platform_tag=platform_tag,
+        runtime_libc=libc,
     )
 
 
@@ -1566,6 +2045,7 @@ def _artifact_evidence_is_valid(
     *,
     platform_name: object,
     machine: object,
+    libc: object,
 ) -> bool:
     if not _exact_keys(artifact, {"wheel", "wheel_sha256", "metadata", "wheel_tags", "native"}):
         return False
@@ -1603,6 +2083,7 @@ def _artifact_evidence_is_valid(
             python.get("version"),
             platform_name,
             machine,
+            libc,
         )
     )
 
@@ -1723,6 +2204,7 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
         "hostname",
         "platform",
         "machine",
+        "libc",
         "cpu_model",
         "cpu_cores_physical",
         "cpu_cores_logical",
@@ -1761,6 +2243,7 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
     affinity = value.get("cpu_affinity")
     physical = value.get("cpu_cores_physical")
     logical = value.get("cpu_cores_logical")
+    platform_identity = _runtime_platform_identity(value.get("platform"), value.get("machine"))
     return (
         _utc_timestamp_is_valid(value.get("timestamp_utc"))
         and _is_git_commit(value.get("git_commit"))
@@ -1776,6 +2259,8 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
         and logical >= physical
         and _positive_int(value.get("total_ram_bytes"))
         and _positive_int(value.get("free_disk_bytes"))
+        and platform_identity is not None
+        and _libc_identity_is_valid(value.get("libc"), operating_system=platform_identity[0])
         and isinstance(affinity, list)
         and bool(affinity)
         and all(_nonnegative_int(cpu) for cpu in affinity)
@@ -1812,6 +2297,7 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
             python,
             platform_name=value.get("platform"),
             machine=value.get("machine"),
+            libc=value.get("libc"),
         )
         and _bounded_env_is_valid(value.get("env"), threads=threads)
     )
