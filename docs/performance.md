@@ -132,10 +132,10 @@ run as the speed numbers rather than retyped:
 <!-- BEGIN GENERATED: tradeoffs-table -->
 | | gffbase | legacy `gffutils` | ratio |
 | --- | ---: | ---: | ---: |
-| **Peak ingest RSS** | 1.61 GB – 5.62 GB | 174.50 MB – 495.06 MB | 9.44–24.24× |
-| **On-disk database** | 610.51 MB – 6.14 GB | 472.90 MB – 4.68 GB | 1.29–1.36× |
+| **Peak ingest RSS** | 1.61 GB – 4.73 GB | 174.50 MB – 217.52 MB | 9.44–24.24× |
+| **On-disk database** | 610.51 MB – 4.95 GB | 472.90 MB – 3.79 GB | 1.29–1.36× |
 
-*Measured across 4 corpora; ratios are gffbase ÷ legacy.*
+*Measured across 3 corpora; ratios are gffbase ÷ legacy.*
 <!-- END GENERATED: tradeoffs-table -->
 
 The rest of the ledger is qualitative, and stays that way:
