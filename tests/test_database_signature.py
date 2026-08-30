@@ -32,6 +32,8 @@ chr1\tsrc\texon\t40\t60\t.\t+\t.\tgene_id "g"; transcript_id "t"; exon_number "2
 chr1\tsrc\tCDS\t5\t15\t.\t+\t0\tgene_id "g"; transcript_id "t";
 """
 
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+
 
 def _independent_signature(seed: str = "fixture") -> dict:
     """A valid v3 payload made without the production validation helpers."""
@@ -52,6 +54,19 @@ def _independent_signature(seed: str = "fixture") -> dict:
         "feature_count": 3,
         "featuretype_histogram": [["CDS", 1], ["gene", 1], ["mRNA", 1]],
     }
+    return {
+        **payload,
+        "combined_sha256": hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def _independently_recomputed_signature(signature: dict, **changes: object) -> dict:
+    """Mutate a literal fixture and recompute its digest without production code."""
+
+    payload = {key: value for key, value in signature.items() if key != "combined_sha256"}
+    payload.update(changes)
     return {
         **payload,
         "combined_sha256": hashlib.sha256(
@@ -230,6 +245,78 @@ def test_signature_ignores_gffutils_self_ancestry_for_explicit_gtf_parents(tmp_p
     assert signatures_match(candidate_signature, comparator_signature) is True
 
 
+@pytest.mark.parametrize(
+    ("kind", "rows", "artifact"),
+    [
+        (
+            "gene",
+            'chr1\tsrc\tgene\t1\t100\t.\t+\t.\tgene_id "g";\n'
+            'chr2\tgffbase_derived\tgene\t1\t100\t.\t+\t.\tgene_id "g";\n',
+            ("g", "g_1", 2),
+        ),
+        (
+            "transcript",
+            'chr1\tsrc\ttranscript\t1\t100\t.\t+\t.\ttranscript_id "t";\n'
+            'chr2\tgffbase_derived\ttranscript\t1\t100\t.\t+\t.\ttranscript_id "t";\n',
+            ("t", "t_1", 1),
+        ),
+    ],
+)
+def test_signature_handles_duplicate_explicit_gtf_parent_artifacts(tmp_path, kind, rows, artifact):
+    """create_unique artifacts are identified by authored attributes, not dbid equality."""
+
+    source = tmp_path / f"duplicate-{kind}.gtf"
+    candidate = tmp_path / f"duplicate-{kind}.duckdb"
+    comparator = tmp_path / f"duplicate-{kind}.sqlite"
+    source.write_text(rows)
+    create_db(
+        str(source),
+        str(candidate),
+        force=True,
+        merge_strategy="create_unique",
+        disable_infer_genes=True,
+        disable_infer_transcripts=True,
+    ).close()
+    gffutils.create_db(
+        str(source),
+        str(comparator),
+        force=True,
+        merge_strategy="create_unique",
+        keep_order=False,
+        sort_attribute_values=False,
+        disable_infer_genes=True,
+        disable_infer_transcripts=True,
+    )
+
+    raw = sqlite3.connect(comparator)
+    try:
+        assert (
+            artifact
+            in raw.execute(
+                "SELECT parent, child, level FROM relations ORDER BY parent, child, level"
+            ).fetchall()
+        )
+    finally:
+        raw.close()
+
+    candidate_signature = database_signature(candidate, engine="gffbase")
+    comparator_signature = database_signature(comparator, engine="gffutils")
+    assert signatures_match(candidate_signature, comparator_signature) is True
+
+    candidate_con = duckdb.connect(str(candidate))
+    candidate_con.execute("LOAD spatial")
+    candidate_con.execute(
+        "UPDATE features SET source = 'source-mutated' "
+        "WHERE featuretype = ? AND source = 'gffbase_derived'",
+        [kind],
+    )
+    candidate_con.close()
+    changed = database_signature(candidate, engine="gffbase")
+
+    assert changed["segments_sha256"] != comparator_signature["segments_sha256"]
+    assert signatures_match(changed, comparator_signature) is False
+
+
 def test_signature_includes_empty_attributes_and_ordered_values(tmp_path):
     source = tmp_path / "flags.gff3"
     candidate = tmp_path / "flags.duckdb"
@@ -273,6 +360,98 @@ def test_signature_treats_attribute_key_order_as_nonsemantic_but_preserves_value
     assert signatures_match(baseline, value_reordered) is False
 
 
+@pytest.mark.parametrize("engine", ["gffbase", "gffutils"])
+@pytest.mark.parametrize("suffix", ["gff3", "gtf"])
+def test_signature_preserves_authored_reserved_source_labels(tmp_path, engine, suffix):
+    source = tmp_path / f"authored.{suffix}"
+    target = tmp_path / ("authored.duckdb" if engine == "gffbase" else "authored.sqlite")
+    if suffix == "gff3":
+        source.write_text("chr1\tgffbase_derived\tgene\t1\t10\t.\t+\t.\tID=g\n")
+    else:
+        source.write_text('chr1\tgffbase_derived\tgene\t1\t10\t.\t+\t.\tgene_id "g";\n')
+    if engine == "gffbase":
+        create_db(str(source), str(target), force=True, force_gff=suffix == "gff3").close()
+        baseline = database_signature(target, engine=engine)
+        con = duckdb.connect(str(target))
+        con.execute("LOAD spatial")
+        con.execute("UPDATE features SET source = 'gffutils_derived'")
+        con.close()
+    else:
+        gffutils.create_db(
+            str(source),
+            str(target),
+            force=True,
+            merge_strategy="create_unique",
+            keep_order=False,
+            sort_attribute_values=False,
+            disable_infer_genes=True,
+            disable_infer_transcripts=True,
+        )
+        baseline = database_signature(target, engine=engine)
+        con = sqlite3.connect(target)
+        con.execute("UPDATE features SET source = 'gffutils_derived'")
+        con.commit()
+        con.close()
+
+    changed = database_signature(target, engine=engine)
+
+    assert changed["segments_sha256"] != baseline["segments_sha256"]
+    assert signatures_match(baseline, changed) is False
+
+
+@pytest.mark.parametrize("featuretype", ["exon", "CDS"])
+def test_signature_retains_semantic_gtf_self_relations_across_engines(tmp_path, featuretype):
+    source = tmp_path / "explicit-self.gtf"
+    candidate = tmp_path / "explicit-self.duckdb"
+    comparator = tmp_path / "explicit-self.sqlite"
+    source.write_text(EXPLICIT_GTF_SOURCE)
+    create_db(
+        str(source),
+        str(candidate),
+        force=True,
+        merge_strategy="create_unique",
+        disable_infer_genes=True,
+        disable_infer_transcripts=True,
+    ).close()
+    gffutils.create_db(
+        str(source),
+        str(comparator),
+        force=True,
+        merge_strategy="create_unique",
+        keep_order=False,
+        sort_attribute_values=False,
+        disable_infer_genes=True,
+        disable_infer_transcripts=True,
+    )
+    before = database_signature(candidate, engine="gffbase")
+
+    candidate_con = duckdb.connect(str(candidate))
+    feature_id = candidate_con.execute(
+        "SELECT id FROM features WHERE featuretype = ? ORDER BY id LIMIT 1", [featuretype]
+    ).fetchone()[0]
+    candidate_con.execute("INSERT INTO edges VALUES (?, ?)", [feature_id, feature_id])
+    candidate_con.execute("INSERT INTO closure VALUES (?, ?, 1)", [feature_id, feature_id])
+    candidate_con.close()
+
+    comparator_con = sqlite3.connect(comparator)
+    comparator_id = comparator_con.execute(
+        "SELECT id FROM features WHERE featuretype = ? ORDER BY id LIMIT 1", [featuretype]
+    ).fetchone()[0]
+    assert comparator_id == feature_id
+    comparator_con.execute("INSERT INTO relations VALUES (?, ?, 1)", [feature_id, feature_id])
+    comparator_con.commit()
+    comparator_con.close()
+
+    candidate_signature = database_signature(candidate, engine="gffbase")
+    comparator_signature = database_signature(comparator, engine="gffutils")
+
+    assert candidate_signature["direct_relationship_count"] == (
+        before["direct_relationship_count"] + 1
+    )
+    assert candidate_signature["closure_count"] == before["closure_count"] + 1
+    assert signatures_match(candidate_signature, comparator_signature) is True
+
+
 def test_signature_retains_gff3_relationships_to_unresolved_parents(tmp_path):
     source = tmp_path / "dangling.gff3"
     candidate = tmp_path / "dangling.duckdb"
@@ -309,6 +488,102 @@ def test_signature_rejects_stale_combined_digest_and_compares_full_object():
     same_digest_different_payload = dict(signature)
     same_digest_different_payload["attributes_sha256"] = "0" * 64
     assert signatures_match(signature, same_digest_different_payload) is None
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"segment_count": 2},
+        {"closure_count": 1},
+        {"featuretype_histogram": [["CDS", 1], ["gene", 1], ["mRNA", 1], ["zero", 0]]},
+        {"featuretype_histogram": [["CDS", -1], ["gene", 2], ["mRNA", 2]]},
+    ],
+    ids=("fewer-segments-than-features", "closure-smaller-than-direct", "zero-bin", "negative-bin"),
+)
+def test_signature_rejects_independently_digest_consistent_impossible_counts(changes):
+    forged = _independently_recomputed_signature(_independent_signature(), **changes)
+
+    assert validate_database_signature(forged) is False
+    assert signatures_match(forged, dict(forged)) is None
+
+
+def test_empty_signature_histogram_is_valid_only_for_an_empty_database():
+    empty = _independently_recomputed_signature(
+        _independent_signature(),
+        segment_count=0,
+        attribute_count=0,
+        direct_relationship_count=0,
+        closure_count=0,
+        feature_count=0,
+        featuretype_histogram=[],
+        segments_sha256=EMPTY_SHA256,
+        attributes_sha256=EMPTY_SHA256,
+        direct_relationships_sha256=EMPTY_SHA256,
+        closure_sha256=EMPTY_SHA256,
+    )
+
+    assert validate_database_signature(empty) is True
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"feature_count": 0, "featuretype_histogram": [], "segment_count": 1},
+        {
+            "feature_count": 0,
+            "featuretype_histogram": [],
+            "segment_count": 0,
+            "attribute_count": 1,
+        },
+        {"direct_relationship_count": 0, "closure_count": 1},
+        {"direct_relationship_count": 1, "closure_count": 0},
+    ],
+    ids=(
+        "empty-features-with-segment",
+        "attributes-without-segment",
+        "closure-without-direct",
+        "direct-without-closure",
+    ),
+)
+def test_signature_rejects_digest_consistent_cross_count_impossibilities(changes):
+    forged = _independently_recomputed_signature(_independent_signature(), **changes)
+
+    assert validate_database_signature(forged) is False
+
+
+@pytest.mark.parametrize(
+    ("count_name", "digest_name"),
+    [
+        ("segment_count", "segments_sha256"),
+        ("attribute_count", "attributes_sha256"),
+        ("direct_relationship_count", "direct_relationships_sha256"),
+        ("closure_count", "closure_sha256"),
+    ],
+)
+def test_signature_requires_empty_stream_digest_for_zero_component_count(count_name, digest_name):
+    forged = _independently_recomputed_signature(
+        _independent_signature(),
+        **{count_name: 0, digest_name: hashlib.sha256(b"not empty").hexdigest()},
+    )
+
+    assert validate_database_signature(forged) is False
+
+
+@pytest.mark.parametrize(
+    "digest_name",
+    [
+        "segments_sha256",
+        "attributes_sha256",
+        "direct_relationships_sha256",
+        "closure_sha256",
+    ],
+)
+def test_signature_rejects_empty_stream_digest_for_nonzero_component_count(digest_name):
+    forged = _independently_recomputed_signature(
+        _independent_signature(), **{digest_name: EMPTY_SHA256}
+    )
+
+    assert validate_database_signature(forged) is False
 
 
 def test_signature_changes_for_independent_semantic_mutations(tmp_path):

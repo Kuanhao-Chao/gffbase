@@ -42,6 +42,7 @@ the generated block is INJECTED between HTML-comment markers in each file:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -54,6 +55,11 @@ from benchmarks.common import benchmark_results_evidence_error  # noqa: E402
 
 RESULTS = ROOT / "benchmarks" / "results"
 MEGA = RESULTS / "06_mega.json"
+
+HISTORICAL_SCHEMA_V2_RAW_SHA256 = "d215d19fcf67d226dda401ed9069c75d524494904faced588f23cc81712db53d"
+HISTORICAL_SCHEMA_V2_CANONICAL_SHA256 = (
+    "b751f75e3d8682dbc33667e0ade153f19603302ac85994e189865137d85669f1"
+)
 
 BEGIN = "<!-- BEGIN GENERATED: {name} -->"
 END = "<!-- END GENERATED: {name} -->"
@@ -177,6 +183,13 @@ def _check_no_invented_numbers(row: dict, schema_version: str) -> None:
 def _require_publishable_schema_v3(data: dict) -> None:
     schema_version = data.get("schema_version")
     if schema_version == "2":
+        canonical = hashlib.sha256(
+            json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        if canonical != HISTORICAL_SCHEMA_V2_CANONICAL_SHA256:
+            raise Stale("historical schema-v2 object differs from the immutable artifact")
         return
     if schema_version != "3":
         raise Stale(f"unsupported benchmark schema {schema_version!r}")
@@ -271,7 +284,18 @@ def render_tradeoffs(data: dict) -> str:
     """
     _require_publishable_schema_v3(data)
     corpora = data.get("corpora") or {}
-    rows = [r for r in corpora.values() if r and "error" not in r]
+    schema_version = data.get("schema_version")
+
+    def is_completed_pair(row: dict) -> bool:
+        candidate = row.get("gffbase") or {}
+        comparator = row.get("legacy") or {}
+        if schema_version == "3":
+            return candidate.get("state") == "completed" and comparator.get("state") == "completed"
+        return not candidate.get("timed_out") and not comparator.get("timed_out")
+
+    rows = [
+        row for row in corpora.values() if row and "error" not in row and is_completed_pair(row)
+    ]
 
     def ratio(section: str) -> str | None:
         pairs = [
@@ -373,9 +397,14 @@ def main() -> int:
             "Run: python benchmarks/06_mega.py, then copy out/06_mega.json there.", file=sys.stderr
         )
         return 1
-    data = json.loads(MEGA.read_text())
-
     try:
+        raw = MEGA.read_bytes()
+        data = json.loads(raw)
+        if (
+            data.get("schema_version") == "2"
+            and hashlib.sha256(raw).hexdigest() != HISTORICAL_SCHEMA_V2_RAW_SHA256
+        ):
+            raise Stale("historical schema-v2 raw bytes differ from the immutable artifact")
         problems = process(data, write=args.write)
     except Stale as exc:
         print(f"refusing to render: {exc}", file=sys.stderr)

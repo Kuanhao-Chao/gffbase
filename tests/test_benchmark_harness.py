@@ -30,6 +30,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
+import struct
 import subprocess
 import sys
 import textwrap
@@ -84,6 +86,70 @@ def test_the_harness_imports_without_the_bench_extras():
     assert proc.returncode == 0, (
         f"benchmarks.common cannot be imported without psutil:\n{proc.stderr}"
     )
+
+
+def test_clean_snapshot_contains_the_canonical_corpus_registry_and_harness_help():
+    from benchmarks.corpora import CORPORA
+
+    assert CORPORA == (
+        {
+            "name": "MANE v1.5 (Ensembl IDs)",
+            "key": "mane",
+            "filename": "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+            "fmt": "gff3",
+            "bytes": 10_349_746,
+            "sha256": "69089bbc84d1d3c3ce31c2ed3f85b6c3169fb8836d092a082623c59a43fd22ef",
+            "url": "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/release_1.5/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+        },
+        {
+            "name": "CHESS 3.1.3",
+            "key": "chess",
+            "filename": "chess3.1.3.GRCh38.gff.gz",
+            "fmt": "gff3",
+            "bytes": 20_435_645,
+            "sha256": "28da847be976780fe38162a7c244749fdc7a0b446741ca8da2b64019c1606e03",
+            "url": "https://github.com/chess-genome/chess/releases/download/v.3.1.3/chess3.1.3.GRCh38.gff.gz",
+        },
+        {
+            "name": "RefSeq GRCh38.p14",
+            "key": "refseq",
+            "filename": "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+            "fmt": "gff3",
+            "bytes": 78_190_483,
+            "sha256": "4920f0eae7e2197c50b67a201e06d657387137b49dd60f474b4f1d5b29334051",
+            "url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+        },
+        {
+            "name": "GENCODE v49 (GTF)",
+            "key": "gencode-gtf",
+            "filename": "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+            "fmt": "gtf",
+            "bytes": 70_588_995,
+            "sha256": "576dddae36169ad648afbe706535361309786e549ad7daf529cca7674fb0058f",
+            "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+        },
+        {
+            "name": "GENCODE v49 (GFF3)",
+            "key": "gencode-gff3",
+            "filename": "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+            "fmt": "gff3",
+            "bytes": 89_385_177,
+            "sha256": "22ffa691aac993603f7f21effacf19848262bec74545bd979863e7af602e5a1d",
+            "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+        },
+    )
+    if (REPO_ROOT / ".git").exists():
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "benchmarks/corpora.py"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert tracked.returncode == 0, "benchmarks/corpora.py is absent from committed snapshots"
+    help_result = subprocess.run(
+        [sys.executable, str(MEGA), "--help"], capture_output=True, text=True, timeout=120
+    )
+    assert help_result.returncode == 0, help_result.stderr
 
 
 @pytest.mark.parametrize(
@@ -521,6 +587,23 @@ def test_complete_benchmark_environment_is_recorded_and_portable(monkeypatch):
             assert "/" not in install[key]
 
 
+def test_runtime_libc_identity_is_closed_portable_and_canonical(monkeypatch):
+    from benchmarks import common
+
+    identity = getattr(common, "_runtime_libc_identity", None)
+    assert callable(identity)
+
+    monkeypatch.setattr(common.sys, "platform", "darwin")
+    assert identity() == {"family": None, "version": None}
+
+    monkeypatch.setattr(common.sys, "platform", "linux")
+    monkeypatch.setattr(common.platform, "libc_ver", lambda: ("GNU libc", "02.034.0"))
+    assert identity() == {"family": "glibc", "version": "2.34.0"}
+
+    monkeypatch.setattr(common.platform, "libc_ver", lambda: ("unknown-libc", "1.2"))
+    assert identity() == {"family": "unknown", "version": None}
+
+
 def test_actual_environment_without_candidate_wheel_is_prepublication_only(monkeypatch):
     from benchmarks.common import benchmark_env, benchmark_results_evidence_error, environment
 
@@ -540,8 +623,9 @@ def _write_test_candidate_wheel(
     metadata_version="0.2.0rc1",
     wheel_tags=("cp310-abi3-manylinux_2_28_x86_64",),
     native_members=(("gffbase/_native.abi3.so", b"candidate-native"),),
+    dist_info="gffbase-0.2.0rc1.dist-info",
+    extra_members=(),
 ):
-    dist_info = "gffbase-0.2.0rc1.dist-info"
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(
             f"{dist_info}/METADATA",
@@ -553,6 +637,8 @@ def _write_test_candidate_wheel(
             + "".join(f"Tag: {tag}\n" for tag in wheel_tags),
         )
         for member, content in native_members:
+            archive.writestr(member, content)
+        for member, content in extra_members:
             archive.writestr(member, content)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -566,6 +652,374 @@ def _installed_candidate_identity(*, native_sha256):
         "native_module": "_native.abi3.so",
         "native_sha256": native_sha256,
     }
+
+
+def test_candidate_wheel_archive_limits_are_explicit_and_sane():
+    from benchmarks import common
+
+    assert 1 << 20 <= common._MAX_CANDIDATE_WHEEL_BYTES <= 1 << 30
+    assert 100 <= common._MAX_CANDIDATE_WHEEL_MEMBERS <= 10_000
+    assert common._MAX_CANDIDATE_NATIVE_BYTES <= common._MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES
+    assert common._MAX_CANDIDATE_WHEEL_BYTES <= common._MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES
+
+
+@pytest.mark.parametrize(
+    "limit_name",
+    [
+        "_MAX_CANDIDATE_WHEEL_BYTES",
+        "_MAX_CANDIDATE_WHEEL_MEMBERS",
+        "_MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES",
+        "_MAX_CANDIDATE_NATIVE_BYTES",
+    ],
+)
+def test_environment_rejects_candidate_wheels_over_configured_archive_limits(
+    tmp_path, monkeypatch, limit_name
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel)
+    native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+    monkeypatch.setattr(
+        common,
+        "_installed_gffbase",
+        lambda: _installed_candidate_identity(native_sha256=native_sha256),
+    )
+    limits = {
+        "_MAX_CANDIDATE_WHEEL_BYTES": wheel.stat().st_size - 1,
+        "_MAX_CANDIDATE_WHEEL_MEMBERS": 2,
+        "_MAX_CANDIDATE_WHEEL_UNCOMPRESSED_BYTES": 10,
+        "_MAX_CANDIDATE_NATIVE_BYTES": len(b"candidate-native") - 1,
+    }
+    monkeypatch.setattr(common, limit_name, limits[limit_name])
+
+    with pytest.raises(ValueError, match="limit"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_streams_the_native_member_when_hashing(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel)
+    native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+    monkeypatch.setattr(
+        common,
+        "_installed_gffbase",
+        lambda: _installed_candidate_identity(native_sha256=native_sha256),
+    )
+    archive_read = zipfile.ZipFile.read
+
+    def reject_buffered_native(self, name, *args, **kwargs):
+        member_name = name.filename if isinstance(name, zipfile.ZipInfo) else name
+        if str(member_name).endswith((".so", ".pyd")):
+            raise AssertionError("native member was buffered")
+        return archive_read(self, name, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", reject_buffered_native)
+
+    artifact = common.environment(benchmark_controls=common.benchmark_env(4))["artifact"]
+
+    assert artifact["native"]["sha256"] == native_sha256
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "/absolute.txt",
+        "../outside.txt",
+        "gffbase/../outside.txt",
+        "gffbase/./ambiguous.txt",
+        "gffbase//ambiguous.txt",
+        "gffbase\\windows.txt",
+        "C:/drive.txt",
+    ],
+)
+def test_environment_rejects_nonportable_wheel_member_paths(tmp_path, monkeypatch, member):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=((member, b"x"),))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="member path"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+@pytest.mark.parametrize(
+    "extra_members",
+    [
+        (("GFFBASE/_NATIVE.ABI3.SO", b"collision"),),
+        (("docs/é.txt", b"one"), ("docs/e\u0301.txt", b"two")),
+    ],
+)
+def test_environment_rejects_casefold_and_unicode_member_collisions(
+    tmp_path, monkeypatch, extra_members
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=extra_members)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_rejects_nul_in_raw_wheel_member_name(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel, extra_members=(("docs/nulx.txt", b"x"),))
+    raw = wheel.read_bytes().replace(b"docs/nulx.txt", b"docs/nul\x00.txt")
+    assert raw.count(b"docs/nul\x00.txt") == 2
+    wheel.write_bytes(raw)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(raw).hexdigest())
+
+    with pytest.raises(ValueError, match="NUL"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_requires_the_exact_candidate_dist_info_directory(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, dist_info="gffbase-0.2.0rc1.post1.dist-info")
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="dist-info"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+@pytest.mark.parametrize("file_type", [stat.S_IFLNK, stat.S_IFDIR, stat.S_IFIFO])
+def test_environment_requires_regular_wheel_evidence_members(tmp_path, monkeypatch, file_type):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    native = zipfile.ZipInfo("gffbase/_native.abi3.so")
+    native.create_system = 3
+    native.external_attr = (file_type | 0o755) << 16
+    wheel_sha256 = _write_test_candidate_wheel(
+        wheel, native_members=((native, b"candidate-native"),)
+    )
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="regular file"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_rejects_entry_count_before_zipfile_materialization(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel)
+    raw = bytearray(wheel.read_bytes())
+    eocd = raw.rfind(b"PK\x05\x06")
+    assert eocd >= 0
+    struct.pack_into(
+        "<HH",
+        raw,
+        eocd + 8,
+        common._MAX_CANDIDATE_WHEEL_MEMBERS + 1,
+        common._MAX_CANDIDATE_WHEEL_MEMBERS + 1,
+    )
+    wheel.write_bytes(raw)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(raw).hexdigest())
+    monkeypatch.setattr(
+        zipfile.ZipFile,
+        "__init__",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("ZipFile materialized")),
+    )
+
+    with pytest.raises(ValueError, match="member-count limit"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_zip_entry_count_preflight_reads_ordinary_and_zip64_metadata(tmp_path):
+    from benchmarks import common
+
+    ordinary = tmp_path / "ordinary.whl"
+    _write_test_candidate_wheel(ordinary)
+    assert common._zip_entry_count_before_open(ordinary) == 3
+
+    zip64 = tmp_path / "zip64.whl"
+    count = common._MAX_CANDIDATE_WHEEL_MEMBERS + 1
+    zip64_eocd = struct.pack("<4sQ2H2L4Q", b"PK\x06\x06", 44, 45, 45, 0, 0, count, count, 0, 0)
+    locator = struct.pack("<4sLQL", b"PK\x06\x07", 0, 0, 1)
+    eocd = struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
+    zip64.write_bytes(zip64_eocd + locator + eocd)
+    assert common._zip_entry_count_before_open(zip64) == count
+
+
+def test_zip_entry_count_preflight_rejects_malformed_metadata(tmp_path):
+    from benchmarks import common
+
+    malformed = tmp_path / "malformed.whl"
+    malformed.write_bytes(b"not-a-zip")
+
+    with pytest.raises(ValueError, match="central directory"):
+        common._zip_entry_count_before_open(malformed)
+
+
+@pytest.mark.parametrize(
+    ("entries_on_disk", "entry_count", "central_size", "central_offset"),
+    [
+        (1, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF),
+        (0xFFFF, 1, 0xFFFFFFFF, 0xFFFFFFFF),
+        (0xFFFF, 0xFFFF, 1, 0xFFFFFFFF),
+        (0xFFFF, 0xFFFF, 0xFFFFFFFF, 1),
+    ],
+)
+def test_zip64_metadata_rejects_disagreeing_non_sentinel_eocd_fields(
+    tmp_path, entries_on_disk, entry_count, central_size, central_offset
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "inconsistent-zip64.whl"
+    zip64_count = common._MAX_CANDIDATE_WHEEL_MEMBERS + 1
+    zip64_eocd = struct.pack(
+        "<4sQ2H2I4Q", b"PK\x06\x06", 44, 45, 45, 0, 0, zip64_count, zip64_count, 0, 0
+    )
+    locator = struct.pack("<4sIQI", b"PK\x06\x07", 0, 0, 1)
+    eocd = struct.pack(
+        "<4s4H2IH",
+        b"PK\x05\x06",
+        0,
+        0,
+        entries_on_disk,
+        entry_count,
+        central_size,
+        central_offset,
+        0,
+    )
+    wheel.write_bytes(zip64_eocd + locator + eocd)
+
+    with pytest.raises(ValueError, match="ZIP64 central directory"):
+        common._zip_entry_count_before_open(wheel)
+
+
+def test_environment_validates_every_local_header_and_member_crc(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel, extra_members=(("docs/good.txt", b"crc-payload"),))
+    raw = wheel.read_bytes()
+    assert raw.count(b"docs/good.txt") == 2
+    corrupted_name = raw.replace(b"docs/good.txt", b"../x/evil.txt", 1)
+    wheel.write_bytes(corrupted_name)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(corrupted_name).hexdigest())
+
+    with pytest.raises(ValueError, match="valid ZIP"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+    _write_test_candidate_wheel(wheel, extra_members=(("docs/good.txt", b"crc-payload"),))
+    corrupted_crc = wheel.read_bytes().replace(b"crc-payload", b"crc-payloae", 1)
+    wheel.write_bytes(corrupted_crc)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(corrupted_crc).hexdigest())
+
+    with pytest.raises(ValueError, match="valid ZIP"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+@pytest.mark.parametrize(
+    "extra_members",
+    [
+        (("docs", b"file"), ("docs/", b"")),
+        (("docs", b"file"), ("docs/a.txt", b"child")),
+    ],
+)
+def test_environment_rejects_file_directory_namespace_conflicts(
+    tmp_path, monkeypatch, extra_members
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=extra_members)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="namespace|ambiguous"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_rejects_foreign_dist_info_trees(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(
+        wheel, extra_members=(("evil-1.dist-info/RECORD", b"foreign"),)
+    )
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
+
+    with pytest.raises(ValueError, match="dist-info"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+def test_environment_normalizes_unsupported_member_compression_errors(tmp_path, monkeypatch):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel)
+    raw = bytearray(wheel.read_bytes())
+    metadata_name = b"gffbase-0.2.0rc1.dist-info/METADATA"
+    local_name = raw.find(metadata_name)
+    central_name = raw.rfind(metadata_name)
+    assert local_name >= 30 and central_name >= 46 and local_name != central_name
+    struct.pack_into("<H", raw, local_name - 30 + 8, 99)
+    struct.pack_into("<H", raw, central_name - 46 + 10, 99)
+    wheel.write_bytes(raw)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(raw).hexdigest())
+
+    with pytest.raises(ValueError, match="valid ZIP"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2])
+def test_environment_normalizes_corrupt_supported_compression_errors(
+    tmp_path, monkeypatch, compression
+):
+    from benchmarks import common
+
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    dist_info = "gffbase-0.2.0rc1.dist-info"
+    corrupt_name = "docs/corrupt.bin"
+    with zipfile.ZipFile(wheel, "w", compression=compression) as archive:
+        archive.writestr(
+            f"{dist_info}/METADATA",
+            "Metadata-Version: 2.4\nName: gffbase\nVersion: 0.2.0rc1\n",
+        )
+        archive.writestr(
+            f"{dist_info}/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: focused-test\nRoot-Is-Purelib: false\n"
+            "Tag: cp310-abi3-manylinux_2_28_x86_64\n",
+        )
+        archive.writestr("gffbase/_native.abi3.so", b"candidate-native")
+        archive.writestr(corrupt_name, bytes(range(256)) * 64)
+    with zipfile.ZipFile(wheel) as archive:
+        corrupt = archive.getinfo(corrupt_name)
+    raw = bytearray(wheel.read_bytes())
+    name_size, extra_size = struct.unpack_from("<HH", raw, corrupt.header_offset + 26)
+    data_offset = corrupt.header_offset + 30 + name_size + extra_size
+    raw[data_offset : data_offset + corrupt.compress_size] = b"\xff" * corrupt.compress_size
+    wheel.write_bytes(raw)
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
+    monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", hashlib.sha256(raw).hexdigest())
+
+    with pytest.raises(ValueError, match="valid ZIP"):
+        common.environment(benchmark_controls=common.benchmark_env(4))
 
 
 def test_environment_binds_installed_native_to_authoritative_wheel_evidence(tmp_path, monkeypatch):
@@ -882,6 +1336,7 @@ def _publishable_payload(*, threads: int = 4) -> dict:
         "hostname": "benchmark-host",
         "platform": "Linux-6.12-x86_64",
         "machine": "x86_64",
+        "libc": {"family": "glibc", "version": "2.34"},
         "cpu_model": "Example CPU",
         "cpu_cores_physical": 4,
         "cpu_cores_logical": 8,
@@ -1147,6 +1602,7 @@ def test_full_gate_accepts_normalized_windows_artifact_architectures(
     payload = _publishable_payload()
     payload["environment"]["platform"] = "Windows-11-10.0.26100-SP0"
     payload["environment"]["machine"] = machine
+    payload["environment"]["libc"] = {"family": None, "version": None}
     wheel = f"gffbase-0.2.0rc1-cp313-cp313-win_{wheel_arch}.whl"
     wheel_tag = f"cp313-cp313-win_{wheel_arch}"
     native_module = f"_native.cp313-win_{native_arch}.pyd"
@@ -1202,6 +1658,8 @@ def test_full_gate_accepts_configured_abi3_artifact(
     payload = _publishable_payload()
     payload["environment"]["platform"] = platform_name
     payload["environment"]["machine"] = machine
+    if not platform_name.startswith("Linux-"):
+        payload["environment"]["libc"] = {"family": None, "version": None}
     wheel = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
     payload["environment"]["artifact"]["wheel"] = wheel
     payload["environment"]["artifact"]["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
@@ -1240,6 +1698,137 @@ def test_full_gate_cross_checks_wheel_and_native_linux_libc(wheel_platform, nati
     artifact["wheel_tags"] = [f"cp313-cp313-{wheel_platform}"]
     artifact["native"]["member"] = f"gffbase/{native_module}"
     payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_accepts_matching_linux_libc_runtime_evidence():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+@pytest.mark.parametrize(
+    ("wheel_platform", "family", "version"),
+    [
+        ("manylinux_2_28_x86_64", "musl", "1.2"),
+        ("musllinux_1_2_x86_64", "glibc", "2.34"),
+        ("manylinux_2_28_x86_64", "glibc", "2.27"),
+        ("musllinux_1_2_x86_64", "musl", "1.1"),
+    ],
+)
+def test_full_gate_rejects_incompatible_or_too_old_linux_libc(wheel_platform, family, version):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["libc"] = {"family": family, "version": version}
+    artifact = payload["environment"]["artifact"]
+    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+@pytest.mark.parametrize(
+    ("wheel_platform", "family", "version"),
+    [
+        ("manylinux_2_28_x86_64", "glibc", "2.28"),
+        ("musllinux_1_2_x86_64", "musl", "1.2"),
+        ("linux_x86_64", "glibc", "2.17"),
+        ("linux_x86_64", "musl", "1.2.4"),
+    ],
+)
+def test_full_gate_accepts_compatible_linux_libc_boundaries(wheel_platform, family, version):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["libc"] = {"family": family, "version": version}
+    artifact = payload["environment"]["artifact"]
+    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+@pytest.mark.parametrize(
+    ("wheel_platform", "family", "version"),
+    [
+        ("manylinux_0_0_x86_64", "glibc", "2.34"),
+        ("manylinux_1_0_x86_64", "glibc", "2.34"),
+        ("manylinux_2_4_x86_64", "glibc", "2.34"),
+        ("musllinux_0_0_x86_64", "musl", "1.2"),
+        ("musllinux_1_0_x86_64", "musl", "1.2"),
+    ],
+)
+def test_full_gate_rejects_unsupported_linux_policy_tags(wheel_platform, family, version):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["libc"] = {"family": family, "version": version}
+    artifact = payload["environment"]["artifact"]
+    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_cross_checks_generic_linux_native_libc_suffix():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["libc"] = {"family": "musl", "version": "1.2"}
+    artifact = payload["environment"]["artifact"]
+    artifact["wheel"] = "gffbase-0.2.0rc1-cp313-cp313-linux_x86_64.whl"
+    artifact["wheel_tags"] = ["cp313-cp313-linux_x86_64"]
+    native_module = "_native.cpython-313-x86_64-linux-gnu.so"
+    artifact["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+    native_module = "_native.cpython-313-x86_64-linux-musl.so"
+    artifact["native"]["member"] = f"gffbase/{native_module}"
+    payload["environment"]["gffbase_install"]["native_module"] = native_module
+
+    assert benchmark_results_evidence_error(payload) is None
+
+
+@pytest.mark.parametrize(
+    "libc",
+    [
+        {"family": "unknown", "version": None},
+        {"family": "glibc", "version": None},
+        {"family": "glibc", "version": "02.34"},
+        {"family": None, "version": None},
+    ],
+)
+def test_full_gate_rejects_unknown_linux_libc_identity(libc):
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    payload["environment"]["libc"] = libc
+
+    assert benchmark_results_evidence_error(payload) is not None
+
+
+def test_full_gate_rejects_equal_but_internally_impossible_signatures():
+    from benchmarks.common import benchmark_results_evidence_error
+
+    payload = _publishable_payload()
+    signature = payload["corpora"]["mane"]["gffbase"]["correctness_signature"]
+    forged = {key: value for key, value in signature.items() if key != "combined_sha256"}
+    forged["segment_count"] = forged["feature_count"] - 1
+    forged["combined_sha256"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in forged.items() if key != "combined_sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    payload["corpora"]["mane"]["gffbase"]["correctness_signature"] = dict(forged)
+    payload["corpora"]["mane"]["legacy"]["correctness_signature"] = dict(forged)
 
     assert benchmark_results_evidence_error(payload) is not None
 
@@ -1458,6 +2047,28 @@ def test_full_gate_requires_complete_timeout_diagnostics_and_no_completed_fields
     assert benchmark_results_evidence_error(completed_leak) is not None
 
 
+def test_tradeoffs_excludes_incomplete_engine_pairs_from_every_statistic():
+    from benchmarks.common import benchmark_results_evidence_error
+    from tools import gen_benchmark_tables as tables
+
+    payload = _payload_with_timed_out_comparator()
+    row = payload["corpora"]["mane"]
+    row["gffbase"]["peak_rss_bytes"] = 8 << 40
+    row["gffbase"]["peak_rss_mb"] = (8 << 40) / (1024 * 1024)
+    row["gffbase"]["disk_bytes"] = 4 << 40
+    row["legacy"]["peak_rss_bytes"] = 16 << 40
+    row["legacy"]["peak_rss_mb"] = (16 << 40) / (1024 * 1024)
+
+    assert benchmark_results_evidence_error(payload) is None
+    rendered = tables.render_tradeoffs(payload)
+
+    assert "Measured across 4 corpora" in rendered
+    assert "8.00 TB" not in rendered
+    assert "16.00 TB" not in rendered
+    assert "4.00 TB" not in rendered
+    assert "| 1.00 MB | 2.00 MB | 0.50× |" in rendered
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [
@@ -1656,6 +2267,45 @@ def test_renderer_reads_actual_schema_v2_top_level_python_version():
 
     assert "Python 3.13.5" in rendered
     assert "Python ?" not in rendered
+
+
+def test_historical_schema_v2_raw_bytes_are_immutable():
+    assert hashlib.sha256(RESULTS.read_bytes()).hexdigest() == (
+        "d215d19fcf67d226dda401ed9069c75d524494904faced588f23cc81712db53d"
+    )
+
+
+@pytest.mark.parametrize(
+    "renderer_name", ["render_corpus_table", "render_provenance", "render_tradeoffs"]
+)
+def test_schema_v2_renderers_reject_mutated_historical_objects(renderer_name):
+    from tools import gen_benchmark_tables as tables
+
+    historical = json.loads(RESULTS.read_text(encoding="utf-8"))
+    historical["corpora"]["gencode-gtf"]["ingest_speedup"] = 999
+
+    with pytest.raises(tables.Stale, match="historical schema-v2"):
+        getattr(tables, renderer_name)(historical)
+
+
+def test_generator_main_rejects_schema_v2_with_changed_raw_bytes(tmp_path, monkeypatch):
+    from tools import gen_benchmark_tables as tables
+
+    altered = tmp_path / "06_mega.json"
+    altered.write_bytes(RESULTS.read_bytes() + b" ")
+    process_called = False
+
+    def unexpected_process(*_args, **_kwargs):
+        nonlocal process_called
+        process_called = True
+        return []
+
+    monkeypatch.setattr(tables, "MEGA", altered)
+    monkeypatch.setattr(tables, "process", unexpected_process)
+    monkeypatch.setattr(sys, "argv", ["gen_benchmark_tables.py", "--check"])
+
+    assert tables.main() == 1
+    assert process_called is False
 
 
 @pytest.mark.parametrize(
