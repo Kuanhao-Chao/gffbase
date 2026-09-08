@@ -15,7 +15,7 @@ import pytest
 from benchmarks.campaign import model, safe_io, worker
 
 
-def _status_job() -> model.JobSpec:
+def _job_matrix() -> list[model.JobSpec]:
     inputs: dict[str, object] = {}
     for key in model.CORPUS_ORDER:
         inputs[key] = {
@@ -42,7 +42,11 @@ def _status_job() -> model.JobSpec:
             "removed_transcript_rows": 1,
         },
     }
-    return model.build_job_matrix({}, {}, inputs)[0]
+    return model.build_job_matrix({}, {}, inputs)
+
+
+def _status_job() -> model.JobSpec:
+    return _job_matrix()[0]
 
 
 def _process(pid: int, *, ticks: int = 99) -> dict[str, object]:
@@ -983,3 +987,64 @@ def test_worker_waits_for_its_exact_controller_launch_record(tmp_path: Path) -> 
             monotonic=clock.__next__,
             sleeper=lambda _seconds: None,
         )
+
+
+# ---------------------------------------------------------------------------
+# In-progress database files
+# ---------------------------------------------------------------------------
+#
+# `gffbase.ingest.from_file` builds into `<target>.gffbase-building.<pid>` and
+# renames on success, so the target never exists half-written. DuckDB puts its
+# own `.wal` / `.tmp` beside that temporary. `status` scans a scratch directory
+# while its job is still running, so it meets those files:
+#
+#     campaign attempt scratch contains an unexpected entry:
+#     'chess.duckdb.gffbase-building.4026403.wal'
+#
+# They are legitimate artifacts of the tool the campaign drives, and transient.
+# The scan is taught the shape rather than the exact pid.
+
+
+def _chess_spec() -> model.JobSpec:
+    """A non-bridge job whose `result_key` is `chess` -- that key decides which
+    database names the scratch scan will accept."""
+    for job in _job_matrix():
+        if job.kind != "bridge" and job.result_key == "chess":
+            return job
+    raise AssertionError("no non-bridge chess job in the matrix")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "chess.duckdb.gffbase-building.4026403",
+        "chess.duckdb.gffbase-building.4026403.wal",
+        "chess.duckdb.gffbase-building.1.tmp",
+    ],
+)
+def test_an_in_progress_database_is_expected_in_scratch(tmp_path, name) -> None:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(mode=0o700)
+    (scratch / name).write_bytes(b"")
+    (scratch / name).chmod(0o600)
+    worker._scan_scratch(scratch, _chess_spec())
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "chess.duckdb.gffbase-building",  # no pid at all
+        "chess.duckdb.gffbase-building.abc",  # pid must be digits
+        "other.duckdb.gffbase-building.7",  # a database this job never builds
+        "chess.duckdb.gffbase-building.7.stray",  # not a DuckDB sidecar
+    ],
+)
+def test_a_lookalike_is_still_rejected(tmp_path, name) -> None:
+    """The exemption is for a known shape, not for anything containing the
+    word: a stray file in scratch is what the scan exists to catch."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(mode=0o700)
+    (scratch / name).write_bytes(b"")
+    (scratch / name).chmod(0o600)
+    with pytest.raises(model.CampaignError, match="unexpected entry"):
+        worker._scan_scratch(scratch, _chess_spec())
