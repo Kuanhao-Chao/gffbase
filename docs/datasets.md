@@ -15,9 +15,9 @@ python benchmarks/download_corpora.py            # all five, ~257 MB
 python benchmarks/download_corpora.py --only mane --only chess   # just two
 ```
 
-Downloads land in `benchmarks/data/`, are skipped if already present, and
-write through a `.part` file so an interrupted download cannot leave a
-truncated corpus that looks complete.
+Downloads land in `benchmarks/data/`, write through a `.part` file, and are
+accepted only after expected size, SHA-256, and gzip integrity checks. An
+existing file is verified rather than silently skipped.
 
 ---
 
@@ -32,9 +32,10 @@ truncated corpus that looks complete.
 | **MANE v1.5** (Ensembl IDs) | GFF3 | 524,834 | 10 MB | `--only mane` |
 
 GENCODE ships the **same biological release in both GTF and GFF3**, which is
-why both are here: it is the cleanest available measurement of what the
-surface format costs, with everything else held constant. The GFF3 half is not
-in the current published sweep — see the note on
+why both are here. They are related biological releases, but their row models
+and default inference behavior still differ, so they are not by themselves a
+controlled measurement of format cost. The GFF3 half is not in the historical
+Mac sweep — see the note on
 [Performance](performance.md). Method:
 [Methodology](performance/methodology.md).
 
@@ -42,10 +43,11 @@ in the current published sweep — see the note on
 
 ## What each one is for
 
-**GENCODE v49** — the reference human annotation, and the flagship ingest
-benchmark. The GTF edition is the demanding case: GTF carries no explicit
-parent rows, so every gene and transcript has to be *synthesized* from the
-span of its children.
+**GENCODE v49** — the reference human annotation and flagship ingest benchmark.
+This GTF contains 86,369 `gene` rows and 293,203 `transcript` rows; it is not a
+leaf-only file. The benchmark measures it once with default compatibility
+inference and once with inference disabled. A third, reproducibly transformed
+copy removes those parent rows to measure actual synthesis in isolation.
 
 **RefSeq GRCh38.p14** — NCBI's annotation, with `Dbxref`, `Note` and `gbkey`
 attributes and `NC_000001.11`-style sequence names. The stress test for

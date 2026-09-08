@@ -58,6 +58,11 @@ Directives:
     Execute in a fresh namespace instead of the page's, for a block that
     deliberately redefines something.
 
+``pandas``
+    Exclude the block from the minimum-dependency documentation run and execute
+    it in the dedicated ``pandas_docs`` gate, where ``gffbase[pandas]`` is an
+    explicit dependency. A missing pandas install is a failure in that gate.
+
 Each page starts from the fixtures in `_namespace()`: the public imports and a
 `db` built from `tests/data/hierarchy.gff3`, so a page does not have to open
 with boilerplate a reader would not need.
@@ -72,6 +77,13 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(__file__).parent / "data"
+pytestmark = pytest.mark.filterwarnings("error::UserWarning")
+
+# A missing import is exempt only when the snippet directly imports one of
+# these deliberately external packages. Internal typos and missing transitive
+# dependencies must fail: both previously disappeared behind the blanket
+# ``except ModuleNotFoundError: skip`` below.
+OPTIONAL_TOP_LEVEL_IMPORTS = frozenset({"gffutils", "torch"})
 
 #: Files whose Python blocks are executed. Everything a user is likely to
 #: copy from, which includes the two root documents rendered on GitHub and PyPI.
@@ -167,6 +179,7 @@ def _all_snippets() -> list[Snippet]:
 
 ALL_SNIPPETS = _all_snippets()
 RUNNABLE = [s for s in ALL_SNIPPETS if s.lang == "python" and s.verb in {"run", "isolated"}]
+PANDAS_SNIPPETS = [s for s in ALL_SNIPPETS if s.lang == "python" and s.verb == "pandas"]
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +238,18 @@ def _close_quietly(namespace: dict) -> None:
                 pass
 
 
+def _is_allowed_missing_import(snippet: Snippet, missing: str | None) -> bool:
+    """Whether *missing* is a direct, explicitly allowlisted snippet import."""
+    if missing not in OPTIONAL_TOP_LEVEL_IMPORTS:
+        return False
+    direct = re.compile(
+        rf"^\s*(?:import\s+{re.escape(missing)}(?:\s|$)|"
+        rf"from\s+{re.escape(missing)}(?:\.|\s))",
+        re.MULTILINE,
+    )
+    return direct.search(snippet.code) is not None
+
+
 # One accumulating namespace AND one working directory per document, built
 # lazily. The directory matters as much as the namespace: `quickstart.md`
 # writes `demo.gff3` in its first block and opens it in the second, which only
@@ -238,8 +263,7 @@ _PAGE_CWD: dict[Path, Path] = {}
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("snippet", RUNNABLE, ids=lambda s: s.id)
-def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory, monkeypatch):
+def _run_snippet(snippet: Snippet, tmp_path, tmp_path_factory, monkeypatch):
     """A documented example must actually work.
 
     Failure here means the documentation tells a user to do something that
@@ -273,33 +297,11 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
         with contextlib.redirect_stdout(captured):
             exec(compile(snippet.code, snippet.id, "exec"), namespace)  # noqa: S102
     except ModuleNotFoundError as exc:
-        # A snippet may legitimately import something this environment does not
-        # have: `torch` in the ML cookbook, `gffutils` for the export example,
-        # `datasets` for the Hugging Face path. None is a gffbase dependency
-        # and CI installs none of them, so requiring them would make the docs
-        # gate a function of the runner's package set rather than of whether
-        # the documentation is correct.
-        #
-        # Skipped rather than passed, so a developer with the full environment
-        # still runs it -- and so `-rs` shows exactly what went unchecked.
+        # Skipped rather than passed, so a developer with the optional package
+        # still runs it and ``-rs`` reports the exact unchecked example.
+        if not _is_allowed_missing_import(snippet, exc.name):
+            raise
         pytest.skip(f"{snippet.id} needs the optional package {exc.name!r}")
-    except ImportError as exc:
-        # gffbase converts a missing optional package into its own actionable
-        # ImportError ("format='df' requires the optional pandas package"),
-        # which is NOT a ModuleNotFoundError and so fell through to a failure.
-        # The `minimum-deps` CI job installs no extras at all, so this is the
-        # ordinary state there, not a defect.
-        if "requires the optional" not in str(exc):
-            raise
-        pytest.skip(f"{snippet.id} needs an optional package: {exc}")
-    except NotImplementedError as exc:
-        # `pybedtools` imports fine and then raises this from a method when the
-        # `bedtools` BINARY is absent, which is the state of every CI runner.
-        # An installed library whose external tool is missing is the same
-        # situation as a missing library.
-        if "does not appear to be installed" not in str(exc):
-            raise
-        pytest.skip(f"{snippet.id} needs an external binary: {exc}")
     except Exception as exc:
         raise AssertionError(
             f"documentation snippet at {snippet.id} raised "
@@ -319,6 +321,19 @@ def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory
         )
 
 
+@pytest.mark.parametrize("snippet", RUNNABLE, ids=lambda s: s.id)
+def test_documentation_snippet_runs(snippet: Snippet, tmp_path, tmp_path_factory, monkeypatch):
+    """The minimum-dependency documentation examples execute without pandas."""
+    _run_snippet(snippet, tmp_path, tmp_path_factory, monkeypatch)
+
+
+@pytest.mark.pandas_docs
+@pytest.mark.parametrize("snippet", PANDAS_SNIPPETS, ids=lambda s: s.id)
+def test_pandas_documentation_snippet_runs(snippet, tmp_path, tmp_path_factory, monkeypatch):
+    """Pandas-specific examples run only in the environment that promises pandas."""
+    _run_snippet(snippet, tmp_path, tmp_path_factory, monkeypatch)
+
+
 def test_every_skip_states_a_reason():
     """An exemption has to say why, so the list cannot quietly grow.
 
@@ -336,7 +351,7 @@ def test_every_skip_states_a_reason():
 
 def test_every_directive_is_recognised():
     """Catch a typo'd directive, which would otherwise silently mean `run`."""
-    known = {"run", "skip", "isolated"}
+    known = {"run", "skip", "isolated", "pandas"}
     unknown = [(s.id, s.verb) for s in ALL_SNIPPETS if s.verb not in known]
     assert not unknown, f"unrecognised docs-test directives: {unknown}"
 
@@ -352,6 +367,52 @@ def test_the_docs_actually_contain_executable_snippets():
         f"only {len(RUNNABLE)} runnable snippets found across {len(_doc_files())} "
         "documents; the extractor is probably not matching the fences any more"
     )
+
+
+def test_generic_snippets_do_not_require_pandas():
+    offenders = [snippet.id for snippet in RUNNABLE if 'format="df"' in snippet.code]
+    assert not offenders, f"generic docs snippets request pandas: {offenders}"
+
+
+def test_pandas_examples_are_explicit_and_exercised():
+    assert PANDAS_SNIPPETS, "no explicit pandas documentation snippets were found"
+    assert all('format="df"' in snippet.code for snippet in PANDAS_SNIPPETS)
+
+
+def _synthetic_snippet(code: str) -> Snippet:
+    return Snippet(REPO_ROOT / "docs" / "synthetic-import-test.md", 1, code, "isolated", "")
+
+
+def test_allowlisted_direct_optional_import_is_the_only_missing_import_skip(
+    tmp_path, tmp_path_factory, monkeypatch
+):
+    snippet = _synthetic_snippet("import torch\n")
+    real_import = __import__
+
+    def missing_torch(name, *args, **kwargs):
+        if name == "torch":
+            raise ModuleNotFoundError("No module named 'torch'", name="torch")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", missing_torch)
+    with pytest.raises(pytest.skip.Exception, match="optional package 'torch'"):
+        _run_snippet(snippet, tmp_path, tmp_path_factory, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "import gffbase.nonexistent\n",
+        "import not_an_allowlisted_package\n",
+        "import torch\nraise ModuleNotFoundError('broken torch dependency', name='torch._broken')\n",
+    ],
+)
+def test_internal_unlisted_and_transitive_import_failures_are_not_skipped(
+    code, tmp_path, tmp_path_factory, monkeypatch
+):
+    snippet = _synthetic_snippet(code)
+    with pytest.raises(ModuleNotFoundError):
+        _run_snippet(snippet, tmp_path, tmp_path_factory, monkeypatch)
 
 
 #: How many snippets are currently exempt. A RATCHET, not a target: lower it

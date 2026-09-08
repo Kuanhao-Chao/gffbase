@@ -23,12 +23,12 @@ print(f"{db.count_features_of_type():,} features")    # ~6.5 M (incl. synth pare
 print(db.fmt)                                          # 'gtf'
 ```
 
-GTF input is auto-detected; `disable_infer_genes` and
-`disable_infer_transcripts` default to `False` so missing parent rows
-are synthesized by a single set-based `GROUP BY` over the
-attribute-normalized `transcript_id` / `gene_id` columns. (See
-[Performance Comparison](../performance.md) — *"GTF Synthesis
-Bottleneck"* — for why this matters.)
+GTF input is auto-detected. GENCODE v49 already supplies gene and transcript
+rows, so reproducible real-data benchmarks set `disable_infer_genes=True` and
+`disable_infer_transcripts=True`. Leave inference enabled for older or derived
+leaf-only files: missing parents are synthesized by set-based `GROUP BY` over
+the normalized `transcript_id` / `gene_id` columns. See the controlled arms in
+[Benchmark methodology](../performance/methodology.md).
 
 ## 2. Walk a single gene's hierarchy
 

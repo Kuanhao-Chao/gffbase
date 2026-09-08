@@ -5,7 +5,7 @@ All notable changes to GFFBase are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-08-15
+## [0.2.0rc1] — Unreleased
 
 Genuine `gffutils` 0.14 API and CLI parity, first-class support for
 discontinuous (multipart) GFF3 features, a `compat`/`strict` mode axis,
@@ -1142,8 +1142,10 @@ attribute escaping now survives materialization.)
 
 ### Notes
 
-Version 0.1.0 is being yanked from PyPI: its metadata advertises Python 3.9
-support that the artifact cannot deliver.
+Version 0.1.0 remains the only published release while 0.2.0 completes its
+hardening and release-evidence gates. Its metadata advertises Python 3.9
+support that the artifact cannot deliver; users who cannot install the 0.2.0
+candidate from source should apply the mitigations in the security advisory.
 
 ---
 
@@ -1153,5 +1155,6 @@ support that the artifact cannot deliver.
 
 Initial public release.
 
+[0.2.0rc1]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0rc1
 [0.2.0]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kuanhao-Chao/gffbase/releases/tag/v0.1.0

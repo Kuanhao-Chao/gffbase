@@ -237,6 +237,11 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: str, force: bool = False
         except duckdb.Error:
             pass
 
+        # gffutils checks for sqlite_stat1 while opening a FeatureDB and warns
+        # if it is absent. Populate planner statistics after every table and
+        # index has reached its final state so an exported database is ready
+        # for legacy readers without a noisy or easy-to-miss manual step.
+        sqlite_con.execute("ANALYZE")
         sqlite_con.commit()
     finally:
         sqlite_con.close()

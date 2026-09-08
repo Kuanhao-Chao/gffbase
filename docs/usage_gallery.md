@@ -426,7 +426,7 @@ contained = db.region_batched(
     peaks,
     featuretype="exon",
     completely_within=True,    # only fully-contained features
-    format="df",
+    format="arrow",
 )
 ```
 
@@ -561,10 +561,12 @@ leaking out of `region()` or `children()` would confuse legacy consumers.
 ### 6.8 Validating a database
 
 ```python
-report = db.validate()          # 14 invariants, each a single set-based query
+report = db.validate()          # fast structural invariants
 report.ok                       # False if any ERROR-severity check failed
 report.errors, report.warnings  # separate: an error is a broken invariant,
                                 # a warning is legal but suspect
+
+full = db.validate(level="full")  # adds recursive closure/content checks
 ```
 
 Run automatically at the end of a strict-mode ingest, and available from the
@@ -717,6 +719,8 @@ print(out_path)
 
 # Round-trip:
 import gffutils                         # pip install gffutils
+# The export already contains SQLite ANALYZE statistics, so the legacy
+# reader opens it without the "database has not had ANALYZE" warning.
 legacy = gffutils.FeatureDB(out_path)
 print(legacy.count_features_of_type())
 ```

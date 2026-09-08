@@ -18,6 +18,7 @@ choice between compatibility and correctness.
 | `GFFFormatError` | A line violates the GFF3 specification. Carries `line_no`, `kind` and `message`, so you get a pointer into the file rather than a stack trace. When the Rust extension is loaded this is the PyO3-defined class; `gffbase.GFFFormatError` is rebound at import so `isinstance` works either way. |
 | `FeatureNotFoundError` | `db[feature_id]` and the id is not in the database. |
 | `DuplicateIDError` | Two features resolve to the same primary key under `merge_strategy="error"` (the default). Usually the split-CDS convention — see [Modes](../guides/modes.md). |
+| `SynthesisConflictError` | One inferred GTF gene/transcript identifier spans incompatible sequence or strand groups. It subclasses `DuplicateIDError`. The default rejects the ambiguous hierarchy; explicit `merge_strategy="create_unique"` creates deterministic per-group parents. |
 | `AttributeStringError` | Column 9 is malformed beyond parsing. |
 | `EmptyInputError` | The input file or iterable yielded no features. |
 | `SchemaVersionError` | The database was written by a newer GFFBase, or its `meta.schema_version` is unintelligible, or it is a v1 database opened with `upgrade="error"`. An *older* readable version is not an error — it degrades to compatibility mode. |

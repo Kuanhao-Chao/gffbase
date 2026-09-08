@@ -82,6 +82,7 @@ def _require_matching_native_version(native_module) -> None:
 # Prefer the Rust exception class when the extension is loaded. Importing all
 # package modules above is safe: Python cannot return this partially initialized
 # package to a caller, and this check runs before package initialization ends.
+GFFFormatError: type[Exception]
 try:  # pragma: no cover - import availability is environment-dependent
     _native_module = import_module("gffbase._native")
 except ImportError:

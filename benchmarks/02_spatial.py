@@ -32,22 +32,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "python"))
 
 import duckdb
 
 from benchmarks.common import (
     GFFBASE_DB,
     LEGACY_DB,
+    configure_duckdb_connection,
     pretty_seconds,
     write_results,
 )
 
 
-def sample_regions(n: int, seed: int = 20260501) -> list[tuple[str, int, int]]:
+def sample_regions(n: int, seed: int = 20260501, *, threads: int = 1) -> list[tuple[str, int, int]]:
     """Sample regions grounded in the gffbase DuckDB feature spans so we never
     query off the end of a chromosome."""
     con = duckdb.connect(str(GFFBASE_DB), read_only=True)
+    configure_duckdb_connection(con, threads)
     rows = con.execute("""
         SELECT seqid, MIN(start) AS lo, MAX("end") AS hi
         FROM features GROUP BY seqid HAVING COUNT(*) > 50
@@ -65,23 +66,26 @@ def sample_regions(n: int, seed: int = 20260501) -> list[tuple[str, int, int]]:
     return out
 
 
-def run_gffbase(regions, *, force_btree: bool):
+def run_gffbase(regions, *, force_btree: bool, threads: int = 1):
     import gffbase
 
-    db = gffbase.FeatureDB(str(GFFBASE_DB))
-    saved = db._rtree_built
-    if force_btree:
-        db._rtree_built = False
-    latencies = []
-    total_features = 0
-    t0 = time.perf_counter()
-    for seqid, rs, re_ in regions:
-        q0 = time.perf_counter()
-        n = sum(1 for _ in db.region(seqid=seqid, start=rs, end=re_, featuretype="exon"))
-        latencies.append(time.perf_counter() - q0)
-        total_features += n
-    elapsed = time.perf_counter() - t0
-    db._rtree_built = saved
+    with gffbase.FeatureDB(str(GFFBASE_DB), read_only=True) as db:
+        configure_duckdb_connection(db.conn, threads)
+        saved = db._rtree_built
+        if force_btree:
+            db._rtree_built = False
+        latencies = []
+        total_features = 0
+        try:
+            t0 = time.perf_counter()
+            for seqid, rs, re_ in regions:
+                q0 = time.perf_counter()
+                n = sum(1 for _ in db.region(seqid=seqid, start=rs, end=re_, featuretype="exon"))
+                latencies.append(time.perf_counter() - q0)
+                total_features += n
+            elapsed = time.perf_counter() - t0
+        finally:
+            db._rtree_built = saved
     return latencies, elapsed, total_features
 
 
@@ -119,14 +123,17 @@ def summarize(latencies, elapsed, n_returned, label):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-queries", type=int, default=5000)
+    ap.add_argument("--threads", type=int, default=1)
     args = ap.parse_args()
+    if args.threads < 1:
+        ap.error("--threads must be >= 1")
 
     print(f"[spatial] sampling {args.n_queries} random regions…", flush=True)
-    regions = sample_regions(args.n_queries)
+    regions = sample_regions(args.n_queries, threads=args.threads)
     print(f"  sampled {len(regions)} regions", flush=True)
 
     print("[spatial] gffbase R-tree path…", flush=True)
-    rt_lat, rt_elapsed, rt_n = run_gffbase(regions, force_btree=False)
+    rt_lat, rt_elapsed, rt_n = run_gffbase(regions, force_btree=False, threads=args.threads)
     rt_summary = summarize(rt_lat, rt_elapsed, rt_n, "gffbase rtree")
     print(
         f"  wall={pretty_seconds(rt_elapsed)}, qps={rt_summary['qps']:.0f}, "
@@ -135,7 +142,7 @@ def main():
     )
 
     print("[spatial] gffbase B-tree fallback path…", flush=True)
-    bt_lat, bt_elapsed, bt_n = run_gffbase(regions, force_btree=True)
+    bt_lat, bt_elapsed, bt_n = run_gffbase(regions, force_btree=True, threads=args.threads)
     bt_summary = summarize(bt_lat, bt_elapsed, bt_n, "gffbase btree")
     print(
         f"  wall={pretty_seconds(bt_elapsed)}, qps={bt_summary['qps']:.0f}, "
@@ -154,6 +161,7 @@ def main():
 
     payload = {
         "n_queries": len(regions),
+        "threads": args.threads,
         "gffbase_rtree": rt_summary,
         "gffbase_btree": bt_summary,
         "legacy": lg_summary,

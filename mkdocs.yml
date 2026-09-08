@@ -4,7 +4,7 @@ site_name: GFFBase
 # were unreachable from the site for an entire release, because the default
 # is a warning in a log nobody reads.
 strict: true
-site_description: Rust + DuckDB GFF3/GTF engine — up to 32× faster ingest, 36× faster bulk ML queries vs legacy gffutils.
+site_description: Rust + DuckDB GFF3/GTF engine with gffutils compatibility, structural validation, and Arrow-native bulk queries.
 site_url: https://khchao.com/gffbase/
 repo_url: https://github.com/Kuanhao-Chao/gffbase
 repo_name: Kuanhao-Chao/gffbase
@@ -152,8 +152,12 @@ nav:
       - FAQ: faq.md
       - Troubleshooting: guides/troubleshooting.md
   - Design:
+      - Architecture: design/architecture.md
       - Schema v2: design/schema-v2.md
   - Project:
+      - Testing and release gates: testing.md
+      - 0.2 release checklist: release-checklist.md
+      - Roadmap: roadmap.md
       - Changelog: changelog.md
       - Contributing: contributing.md
       - Citation: citation.md

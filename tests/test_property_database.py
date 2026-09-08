@@ -23,13 +23,13 @@ expected answer independently of DuckDB's closure and index implementations.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 from gffbase import Feature, create_db
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
@@ -41,11 +41,20 @@ def _dag_cases(draw):
     """A rooted acyclic hierarchy plus inclusive region queries."""
 
     count = draw(st.integers(min_value=1, max_value=10))
-    parents = [None]
+    parents: list[tuple[int, ...]] = [()]
     for child in range(1, count):
-        # A parent always precedes its child, which makes cycles impossible
-        # without sharing production's graph implementation.
-        parents.append(draw(st.integers(min_value=0, max_value=child - 1)))
+        # Every parent precedes its child, which makes cycles impossible
+        # without sharing production's graph implementation. A set (rather
+        # than one scalar parent) generates diamonds, alternate paths, and
+        # genuine GFF3 multi-parent features.
+        selected = draw(
+            st.sets(
+                st.integers(min_value=0, max_value=child - 1),
+                min_size=0,
+                max_size=min(3, child),
+            )
+        )
+        parents.append(tuple(sorted(selected)))
 
     intervals = []
     for _ in range(count):
@@ -66,44 +75,57 @@ def _dag_cases(draw):
     return parents, intervals, queries
 
 
-def _descendants(parents: list[int | None], anchor: int) -> dict[int, int]:
-    direct: dict[int, list[int]] = defaultdict(list)
-    for child, parent in enumerate(parents):
-        if parent is not None:
-            direct[parent].append(child)
-
+def _shortest_paths(direct: dict[int, set[int]], anchor: int) -> dict[int, int]:
+    """Independent breadth-first minimum depths from one anchor."""
     found: dict[int, int] = {}
-    frontier = [(child, 1) for child in direct[anchor]]
+    frontier = deque((child, 1) for child in sorted(direct.get(anchor, set())))
     while frontier:
-        child, depth = frontier.pop()
-        previous = found.get(child)
-        if previous is not None and previous <= depth:
+        descendant, depth = frontier.popleft()
+        if descendant in found:
             continue
-        found[child] = depth
-        frontier.extend((grandchild, depth + 1) for grandchild in direct[child])
+        found[descendant] = depth
+        frontier.extend((child, depth + 1) for child in sorted(direct.get(descendant, set())))
     return found
 
 
-def _ancestors(parents: list[int | None], anchor: int) -> dict[int, int]:
-    found: dict[int, int] = {}
-    parent = parents[anchor]
-    depth = 1
-    while parent is not None:
-        found[parent] = depth
-        parent = parents[parent]
-        depth += 1
-    return found
+def _descendants(parents: list[tuple[int, ...]], anchor: int) -> dict[int, int]:
+    direct: dict[int, set[int]] = defaultdict(set)
+    for child, child_parents in enumerate(parents):
+        for parent in child_parents:
+            direct[parent].add(child)
+    return _shortest_paths(direct, anchor)
 
 
+def _ancestors(parents: list[tuple[int, ...]], anchor: int) -> dict[int, int]:
+    reverse: dict[int, set[int]] = defaultdict(set)
+    for child, child_parents in enumerate(parents):
+        reverse[child].update(child_parents)
+    return _shortest_paths(reverse, anchor)
+
+
+@example(
+    (
+        [(), (0,), (0,), (0, 1, 2)],
+        [(1, 10), (11, 20), (21, 30), (31, 40)],
+        [(1, 40), (15, 35)],
+    )
+)
+@example(
+    (
+        [(), (0,), (0,), (1, 2)],
+        [(1, 100), (10, 20), (30, 40), (15, 35)],
+        [(1, 1), (20, 30)],
+    )
+)
 @given(_dag_cases())
 def test_generated_dag_matches_relationship_and_region_oracles(case):
     parents, intervals, queries = case
     lines = ["##gff-version 3\n"]
-    for idx, ((start, end), parent) in enumerate(zip(intervals, parents, strict=True)):
+    for idx, ((start, end), child_parents) in enumerate(zip(intervals, parents, strict=True)):
         attrs = f"ID=f{idx}"
-        if parent is not None:
-            attrs += f";Parent=f{parent}"
-        featuretype = "gene" if parent is None else "exon"
+        if child_parents:
+            attrs += ";Parent=" + ",".join(f"f{parent}" for parent in child_parents)
+        featuretype = "gene" if not child_parents else "exon"
         lines.append(f"chr1\tproperty\t{featuretype}\t{start}\t{end}\t.\t+\t.\t{attrs}\n")
 
     with TemporaryDirectory(prefix="gffbase-property-") as scratch:
@@ -129,6 +151,17 @@ def test_generated_dag_matches_relationship_and_region_oracles(case):
                 scalar_parents = {parent.id for parent in db.parents(anchor, level=None)}
                 assert scalar_children == set(expected_children[anchor])
                 assert scalar_parents == set(expected_parents[anchor])
+                for depth in range(1, len(parents)):
+                    assert {child.id for child in db.children(anchor, level=depth)} == {
+                        child
+                        for child, expected_depth in expected_children[anchor].items()
+                        if expected_depth == depth
+                    }
+                    assert {parent.id for parent in db.parents(anchor, level=depth)} == {
+                        parent
+                        for parent, expected_depth in expected_parents[anchor].items()
+                        if expected_depth == depth
+                    }
 
             anchors = list(expected_children)
             child_rows = db.children_batched(anchors, level=None).to_pylist()
@@ -178,16 +211,70 @@ def _expected_closure(edges: set[tuple[str, str]]) -> set[tuple[str, str, int]]:
 
     closure: set[tuple[str, str, int]] = set()
     for ancestor in direct:
-        frontier = [(child, 1, {ancestor, child}) for child in direct[ancestor]]
+        found: dict[str, int] = {}
+        frontier = deque((child, 1) for child in sorted(direct[ancestor]))
         while frontier:
-            descendant, depth, seen = frontier.pop()
-            closure.add((ancestor, descendant, depth))
-            frontier.extend(
-                (child, depth + 1, seen | {child})
-                for child in direct.get(descendant, set())
-                if child not in seen
-            )
+            descendant, depth = frontier.popleft()
+            if descendant in found:
+                continue
+            found[descendant] = depth
+            frontier.extend((child, depth + 1) for child in sorted(direct.get(descendant, set())))
+        closure.update((ancestor, descendant, depth) for descendant, depth in found.items())
     return closure
+
+
+def test_closure_oracle_uses_only_the_shortest_alternate_path():
+    """A direct edge wins over a longer route to the same descendant."""
+    edges = {("a", "b"), ("a", "c"), ("c", "b")}
+    assert _expected_closure(edges) == {
+        ("a", "b", 1),
+        ("a", "c", 1),
+        ("c", "b", 1),
+    }
+
+
+def test_forced_multipart_and_duplicate_id_shapes(tmp_path: Path):
+    """Pin the graph-shaping ingest cases random DAG rows cannot express."""
+    multipart = tmp_path / "multipart.gff3"
+    multipart.write_text(
+        "##gff-version 3\n"
+        "chr1\tp\tgene\t1\t100\t.\t+\t.\tID=g\n"
+        "chr1\tp\tmRNA\t1\t100\t.\t+\t.\tID=t;Parent=g\n"
+        "chr1\tp\tCDS\t10\t20\t.\t+\t0\tID=cds;Parent=t\n"
+        "chr1\tp\tCDS\t30\t40\t.\t+\t2\tID=cds;Parent=t\n",
+        encoding="utf-8",
+    )
+    with create_db(str(multipart), ":memory:", mode="strict") as db:
+        assert db.conn.execute("SELECT n_segments FROM features WHERE id = 'cds'").fetchone() == (
+            2,
+        )
+        assert db.conn.execute(
+            'SELECT start, "end", frame FROM segments WHERE feature_id = ? ORDER BY seg_idx',
+            ["cds"],
+        ).fetchall() == [(10, 20, "0"), (30, 40, "2")]
+        assert db.conn.execute(
+            "SELECT ancestor, descendant, depth FROM closure ORDER BY 1, 2"
+        ).fetchall() == [("g", "cds", 2), ("g", "t", 1), ("t", "cds", 1)]
+        assert db.validate(level="full").ok
+
+    duplicate = tmp_path / "duplicate.gff3"
+    duplicate.write_text(
+        "##gff-version 3\n"
+        "chr1\tp\tgene\t1\t10\t.\t+\t.\tID=dup\n"
+        "chr1\tp\tgene\t20\t30\t.\t+\t.\tID=dup\n",
+        encoding="utf-8",
+    )
+    with create_db(str(duplicate), ":memory:", merge_strategy="create_unique") as db:
+        assert db.conn.execute(
+            "SELECT id, raw_id, occ FROM features ORDER BY file_order"
+        ).fetchall() == [
+            ("dup", "dup", 0),
+            ("dup_1", "dup", 1),
+        ]
+        # This table is reserved for merge->create_unique fallback. Explicit
+        # create_unique provenance lives on (raw_id, occ), matching gffutils.
+        assert db.conn.execute("SELECT COUNT(*) FROM duplicates").fetchone() == (0,)
+        assert db.validate(level="full").ok
 
 
 class DatabaseMutationMachine(RuleBasedStateMachine):

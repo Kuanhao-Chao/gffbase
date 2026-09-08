@@ -32,21 +32,20 @@ migrate by changing one import line.
 
 ### Three reasons it matters
 
-1. **Whole-genome ingest, measured.** gffbase is faster than legacy `gffutils`
-   on every corpus benchmarked, and the gap is widest on GTF — where the
-   missing gene and transcript rows have to be *invented*. Legacy does that
-   with a Python loop and millions of correlated SQLite subqueries; gffbase
-   does it with two set-based DuckDB `GROUP BY` aggregations and one recursive
-   CTE. *([The numbers](#-measured-against-legacy-gffutils))*
+1. **Whole-genome ingest, measured.** The historical Mac sweep records the
+   complete commands and environment for four large annotations. A controlled
+   Linux campaign now separates modern GTF with existing parents, inference
+   disabled, and a reproducibly parent-stripped synthesis workload before
+   making a causal performance claim. *([The numbers](#-measured-against-legacy-gffutils))*
 2. **Bulk extraction without Python objects.**
    `children_batched(format='arrow')` answers "every exon for these tens of
    thousands of transcripts" with a single set-based query returning a
    `pyarrow.Table` that shares memory with DuckDB. No `Feature` object is
    constructed at any layer. *([How](#-the-killer-feature--zero-copy-pyarrow-for-ml-pipelines))*
-3. **Validated against real annotations.** All five canonical human-genome
-   releases (GENCODE GTF + GFF3, RefSeq, MANE, CHESS 3) ingest cleanly and pass
-   a 14-invariant structural validator. The split-CDS duplicate-ID convention
-   is handled either way you ask for it.
+3. **Validated, not just counted.** Structural checks cover feature identity,
+   normalized attributes, multipart envelopes, direct edges, transitive
+   closure, indexes, and synthetic hierarchy coherence. Real-corpus runs are a
+   separate release gate from the quick unit suite.
 
 ---
 
@@ -55,6 +54,11 @@ migrate by changing one import line.
 ```bash
 pip install gffbase
 ```
+
+> **Release status:** PyPI currently provides 0.1.0. This branch documents the
+> unreleased 0.2.0rc1 candidate; verify `gffbase.__version__` and use an exact
+> reviewed commit for candidate testing. The release checklist will add the
+> final date and publication instructions only when 0.2.0 is authorized.
 
 Universal `abi3-py310` wheels — single binary per arch covers CPython
 3.10 → 3.14. No Rust toolchain required at install time.
@@ -129,9 +133,9 @@ pipelines with PyTorch and Hugging Face `datasets`.
 
 ## ⚡ Measured against legacy `gffutils`
 
-Head-to-head on the five canonical human-genome annotation releases — including
-the **GENCODE v49 GTF and GFF3 editions of the same release**, a same-biology,
-different-format pairing that isolates where the ingest cost actually lives.
+The table below is the retained historical Mac run. It contains four of the
+five canonical inputs and used default legacy GTF inference. It is useful
+platform-specific evidence, but it does not isolate the cost of synthesis.
 
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
@@ -149,20 +153,18 @@ different-format pairing that isolates where the ingest cost actually lives.
 *Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
-“Censored at” means the comparator was killed at the safety valve without
+“Censored at” means the comparator was killed at its safety valve without
 finishing. It is cap evidence only: no comparator wall or speedup is claimed.
 
-**Why the two GENCODE rows differ so much for legacy and so little for
-gffbase.** GFF3 states parentage explicitly; GTF only implies it, so the gene
-and transcript rows have to be *invented* from the span of their children.
-Legacy does that with a Python loop and one correlated SQL subquery per missing
-parent — millions of round trips. gffbase does it with two set-based `GROUP BY`
-aggregations and one recursive CTE, and runs the *same* code path for both
-formats.
+**Do not interpret the GTF row as a synthesis-only comparison.** GENCODE v49's
+GTF already contains gene and transcript rows. Leaving legacy inference enabled
+can repeat work that its own modern-GENCODE guidance recommends disabling. The
+cluster campaign therefore reports default behavior, inference-disabled real
+data, and parent-stripped synthesis as three independent arms.
 
-**Robustness.** Every corpus ingests cleanly through the NCBI-spec-hardened
-Rust parser (9 enforced rules, line-numbered `GFFFormatError`), and every one
-passes the 14-invariant structural validator afterwards.
+**Robustness.** Publication now requires matching deterministic feature and
+relationship signatures plus a full structural-validation pass. Parser
+failures remain line-numbered `GFFFormatError` instances.
 
 **Three of the five use the split-CDS convention** — one CDS spread over
 several lines that share an `ID` — namely RefSeq, MANE, and GENCODE's GFF3
@@ -232,9 +234,9 @@ zero-copy contract for spatial and parent workloads.
 
 - **Rust + PyO3 parser** — SIMD line/tab splitting, lazy URL-decoding
   *and* percent-encoding on the way back out, GTF semicolon-in-quotes safe,
-  gzipped input transparent. Hardened against the NCBI GFF3 spec
-  (line-numbered `GFFFormatError`, 9 enforced rules, `compat`/`strict`
-  profiles).
+  gzipped input transparent. The formal profile enforces the nine-column GFF3
+  contract with line-numbered `GFFFormatError`; the compatibility profile
+  preserves accepted legacy inputs with diagnostics.
 - **DuckDB columnar storage** — 11-table schema (plus 3 compatibility
   views), set-based GTF
   gene/transcript synthesis, recursive-CTE transitive closure,
@@ -255,7 +257,8 @@ zero-copy contract for spatial and parent workloads.
   APIs. Several lines sharing one `ID` are one logical feature.
 - **A command line** — `gffbase create|fetch|children|parents|region|search|
   rmdups|sanitize|validate|migrate`. See [the CLI reference](cli.md).
-- **Post-ingest validation** — `gffbase.validate` checks 14 invariants, and
+- **Post-ingest validation** — `gffbase.validate` checks fast and full
+  structural invariant sets, and
   `gffbase.migrate` upgrades a v1 database in place.
 - **abi3 wheels** — single binary per arch covers CPython 3.10-3.14.
 
@@ -350,7 +353,7 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.2.0},
+  version = {0.2.0rc1},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```

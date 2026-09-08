@@ -4,17 +4,16 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | ✅ Current |
-| 0.1.0   | ❌ Superseded — upgrade to 0.2.0 |
+| 0.2.0 candidate | ✅ Fixed on the release branch; not yet published |
+| 0.1.0   | ⚠️ Only public release; affected by known issues below |
 | < 0.1   | ❌ |
 
-0.1.0 is the only release before 0.2.0 (0.1.1 was prepared but never tagged or
-published, and its changes ship inside 0.2.0). It carries two SQL injection
-vulnerabilities that are fixed in 0.2.0 and are **not** backported — see
-`docs/security/2026-sql-injection.md`, which includes a mitigation for anyone
-who cannot upgrade immediately. Backporting to a single superseded release,
-rather than shipping the fix in the version everyone should move to, would
-mean maintaining two vulnerable-adjacent branches for one artifact.
+0.1.0 is currently the only tagged and published release (0.1.1 was prepared
+but never published). It carries two SQL injection vulnerabilities fixed on
+the 0.2.0 release branch and not backported. Until 0.2.0 is published, install
+the reviewed candidate from its exact commit or use the mitigations in
+`docs/security/2026-sql-injection.md`. Do not treat `pip install gffbase` as an
+upgrade to 0.2.0 until PyPI lists that version.
 
 ## Reporting a vulnerability
 

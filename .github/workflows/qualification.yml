@@ -1,0 +1,376 @@
+name: Release qualification
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  compatibility:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }} / ${{ matrix.spatial }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        spatial: [rtree, btree]
+    env:
+      EXPECTED_SPATIAL: ${{ matrix.spatial }}
+      GFFBASE_TEST_DISABLE_RTREE: ${{ matrix.spatial == 'btree' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Build the native editable candidate
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'maturin==1.14.1'
+          python -m pip install -e ".[test]"
+          python -m pip check
+      - name: Assert native and selected spatial routes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import gffbase
+
+          assert gffbase.native_available(), "editable candidate has no native extension"
+          db = gffbase.create_db(
+              "##gff-version 3\nchr1\tq\tgene\t1\t10\t.\t+\t.\tID=g\n",
+              ":memory:",
+              from_string=True,
+          )
+          try:
+              expected = os.environ["EXPECTED_SPATIAL"] == "rtree"
+              assert db._rtree_built is expected, (
+                  f"requested {os.environ['EXPECTED_SPATIAL']}, "
+                  f"but _rtree_built={db._rtree_built}"
+              )
+          finally:
+              db.close()
+          PY
+      - name: Supported-surface suite
+        shell: bash
+        run: pytest -m "not corpus and not parity and not slow and not property and not pandas_docs"
+
+  python-fallback:
+    name: Pure-Python fallback without an extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - name: Install runtime and test dependencies without building gffbase
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'duckdb>=1.4.1' 'pyarrow>=18.1' \
+            'pytest>=7' 'pytest-cov>=4' 'hypothesis==6.165.5' \
+            'packaging>=24' 'pyyaml>=6'
+          PYTHONPATH=python python -c "import gffbase; assert not gffbase.native_available()"
+      - name: Full default suite on the source fallback
+        run: |
+          PYTHONPATH=python python -m pytest \
+            -m "not corpus and not parity and not slow and not property and not pandas_docs"
+
+  minimum-deps:
+    name: Minimum dependencies / ${{ matrix.spatial }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        spatial: [rtree, btree]
+    env:
+      EXPECTED_SPATIAL: ${{ matrix.spatial }}
+      GFFBASE_TEST_DISABLE_RTREE: ${{ matrix.spatial == 'btree' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.10", cache: pip }
+      - name: Install exact declared floors without resolver upgrades
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'maturin==1.14.1' \
+            'duckdb==1.4.1' 'pyarrow==18.1.0' \
+            'pytest>=7' 'pytest-cov>=4' 'hypothesis==6.165.5' \
+            'packaging>=24' 'pyyaml>=6' 'tomli>=2'
+          python -m pip install -e . --no-deps
+          python -m pip check
+      - name: Assert the floor environment and spatial route
+        run: |
+          python - <<'PY'
+          import os
+          import duckdb
+          import pyarrow
+          import gffbase
+
+          assert duckdb.__version__ == "1.4.1"
+          assert pyarrow.__version__ == "18.1.0"
+          assert gffbase.native_available()
+          db = gffbase.create_db(
+              "##gff-version 3\nchr1\tq\tgene\t1\t10\t.\t+\t.\tID=g\n",
+              ":memory:",
+              from_string=True,
+          )
+          try:
+              expected = os.environ["EXPECTED_SPATIAL"] == "rtree"
+              assert db._rtree_built is expected
+          finally:
+              db.close()
+          PY
+      - run: pytest -m "not corpus and not parity and not slow and not property and not pandas_docs"
+
+  slow:
+    name: Slow Python suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test,all]"
+          pytest -m slow
+
+  properties:
+    name: Property ${{ matrix.profile }} / ${{ matrix.test-file }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: quick
+            test-file: tests/test_parser_properties.py
+          - profile: quick
+            test-file: tests/test_property_database.py
+          - profile: extended
+            test-file: tests/test_parser_properties.py
+          - profile: extended
+            test-file: tests/test_property_database.py
+    env:
+      GFFBASE_HYPOTHESIS_PROFILE: ${{ matrix.profile }}
+      PROPERTY_FILE: ${{ matrix.test-file }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - name: Install deterministic property environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -m pip install 'hypothesis==6.165.5'
+      - run: python -m pytest -q -m property "$PROPERTY_FILE" --durations=0
+
+  parity:
+    name: Pinned gffutils parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - name: Install candidate and frozen oracle
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test,all]"
+          python -m pip install \
+            'gffutils @ git+https://github.com/daler/gffutils@6b84330f472dd2b4c69e36f319da7ade95bd5961'
+      - run: python tools/gen_parity_manifest.py --check
+      - run: pytest -m parity
+
+  corpus:
+    name: Five-corpus correctness gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - name: Restore checksum-pinned public corpora
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: benchmarks/data
+          key: gffbase-corpora-${{ hashFiles('benchmarks/corpora.py') }}
+      - name: Install and provision verified inputs
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python benchmarks/download_corpora.py
+      - run: pytest -m corpus
+
+  rust:
+    name: Locked Rust release suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - run: cargo test --locked --release --manifest-path rust/Cargo.toml
+
+  documentation:
+    name: Generic, pandas, and strict MkDocs documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SITE_DIR: ${{ runner.temp }}/gffbase-site
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12", cache: pip }
+      - name: Install docs, pandas, and the exact executable-docs oracle
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test,docs,pandas]"
+          python -m pip install \
+            'gffutils @ git+https://github.com/daler/gffutils@6b84330f472dd2b4c69e36f319da7ade95bd5961'
+      - run: pytest -q tests/test_docs_snippets.py -m "not pandas_docs"
+      - run: pytest -q tests/test_docs_snippets.py -m pandas_docs
+      - run: mkdocs build --strict --site-dir "$SITE_DIR"
+
+  package:
+    name: Wheel, sdist, archive identity, and clean installs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ARTIFACT_DIR: ${{ runner.temp }}/gffbase-qualified-dist
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: Build each local qualification archive once
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'build==1.3.0' 'packaging==25.0'
+          python -m build --wheel --sdist --outdir "$ARTIFACT_DIR"
+      - name: Inspect metadata, native payload, safe members, and RECORD
+        run: |
+          expected=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          python tools/release_artifacts.py inspect \
+            --artifact-dir "$ARTIFACT_DIR" \
+            --expected-version "$expected" \
+            --expected-target linux-x86_64 \
+            --expected-target sdist
+      - name: Clean-install and exercise the exact wheel
+        run: |
+          wheel=$(find "$ARTIFACT_DIR" -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python -m venv "${RUNNER_TEMP}/qualified-wheel"
+          "${RUNNER_TEMP}/qualified-wheel/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/qualified-wheel/bin/python" -m pip install "$wheel"
+          "${RUNNER_TEMP}/qualified-wheel/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "${RUNNER_TEMP}/qualified-wheel/bin/python" - <<'PY'
+          import importlib.metadata
+          import gffbase
+          import gffbase._native as native
+
+          assert importlib.metadata.version("gffbase") == gffbase.__version__ == native.__version__
+          assert gffbase.native_available()
+          db = gffbase.create_db(
+              "##gff-version 3\nchr1\tq\tgene\t1\t10\t.\t+\t.\tID=g\n",
+              ":memory:",
+              from_string=True,
+          )
+          assert gffbase.validate_db(db, level="full").ok
+          db.close()
+          PY
+          "${RUNNER_TEMP}/qualified-wheel/bin/gffbase" --version
+      - name: Clean-build, install, and exercise the exact sdist
+        run: |
+          sdist=$(find "$ARTIFACT_DIR" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)
+          test -n "$sdist"
+          python -m venv "${RUNNER_TEMP}/qualified-sdist"
+          "${RUNNER_TEMP}/qualified-sdist/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/qualified-sdist/bin/python" -m pip install "$sdist"
+          "${RUNNER_TEMP}/qualified-sdist/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "${RUNNER_TEMP}/qualified-sdist/bin/python" - <<'PY'
+          import importlib.metadata
+          import gffbase
+          import gffbase._native as native
+
+          assert importlib.metadata.version("gffbase") == gffbase.__version__ == native.__version__
+          assert gffbase.native_available()
+          db = gffbase.create_db(
+              "##gff-version 3\nchr1\tq\tgene\t1\t10\t.\t+\t.\tID=g\n",
+              ":memory:",
+              from_string=True,
+          )
+          assert gffbase.validate_db(db, level="full").ok
+          db.close()
+          PY
+
+  lint:
+    name: Ruff, mypy, rustfmt, and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - run: |
+          python -m pip install 'ruff==0.16.2' 'mypy==2.3.0' duckdb pyarrow packaging
+          ruff check python/gffbase tests benchmarks tools
+          ruff format --check python/gffbase tests benchmarks tools
+          mypy
+      - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
+        with: { components: clippy, rustfmt }
+      - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
+
+  workflow-security:
+    name: Workflow syntax, security, and citation schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.11", cache: pip }
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: { go-version: "1.26.0", cache: false }
+      - name: Install pinned workflow and CFF validators
+        run: |
+          python -m pip install 'zizmor==1.30.0' 'cffconvert==2.0.0'
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - run: actionlint .github/workflows/*.yml
+      - run: zizmor --pedantic .github/workflows
+      - run: cffconvert --validate
