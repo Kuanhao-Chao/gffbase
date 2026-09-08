@@ -272,3 +272,83 @@ def test_unknown_seqid_returns_empty(edge_db):
 def test_unknown_seqid_returns_empty_btree(edge_db_btree):
     rows = list(edge_db_btree.region(seqid="chrZZ", start=1, end=1000))
     assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# Reversed spans (end < start)
+# ---------------------------------------------------------------------------
+#
+# Compat mode accepts `end < start` -- it is a warning, not a rejection,
+# because real annotation files contain them and refusing the whole file helps
+# nobody. `sanitize_gff_file` exists to repair one. Having accepted such a row,
+# the two index paths have to agree about it.
+#
+# They did not. `ST_MakeEnvelope` orders its own corners, so the R-tree treated
+# `1000..500` as `500..1000`; the B-tree compared the raw columns and could
+# only match when the query was wide enough to satisfy `"end" >= ?`. Same
+# database, same query, two answers -- selected by whether the DuckDB spatial
+# extension happened to load, which depends on network egress at ingest time.
+#
+# Normalized is the right reading: someone who wrote `1000 500` meant
+# `500..1000`, and INV-8 has asserted the normalizing envelope all along. The
+# B-tree now normalizes too.
+#
+# The existing fixture could not catch this: every feature in it is well formed.
+
+
+def _reversed_src(path):
+    path.write_text(
+        "##gff-version 3\n"
+        "chr1\trs\texon\t100\t50\t.\t+\t.\tID=reversed\n"
+        "chr1\trs\texon\t10\t20\t.\t+\t.\tID=normal\n"
+    )
+    return str(path)
+
+
+@pytest.fixture
+def reversed_db(tmp_path):
+    return create_db(_reversed_src(tmp_path / "rev.gff3"), str(tmp_path / "rev.duckdb"), force=True)
+
+
+@pytest.fixture
+def reversed_db_btree(tmp_path, monkeypatch):
+    monkeypatch.setenv("GFFBASE_TEST_DISABLE_RTREE", "1")
+    return create_db(
+        _reversed_src(tmp_path / "rev_b.gff3"), str(tmp_path / "rev_b.duckdb"), force=True
+    )
+
+
+REVERSED_QUERIES = [
+    # (query, ids expected once 100..50 is read as 50..100)
+    ({"seqid": "chr1", "start": 60, "end": 200}, {"reversed"}),
+    ({"seqid": "chr1", "start": 1, "end": 1000}, {"reversed", "normal"}),
+    ({"seqid": "chr1", "start": 40, "end": 60}, {"reversed"}),
+    ({"seqid": "chr1", "start": 200, "end": 300}, set()),
+    ({"seqid": "chr1", "start": 15, "end": 18}, {"normal"}),
+]
+
+
+@pytest.mark.parametrize(("kwargs", "expected"), REVERSED_QUERIES)
+def test_a_reversed_span_is_read_as_its_normalized_range(reversed_db, kwargs, expected):
+    assert set(_ids(reversed_db, **kwargs)) == expected
+
+
+@pytest.mark.parametrize(("kwargs", "expected"), REVERSED_QUERIES)
+def test_the_btree_reads_a_reversed_span_the_same_way(reversed_db_btree, kwargs, expected):
+    assert set(_ids(reversed_db_btree, **kwargs)) == expected
+
+
+@pytest.mark.parametrize(("kwargs", "_expected"), REVERSED_QUERIES)
+def test_the_two_index_paths_agree_about_a_reversed_span(
+    reversed_db, reversed_db_btree, kwargs, _expected
+):
+    """The property that actually matters: same database, same answer,
+    whichever index the environment gave us."""
+    assert set(_ids(reversed_db, **kwargs)) == set(_ids(reversed_db_btree, **kwargs))
+
+
+def test_a_reversed_span_still_round_trips_its_original_bytes(reversed_db):
+    """Normalizing is a QUERY-time reading. The stored row keeps the bytes the
+    file had, or gffbase would stop being byte-faithful on output."""
+    feature = reversed_db["reversed"]
+    assert (feature.start, feature.end) == (100, 50)

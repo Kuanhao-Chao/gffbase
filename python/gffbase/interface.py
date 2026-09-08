@@ -121,7 +121,14 @@ _ORDER_BY_COLUMNS = {
     "featuretype": "{q}featuretype",
     "start": "{q}start",
     "end": '{q}"end"',
-    "score": "{q}score",
+    # TRY_CAST, not a bare column: `score` is VARCHAR because GFF3 allows `.`
+    # and the oracle stores column 6 as text. Comparing it as text ranked
+    # `10 < 100 < 1e3 < 2.5 < 9`, so "the highest-scoring features" came back
+    # wrong with nothing raised. TRY_CAST yields NULL for `.` and for any
+    # non-numeric value, and DuckDB's NULLS LAST default then puts unscored
+    # features at the end, which is what a caller asking to sort by score
+    # means. gffutils has the same defect; this is a deliberate divergence.
+    "score": "TRY_CAST({q}score AS DOUBLE)",
     "strand": "{q}strand",
     "frame": "{q}frame",
     # The oracle's names for the two blob columns.
@@ -173,6 +180,21 @@ def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
                 f"cannot order by {name!r}; order_by accepts {', '.join(sorted(_ORDER_BY_COLUMNS))}"
             ) from None
         parts.append(f"{template.format(q=q)} {direction}")
+    # Append `id` unless the caller already sorted by it. None of the columns
+    # above is unique -- features share a start, a featuretype, a score, and
+    # even `file_order` repeats, because GTF synthesis stamps a synthesized
+    # parent with MIN(file_order) of its children. DuckDB sorts in parallel and
+    # does not preserve ties, so without a unique final key the same query over
+    # the same data returns a different order run to run.
+    #
+    # ASC always, independent of `reverse`: the tiebreak exists to be stable,
+    # not to be meaningful, and flipping it with the user's key would make
+    # `reverse=True` something other than the exact reverse of the forward
+    # order for tied rows.
+    #
+    # `region_batched` already did this and explains why at its own ORDER BY.
+    if "id" not in names:
+        parts.append(f"{q}id ASC")
     return ", ".join(parts)
 
 
@@ -1135,7 +1157,8 @@ class FeatureDB:
         )
         if not seg_where:
             sql = (
-                f"SELECT {_SELECT_FEATURE} FROM features WHERE {' AND '.join(where)} ORDER BY start"
+                f"SELECT {_SELECT_FEATURE} FROM features WHERE {' AND '.join(where)} "
+                "ORDER BY start, id"
             )
             return sql, params
 
@@ -1158,7 +1181,7 @@ class FeatureDB:
         sql = (
             f"SELECT {_SELECT_FEATURE} FROM ("
             f"SELECT {inner_cols} FROM features WHERE {' AND '.join(where)}"
-            f") AS f WHERE {' AND '.join(seg_where)} ORDER BY f.start"
+            f") AS f WHERE {' AND '.join(seg_where)} ORDER BY f.start, f.id"
         )
         return sql, params + seg_params
 
@@ -1168,22 +1191,44 @@ class FeatureDB:
         if seqid is not None:
             where.append("seqid = ?")
             params.append(seqid)
+        # LEAST/GREATEST rather than start/"end" throughout the positional
+        # comparisons below.
+        #
+        # Compat mode accepts a reversed row (`end < start`) -- it is a
+        # warning, and `sanitize_gff_file` exists to repair one. The R-tree
+        # path has always normalized such a row, because `ST_MakeEnvelope`
+        # orders its own corners, and INV-8 asserts exactly that. The B-tree
+        # path compared the raw columns, so the two paths disagreed about the
+        # same row in the same database: for `1000..500` queried at 60..200,
+        # `"end" >= 60` is false and the B-tree returned nothing while the
+        # R-tree returned the feature. Widen the query to 1..1000 and both
+        # returned it, which is why a narrow-query test missed this.
+        #
+        # Normalizing here rather than nulling the envelope keeps the reversed
+        # row reachable. A user who wrote `1000 500` meant 500..1000, and
+        # dropping it silently would lose data the file plainly contains.
+        #
+        # The cost is zone-map pruning on `start` for this fallback path.
+        # That is worth paying for two paths that agree; reversed rows are
+        # malformed and vanishingly rare, but a query that answers differently
+        # depending on whether an extension loaded is a correctness bug.
+        lo, hi = 'LEAST(start, "end")', 'GREATEST(start, "end")'
         if start is not None and end is not None:
             if completely_within:
-                where.append('start >= ? AND "end" <= ?')
+                where.append(f"{lo} >= ? AND {hi} <= ?")
                 params.extend([start, end])
             else:
                 # Standard overlap: feature.start <= region.end AND feature.end >= region.start
-                where.append('start <= ? AND "end" >= ?')
+                where.append(f"{lo} <= ? AND {hi} >= ?")
                 params.extend([end, start])
                 seg_where, seg_params = self._segment_overlap(start, end)
                 where.extend(seg_where)
                 params.extend(seg_params)
         elif start is not None:
-            where.append("start >= ?")
+            where.append(f"{lo} >= ?")
             params.append(start)
         elif end is not None:
-            where.append('"end" <= ?')
+            where.append(f"{hi} <= ?")
             params.append(end)
         if strand is not None:
             where.append("strand = ?")
@@ -1199,7 +1244,8 @@ class FeatureDB:
         sql = f"SELECT {_SELECT_FEATURE} FROM features"
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY start"
+        # `start` alone is not a total order; see `_order_clause`.
+        sql += " ORDER BY start, id"
         return sql, params
 
     @staticmethod
