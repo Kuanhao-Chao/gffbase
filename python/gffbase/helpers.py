@@ -245,7 +245,7 @@ def canonical_transcripts(db, fasta_filename):
 
     Two upstream defects are not reproduced: its fallback sorts ascending and
     takes `[0]`, selecting the *shortest* transcript against its own comment;
-    and it `print()`s an internal tuple to stdout on every gene, which corrupts
+    and it calls ``print()`` on an internal tuple for every gene, which corrupts
     any piped output.
     """
     import pyfaidx
