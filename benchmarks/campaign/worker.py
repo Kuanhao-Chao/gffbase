@@ -851,6 +851,19 @@ def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
         else (f"{spec.result_key}.duckdb", f"{spec.result_key}_legacy.sqlite")
     )
     allowed_files = {f"{base}{suffix}" for base in database_bases for suffix in _DATABASE_SUFFIXES}
+    # `gffbase.ingest.from_file` builds into `<target>.gffbase-building.<pid>`
+    # and renames on success, so a half-written database never appears under
+    # the target name. DuckDB puts its own sidecars beside that temporary.
+    # `status` scans a scratch directory while its job is still running, so it
+    # meets them; they are transient artifacts of the tool the campaign drives,
+    # not stray files.
+    #
+    # Matched by shape rather than added to the set, because the pid is not
+    # known here -- but still anchored to this job's own database names, so a
+    # file naming some other database is rejected exactly as before.
+    _bases = "|".join(re.escape(base) for base in database_bases)
+    _suffixes = "|".join(re.escape(suffix) for suffix in _DATABASE_SUFFIXES)
+    in_progress = re.compile(rf"(?:{_bases})\.gffbase-building\.\d+(?:{_suffixes})\Z")
     if spec.kind != "bridge":
         allowed_files.add("06_mega.json")
         # `common._result_lock` leaves this behind on purpose: unlinking a
@@ -860,7 +873,7 @@ def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
         # produced a result, so `status` and `merge` failed permanently.
         allowed_files.add("06_mega.json.lock")
     for name in names:
-        if name in allowed_files:
+        if name in allowed_files or in_progress.fullmatch(name) is not None:
             expected[name] = "file"
         elif _SIGNATURE_SCRATCH_RE.fullmatch(name) is not None:
             expected[name] = "directory"
