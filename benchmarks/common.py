@@ -2667,7 +2667,13 @@ def _result_lock(path: Path):
 
     lock_path = path.with_suffix(path.suffix + ".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+") as handle:
+    # 0600 explicitly: a cluster job's results live in the campaign's attempt
+    # scratch, whose scan rejects any allowed file that is not private, and
+    # `open("a+")` yields 0644 under the usual umask. The file is deliberately
+    # left behind -- see `worker.py`'s allowlist and the note there.
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "a+") as handle:
+        os.fchmod(handle.fileno(), 0o600)
         try:
             import fcntl
 

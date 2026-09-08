@@ -853,6 +853,12 @@ def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
     allowed_files = {f"{base}{suffix}" for base in database_bases for suffix in _DATABASE_SUFFIXES}
     if spec.kind != "bridge":
         allowed_files.add("06_mega.json")
+        # `common._result_lock` leaves this behind on purpose: unlinking a
+        # flock'd path races, and a second caller could then take a lock that
+        # excludes nobody. It is created 0600 so it satisfies the mode rule
+        # below. Without this entry the scan rejected every attempt that had
+        # produced a result, so `status` and `merge` failed permanently.
+        allowed_files.add("06_mega.json.lock")
     for name in names:
         if name in allowed_files:
             expected[name] = "file"
