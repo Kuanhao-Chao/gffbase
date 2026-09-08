@@ -781,6 +781,8 @@ def probe_resources(campaign_root: Path) -> dict[str, Any]:
             "raw": mount_proc.stdout.strip(),
             "fstype": fstype,
             "probe_path": str(probe_path),
+            # Measured, not inferred. See `verify_topology`.
+            "supports_noreplace_rename": _probe_noreplace_rename(probe_path),
         },
         "executables": executable_paths,
         "executable_versions": executable_versions,
@@ -792,6 +794,39 @@ def probe_resources(campaign_root: Path) -> dict[str, Any]:
             "ram_formula": "5 * 5.7 GiB observed peak + margin, rounded to 40 GiB",
         },
     }
+
+
+def _probe_noreplace_rename(directory: Path) -> bool:
+    """Does this filesystem really support `renameat2(RENAME_NOREPLACE)`?
+
+    Performed rather than inferred: NFS reports a perfectly ordinary fstype and
+    then answers the call with EINVAL, and `safe_io` publishes every result
+    through it. A campaign root that cannot do this cannot be published into,
+    and finding that out at publication time means discarding a multi-hour run.
+    """
+    source = directory / f".campaign-rename-probe-{os.getpid()}"
+    destination = directory / f".campaign-rename-probe-{os.getpid()}.dst"
+    try:
+        source.write_text("probe", encoding="ascii")
+    except OSError:
+        return False
+    descriptor = None
+    try:
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        _campaign_safe_io._rename_noreplace_at(
+            descriptor, source.name, descriptor, destination.name
+        )
+        return True
+    except (CampaignError, OSError):
+        return False
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        for path in (source, destination):
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
 
 def verify_topology(resource_probe: Mapping[str, Any]) -> None:
@@ -815,9 +850,26 @@ def verify_topology(resource_probe: Mapping[str, Any]) -> None:
     lanes = [set(parse_cpu_list(value)) for value in LANE_CPUS]
     if any(left & right for index, left in enumerate(lanes) for right in lanes[index + 1 :]):
         raise CampaignError("campaign CPU lanes overlap")
-    fstype = str((resource_probe.get("mount") or {}).get("fstype", "")).lower()
-    if not fstype.startswith("nfs"):
-        raise CampaignError(f"campaign root must be NFS-backed, found {fstype or 'unknown'}")
+    mount = resource_probe.get("mount") or {}
+    fstype = str(mount.get("fstype", "")).lower()
+    # What matters is the PRIMITIVE, not the name of the filesystem.
+    #
+    # This used to require an NFS-backed root. `safe_io` publishes every result
+    # through `renameat2(RENAME_NOREPLACE)`, and NFS answers that with EINVAL --
+    # so the two requirements were mutually exclusive and the campaign could not
+    # run anywhere: NFS failed the rename, everything else failed the fstype
+    # name. The whole suite passed because it feeds a stubbed mount probe
+    # claiming `nfs4` while exercising the rename on a local tmp_path, so the
+    # two halves were never tested together.
+    #
+    # `is not True` rather than a falsy test: a probe recorded before this key
+    # existed must be rejected, not silently treated as capable.
+    if mount.get("supports_noreplace_rename") is not True:
+        raise CampaignError(
+            f"campaign root does not support atomic no-replace rename "
+            f"(fstype {fstype or 'unknown'}); safe publication needs it. "
+            f"Choose a root on a local POSIX filesystem."
+        )
     if int(resource_probe.get("free_bytes", 0)) < MIN_FREE_BYTES:
         raise CampaignError("campaign root has less than 80 GiB free")
     if int(resource_probe.get("available_ram_bytes", 0)) < MIN_AVAILABLE_RAM_BYTES:
