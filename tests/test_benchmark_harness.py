@@ -2390,3 +2390,64 @@ def test_a_single_sample_is_never_recorded_as_a_median():
                 assert {"median", "min", "max", "n"} <= set(timing), (
                     f"{key}.{section}: a repeated measurement must record its spread"
                 )
+
+
+# ---------------------------------------------------------------------------
+# The result lock must not outlive the write, and must be readable by the
+# campaign's strict scratch scan
+# ---------------------------------------------------------------------------
+#
+# `_result_lock` serialises legacy callers writing to a shared results path. Its
+# `finally` released the flock but never removed the file, so every completed
+# campaign attempt kept a `06_mega.json.lock` in its scratch directory -- and
+# the campaign's `exact_directory_scan` allows exactly the databases plus
+# `06_mega.json`. `status` and `merge` therefore failed on every job that had
+# produced a result, permanently rather than transiently.
+#
+# The lock is created 0600 for the same scan: it enforces that mode on every
+# file it allows, and `open("a+")` yields 0644 under the usual umask.
+
+
+def _common():
+    from benchmarks import common
+
+    return common
+
+
+def test_the_result_lock_is_private(tmp_path: Path) -> None:
+    """0600, because the campaign's scratch scan enforces that on every file it
+    allows -- and `open("a+")` yields 0644 under the usual umask, which is what
+    made `status` and `merge` fail on every job that had produced a result."""
+    target = tmp_path / "06_mega.json"
+    with _common()._result_lock(target):
+        mode = stat.S_IMODE((tmp_path / "06_mega.json.lock").stat().st_mode)
+    assert mode == 0o600, oct(mode)
+
+
+def test_the_lock_file_survives_the_write(tmp_path: Path) -> None:
+    """Deliberately NOT unlinked on release.
+
+    Removing it would be tidier -- it is a mutex, not an artifact -- but
+    unlinking a flock'd path races: a second caller can open the path after the
+    unlink, create a fresh inode, and take a lock that excludes nobody. The
+    exclusion is worth more than the tidiness, so the campaign's scratch scan
+    is taught that this file is expected instead.
+    """
+    target = tmp_path / "06_mega.json"
+    with _common()._result_lock(target):
+        pass
+    assert (tmp_path / "06_mega.json.lock").exists()
+
+
+def test_the_lock_still_excludes_a_second_holder(tmp_path: Path) -> None:
+    """Whatever else changes, this is the property the file exists for."""
+    import fcntl
+
+    target = tmp_path / "06_mega.json"
+    with _common()._result_lock(target):
+        rival = (tmp_path / "06_mega.json.lock").open("a+")
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(rival.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            rival.close()
