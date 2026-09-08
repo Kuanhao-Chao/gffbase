@@ -15,12 +15,12 @@ We use a small GFF3 throughout so you can follow along without a download.
 
    Path("demo.gff3").write_text("""\
    ##gff-version 3
-   chr1    demo    gene    1000    9000    .   +   .   ID=gene1;Name=BRCA-like
-   chr1    demo    mRNA    1000    9000    .   +   .   ID=tx1;Parent=gene1
-   chr1    demo    exon    1000    1200    .   +   .   ID=ex1;Parent=tx1
-   chr1    demo    exon    3000    3902    .   +   .   ID=ex2;Parent=tx1
-   chr1    demo    CDS 1050    1200    .   +   0   ID=cds1;Parent=tx1
-   chr1    demo    CDS 3000    3500    .   +   2   ID=cds2;Parent=tx1
+   chr1	demo	gene	1000	9000	.	+	.	ID=gene1;Name=BRCA-like
+   chr1	demo	mRNA	1000	9000	.	+	.	ID=tx1;Parent=gene1
+   chr1	demo	exon	1000	1200	.	+	.	ID=ex1;Parent=tx1
+   chr1	demo	exon	3000	3902	.	+	.	ID=ex2;Parent=tx1
+   chr1	demo	CDS	1050	1200	.	+	0	ID=cds1;Parent=tx1
+   chr1	demo	CDS	3000	3500	.	+	2	ID=cds2;Parent=tx1
    """)
 
 ----

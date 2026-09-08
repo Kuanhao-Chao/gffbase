@@ -8,7 +8,6 @@ on:
     # breaking auto-sync of anything user-visible.
     paths:
       - 'docs/**'
-      - 'mkdocs.yml'
       - 'README.md'
       - 'CHANGELOG.md'
       - 'CONTRIBUTING.md'
@@ -16,7 +15,7 @@ on:
       - 'benchmarks/results/**'
       - 'tools/gen_benchmark_tables.py'
       - 'MIGRATION.md'
-      - 'python/gffbase/**'           # mkdocstrings reads docstrings here
+      - 'python/gffbase/**'           # autodoc reads docstrings here
       - 'pyproject.toml'              # docs extras live here
       - '.github/workflows/docs.yml'  # self-trigger on workflow edits
   workflow_dispatch: {}
@@ -26,13 +25,14 @@ concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: false
 
-# mkdocs gh-deploy commits + pushes to the gh-pages branch.
+# The built HTML is pushed to the gh-pages branch, which GitHub Pages serves
+# at https://khchao.com/gffbase/ as a project page under the user site.
 permissions:
   contents: write
 
 jobs:
   deploy:
-    name: Build & publish MkDocs site
+    name: Build & publish the Sphinx site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,14 +43,15 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          # Sphinx 9 requires >= 3.12. Pinned rather than floating so a runner
+          # image update cannot change the toolchain under the site.
+          python-version: "3.12"
           cache: pip
 
-      # mkdocstrings imports the gffbase package to read docstrings;
-      # the package has a Rust extension, so cargo must be available
-      # at `pip install -e .` time. Without this, install would fall
-      # back to _pyfallback, but the native module is the production
-      # path and is what we want documented.
+      # autodoc imports the gffbase package to read docstrings; the package has
+      # a Rust extension, so cargo must be available at `pip install -e .` time.
+      # Without it the install falls back to _pyfallback, and the native module
+      # is the production path and the one we want documented.
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install gffbase + docs extras
@@ -58,10 +59,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[docs]"
 
-      - name: Configure git author for gh-deploy
-        run: |
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Build the site
+        # -W --keep-going: every warning is an error, and all of them are
+        # reported in one pass rather than one per run. A broken cross-reference
+        # or a page missing from the toctree fails here, not silently on the
+        # published site.
+        run: make -C docs html SPHINXOPTS="-W --keep-going"
 
-      - name: Deploy to gh-pages
-        run: mkdocs gh-deploy --force --clean --verbose
+      # Published with plain git rather than a third-party publishing action:
+      # it is a dozen lines, it adds no supply-chain surface to a job that
+      # holds `contents: write`, and it is auditable in place.
+      - name: Publish to gh-pages
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          # `.nojekyll` is load-bearing: without it Pages runs the output
+          # through Jekyll, which strips every directory beginning with an
+          # underscore -- including Sphinx's `_static`, so the site would load
+          # with no CSS at all.
+          touch docs/build/html/.nojekyll
+          cd docs/build/html
+          git init -q
+          git checkout -q -b gh-pages
+          git add -A
+          git commit -q -m "Deploy docs from ${GITHUB_SHA}"
+          git push -q --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages

@@ -171,8 +171,14 @@ def test_the_documented_flags_exist(flag):
 
 def test_every_command_in_the_methodology_page_parses():
     """Extract the harness invocations from the docs and check argparse accepts them."""
-    page = (REPO_ROOT / "docs" / "performance" / "methodology.md").read_text(encoding="utf-8")
-    commands = re.findall(r"^python benchmarks/06_mega\.py (.+)$", page, re.M)
+    page = (REPO_ROOT / "docs" / "source" / "content" / "methodology.rst").read_text(
+        encoding="utf-8"
+    )
+    # Leading whitespace is significant now: in RST the command lives inside an
+    # indented `.. code-block:: bash`, so an anchored `^python` matches nothing.
+    # The `assert commands` below is what turned that into a visible failure
+    # rather than a test that quietly checked zero commands.
+    commands = re.findall(r"^\s*python benchmarks/06_mega\.py (.+)$", page, re.M)
     assert commands, "no 06_mega.py invocations found in the methodology page"
 
     for args in commands:

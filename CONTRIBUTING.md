@@ -22,9 +22,9 @@ By participating in this project, you agree to abide by our
 | Bug reports | [open an issue](https://github.com/Kuanhao-Chao/gffbase/issues/new?template=bug_report.md) |
 | Feature requests | [open an issue](https://github.com/Kuanhao-Chao/gffbase/issues/new?template=feature_request.md) |
 | Discussions / questions | [GitHub Discussions](https://github.com/Kuanhao-Chao/gffbase/discussions) |
-| Performance &amp; architecture notes | [Performance](https://khchao.com/gffbase/performance/) |
-| Migration from `gffutils` | [Migration guide](https://khchao.com/gffbase/migration/) |
-| API reference | [`docs/api/`](docs/api/) (rendered: `mkdocs serve`) |
+| Performance &amp; architecture notes | [Performance](https://khchao.com/gffbase/content/performance.html) |
+| Migration from `gffutils` | [Migration guide](https://khchao.com/gffbase/content/migration.html) |
+| API reference | [`docs/api/`](docs/api/) (rendered: `make -C docs html`) |
 
 ---
 
@@ -70,7 +70,8 @@ This installs:
 - The runtime: `duckdb`, `pyarrow`.
 - Test tools: `pytest`, `pytest-cov`, `pyyaml` (the release-hygiene suite parses the workflows).
 - Lint tools: `ruff`, `mypy`.
-- Doc tools: `mkdocs`, `mkdocs-material`, `mkdocstrings[python]`.
+- Doc tools: `Sphinx`, `furo`, `sphinx-design`, `sphinx-copybutton`
+  (needs Python >= 3.12).
 - Build tools: `maturin`.
 
 ### 3.3 Build the Rust extension in-place
@@ -201,8 +202,8 @@ CI requires both to pass.
 ### 4.6 Documentation
 
 ```bash
-mkdocs serve              # http://localhost:8000 — live-reloads on edits
-mkdocs build --strict     # what CI runs — fails on any broken anchor
+make -C docs html              # http://localhost:8000 — live-reloads on edits
+make -C docs html SPHINXOPTS="-W --keep-going"     # what CI runs — fails on any broken anchor
 ```
 
 `--strict` is mandatory before opening a docs PR.
@@ -296,7 +297,7 @@ For multi-paragraph rationale, use the body of the commit — explain
 - [ ] **Documentation updated** if you touched a public API: the
       docstring, the migration guide, the cookbook, or the API
       reference.
-- [ ] **`mkdocs build --strict` clean** if you touched `docs/`.
+- [ ] **`make -C docs html SPHINXOPTS="-W --keep-going"` clean** if you touched `docs/`.
 - [ ] **No unrelated changes.** A 200-line diff in a feature PR
       should not include a `ruff` reformat of an unrelated file.
 - [ ] **Apache-2.0 header** on any new `.py` or `.rs` source file

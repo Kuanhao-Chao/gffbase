@@ -241,11 +241,9 @@ jobs:
       - run: cargo test --locked --release --manifest-path rust/Cargo.toml
 
   documentation:
-    name: Generic, pandas, and strict MkDocs documentation
+    name: Generic, pandas, and a warning-free Sphinx build
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      SITE_DIR: ${{ runner.temp }}/gffbase-site
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
@@ -260,7 +258,10 @@ jobs:
             'gffutils @ git+https://github.com/daler/gffutils@6b84330f472dd2b4c69e36f319da7ade95bd5961'
       - run: pytest -q tests/test_docs_snippets.py -m "not pandas_docs"
       - run: pytest -q tests/test_docs_snippets.py -m pandas_docs
-      - run: mkdocs build --strict --site-dir "$SITE_DIR"
+      # -W --keep-going: warnings are errors, all reported in one pass. This
+      # is the gate that catches a broken cross-reference, a page missing from
+      # the toctree, or a docstring that stopped being valid RST.
+      - run: make -C docs html SPHINXOPTS="-W --keep-going"
 
   package:
     name: Wheel, sdist, archive identity, and clean installs

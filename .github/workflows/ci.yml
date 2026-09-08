@@ -32,7 +32,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          # 3.12, not 3.11: this job also runs the Sphinx build, and Sphinx 9
+          # requires >= 3.12. On 3.11 the docs extra does not even resolve.
+          python-version: "3.12"
       # Pin ruff: an unpinned lint tool turns any upstream release into a
       # surprise CI failure on an unrelated PR.
       - run: pip install --upgrade pip 'ruff==0.16.2'
@@ -60,19 +62,19 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
 
-      # `CONTRIBUTING.md` and the PR template both told contributors that
-      # `mkdocs build --strict` is "what CI runs". It was not: the only mkdocs
-      # invocation was `gh-deploy`, on `main`, after merge -- so a broken link
+      # `CONTRIBUTING.md` and the PR template both told contributors that a
+      # strict docs build is "what CI runs". It was not: the only docs
+      # invocation was the deploy, on `main`, after merge -- so a broken link
       # or a page missing from the nav was found by the deploy rather than by
       # the PR that introduced it. Now the claim is true.
       #
       # After the Rust toolchain on purpose: `pip install -e .` goes through
-      # maturin, which needs cargo, and mkdocstrings imports the package to
-      # read its docstrings.
-      - name: mkdocs build --strict
+      # maturin, which needs cargo, and autodoc imports the package to read its
+      # docstrings.
+      - name: sphinx build -W
         run: |
           pip install -e ".[docs]"
-          mkdocs build --strict
+          make -C docs html SPHINXOPTS="-W --keep-going"
 
   # ------------------------------------------------------------------------
   # Test matrix — exhaustive over the *routing* axis (rtree vs btree).

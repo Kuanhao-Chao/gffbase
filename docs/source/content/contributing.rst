@@ -36,9 +36,9 @@ By participating in this project, you agree to abide by our
    * - Discussions / questions
      - `GitHub Discussions <https://github.com/Kuanhao-Chao/gffbase/discussions>`__
    * - Performance & architecture notes
-     - `Performance <https://khchao.com/gffbase/performance/>`__
+     - `Performance <https://khchao.com/gffbase/content/performance.html>`__
    * - Migration from ``gffutils``
-     - `Migration guide <https://khchao.com/gffbase/migration/>`__
+     - `Migration guide <https://khchao.com/gffbase/content/migration.html>`__
    * - API reference
      - [``docs/api/``](docs/api/) (rendered: ``mkdocs serve``)
 

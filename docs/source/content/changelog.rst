@@ -234,14 +234,14 @@ Documentation
   old host reappears anywhere.
 
 - **New pages for everything a first-time reader needed and could not find:**
-  `Installation <https://khchao.com/gffbase/getting-started/installation/>`__,
-  a linear `Quickstart <https://khchao.com/gffbase/getting-started/quickstart/>`__
+  `Installation <https://khchao.com/gffbase/content/installation.html>`__,
+  a linear `Quickstart <https://khchao.com/gffbase/content/quickstart.html>`__
   (every snippet executed before publishing),
-  `Compatibility & strict modes <https://khchao.com/gffbase/guides/modes/>`__ —
+  `Compatibility & strict modes <https://khchao.com/gffbase/content/modes.html>`__ —
   a core concept previously explained only in passing —
-  `Connections & concurrency <https://khchao.com/gffbase/guides/connections/>`__,
-  `Troubleshooting & FAQ <https://khchao.com/gffbase/guides/troubleshooting/>`__,
-  and `Benchmark methodology <https://khchao.com/gffbase/performance/methodology/>`__.
+  `Connections & concurrency <https://khchao.com/gffbase/content/connections.html>`__,
+  `Troubleshooting & FAQ <https://khchao.com/gffbase/content/troubleshooting.html>`__,
+  and `Benchmark methodology <https://khchao.com/gffbase/content/methodology.html>`__.
   The changelog, contributing guide and security policy are now on the site
   rather than GitHub-only.
 

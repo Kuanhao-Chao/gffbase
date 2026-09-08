@@ -86,7 +86,7 @@ Required test coverage of 95% reached. Total coverage: 95.83%
 - [ ] If this changes drop-in compatibility with `gffutils`, I added a
       note in `MIGRATION.md`.
 - [ ] If I touched anything under `docs/`, I ran
-      `mkdocs build --strict` and it's clean.
+      `make -C docs html SPHINXOPTS="-W --keep-going"` and it's clean.
 - [ ] If this is a perf change, I have a benchmark in `benchmarks/`
       that documents the before/after delta.
 

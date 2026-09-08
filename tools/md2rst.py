@@ -27,12 +27,36 @@ from pathlib import Path
 # Every page stem that exists under content/. A link to anything else cannot
 # become a :doc: role -- inventing one would fail the -W build.
 STEMS = {
-    "installation", "quickstart", "modes", "usage_gallery", "gallery", "cli",
-    "connections", "migration", "cookbooks", "cookbook_gencode_ensembl",
-    "cookbook_refseq", "cookbook_mane", "cookbook_ml_workflows", "performance",
-    "methodology", "datasets", "architecture", "schema_v2", "api", "faq",
-    "troubleshooting", "citation", "license", "contact", "testing", "roadmap",
-    "release_checklist", "changelog", "contributing", "security",
+    "installation",
+    "quickstart",
+    "modes",
+    "usage_gallery",
+    "gallery",
+    "cli",
+    "connections",
+    "migration",
+    "cookbooks",
+    "cookbook_gencode_ensembl",
+    "cookbook_refseq",
+    "cookbook_mane",
+    "cookbook_ml_workflows",
+    "performance",
+    "methodology",
+    "datasets",
+    "architecture",
+    "schema_v2",
+    "api",
+    "faq",
+    "troubleshooting",
+    "citation",
+    "license",
+    "contact",
+    "testing",
+    "roadmap",
+    "release_checklist",
+    "changelog",
+    "contributing",
+    "security",
 }
 # Source path (without .md) -> page stem, for links that use the old layout.
 PATH_TO_STEM = {
@@ -54,10 +78,17 @@ PATH_TO_STEM = {
     "usage_gallery": "usage_gallery",
     "index": "index",
     # The eleven mkdocstrings pages are one autodoc page now.
-    "api/index": "api", "api/featuredb": "api", "api/feature": "api",
-    "api/create_db": "api", "api/io": "api", "api/merge_criteria": "api",
-    "api/exceptions": "api", "api/multipart": "api", "api/validate": "api",
-    "api/migrate": "api", "api/compat": "api",
+    "api/index": "api",
+    "api/featuredb": "api",
+    "api/feature": "api",
+    "api/create_db": "api",
+    "api/io": "api",
+    "api/merge_criteria": "api",
+    "api/exceptions": "api",
+    "api/multipart": "api",
+    "api/validate": "api",
+    "api/migrate": "api",
+    "api/compat": "api",
     # Sibling references inside a subdirectory use the bare filename.
     "machine_learning_workflows": "cookbook_ml_workflows",
     "gencode_ensembl": "cookbook_gencode_ensembl",
@@ -133,11 +164,31 @@ def rewrite_admonitions(text: str) -> str:
             continue
         indent, kind, title = m.group(1), m.group(2).lower(), m.group(3)
         # MkDocs types that RST spells differently or does not have.
-        kind = {"info": "note", "tip": "tip", "success": "note", "question": "note",
-                "example": "note", "quote": "note", "abstract": "note",
-                "failure": "warning", "bug": "warning", "caution": "caution"}.get(kind, kind)
-        if kind not in {"note", "warning", "tip", "important", "caution", "danger",
-                        "attention", "hint", "error", "seealso", "admonition"}:
+        kind = {
+            "info": "note",
+            "tip": "tip",
+            "success": "note",
+            "question": "note",
+            "example": "note",
+            "quote": "note",
+            "abstract": "note",
+            "failure": "warning",
+            "bug": "warning",
+            "caution": "caution",
+        }.get(kind, kind)
+        if kind not in {
+            "note",
+            "warning",
+            "tip",
+            "important",
+            "caution",
+            "danger",
+            "attention",
+            "hint",
+            "error",
+            "seealso",
+            "admonition",
+        }:
             kind = "note"
         i += 1
         body: list[str] = []
@@ -182,8 +233,13 @@ def md_table_to_list_table(block: list[str]) -> list[str]:
     base, extra = divmod(100, width)
     widths = [base] * width
     widths[0] += extra
-    out = ["```{=rst}", ".. list-table::", "   :header-rows: 1",
-           f"   :widths: {' '.join(str(w) for w in widths)}", ""]
+    out = [
+        "```{=rst}",
+        ".. list-table::",
+        "   :header-rows: 1",
+        f"   :widths: {' '.join(str(w) for w in widths)}",
+        "",
+    ]
     for row in rows:
         for j, cell in enumerate(row):
             # Inline markdown that survives verbatim into RST.
@@ -201,14 +257,23 @@ def rewrite_tables(text: str) -> str:
     while i < len(lines):
         if lines[i].lstrip().startswith("```"):
             fence = not fence
-            out.append(lines[i]); i += 1; continue
-        if (not fence and lines[i].lstrip().startswith("|")
-                and i + 1 < len(lines) and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1])):
+            out.append(lines[i])
+            i += 1
+            continue
+        if (
+            not fence
+            and lines[i].lstrip().startswith("|")
+            and i + 1 < len(lines)
+            and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1])
+        ):
             block = []
             while i < len(lines) and lines[i].lstrip().startswith("|"):
-                block.append(lines[i]); i += 1
-            out.extend(md_table_to_list_table(block)); continue
-        out.append(lines[i]); i += 1
+                block.append(lines[i])
+                i += 1
+            out.extend(md_table_to_list_table(block))
+            continue
+        out.append(lines[i])
+        i += 1
     return "\n".join(out)
 
 
@@ -230,15 +295,17 @@ def postprocess(rst: str, anchors: dict[str, str] | None = None) -> str:
     rst = re.sub(r"^(\s*)\.\. code::\s*$", r"\1.. code-block:: text", rst, flags=re.M)
 
     # docs-test sentinels -> RST comments the harness can read.
-    rst = re.sub(rf"{SENTINEL}(.*?){SENTINEL}", lambda m: f".. docs-test: {m.group(1)}", rst,
-                 flags=re.S)
+    rst = re.sub(
+        rf"{SENTINEL}(.*?){SENTINEL}", lambda m: f".. docs-test: {m.group(1)}", rst, flags=re.S
+    )
 
     # RST forbids an inline literal inside a link label; pandoc emits
     # ```code`` <url>`__ for [`code`](url), which does not parse. Must run
     # BEFORE the rule below, which would otherwise match from the label's
     # trailing backtick and leave the leading pair behind.
-    rst = re.sub(r"`+``([^`]+)``\s*<([^>\n]+)>`__",
-                 lambda m: f"`{m.group(1)} <{m.group(2)}>`__", rst)
+    rst = re.sub(
+        r"`+``([^`]+)``\s*<([^>\n]+)>`__", lambda m: f"`{m.group(1)} <{m.group(2)}>`__", rst
+    )
 
     # Internal links -> :doc: roles. pandoc emits `label <target>`__ or `<target>`__.
     anchors = anchors or {}
@@ -262,8 +329,7 @@ def postprocess(rst: str, anchors: dict[str, str] | None = None) -> str:
     rst = re.sub(r"`([^`<\n]*?)\s*<([^>\n]+)>`__?", link, rst)
 
     # A bare `.md` reference pandoc left as plain text.
-    rst = re.sub(r"(?<![\w/`])([\w-]+/)*[\w-]+\.md(?![\w`])",
-                 lambda m: f"``{m.group(0)}``", rst)
+    rst = re.sub(r"(?<![\w/`])([\w-]+/)*[\w-]+\.md(?![\w`])", lambda m: f"``{m.group(0)}``", rst)
 
     # House style uses a short rule, not pandoc's long one -- but ONLY for a
     # transition. A dash run that directly follows a non-blank line is a
@@ -286,8 +352,7 @@ def postprocess(rst: str, anchors: dict[str, str] | None = None) -> str:
     # may legally abut an indented one.
     fixed, prev = [], ""
     for line in rst.split("\n"):
-        if (prev.strip() and prev[:1].isspace() and line.strip()
-                and not line[:1].isspace()):
+        if prev.strip() and prev[:1].isspace() and line.strip() and not line[:1].isspace():
             fixed.append("")
         fixed.append(line)
         prev = line
@@ -306,9 +371,24 @@ def convert(src: Path, stem: str) -> str:
     text = rewrite_tables(text)
     text, anchors = add_heading_targets(text, stem)
     proc = subprocess.run(
-        ["pandoc", "-f", "markdown-smart+fenced_divs+raw_attribute", "-t", "rst",
-         "--wrap=preserve"],
-        input=text, capture_output=True, text=True, check=True,
+        # --preserve-tabs is not cosmetic. pandoc expands tabs to spaces by
+        # default, including inside code blocks, and GFF/GTF is TAB-DELIMITED.
+        # Without it the quickstart's demo file became space-delimited, parsed
+        # into nothing, and every later snippet on the page failed to find the
+        # feature it had just written.
+        [
+            "pandoc",
+            "-f",
+            "markdown-smart+fenced_divs+raw_attribute",
+            "-t",
+            "rst",
+            "--wrap=preserve",
+            "--preserve-tabs",
+        ],
+        input=text,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return postprocess(proc.stdout, anchors)
 

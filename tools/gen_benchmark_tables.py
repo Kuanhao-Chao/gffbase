@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -63,6 +64,52 @@ HISTORICAL_SCHEMA_V2_CANONICAL_SHA256 = (
 
 BEGIN = "<!-- BEGIN GENERATED: {name} -->"
 END = "<!-- END GENERATED: {name} -->"
+#: The documentation site is reStructuredText, where an HTML comment is raw
+#: HTML rather than a marker -- it would neither render nor reliably round-trip.
+RST_BEGIN = ".. BEGIN GENERATED: {name}"
+RST_END = ".. END GENERATED: {name}"
+
+
+def _markers(rel: str) -> tuple[str, str]:
+    return (RST_BEGIN, RST_END) if rel.endswith(".rst") else (BEGIN, END)
+
+
+def markdown_table_to_list_table(md: str) -> str:
+    """Render a generated Markdown pipe table as an RST list-table.
+
+    The renderers emit Markdown because README.md and MIGRATION.md are the
+    canonical documents for GitHub and PyPI. The site is RST and the house
+    style is list-table with explicit widths, so the same data is re-rendered
+    rather than duplicated in a second source of truth.
+    """
+    rows = []
+    for line in md.strip().split("\n"):
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+            continue
+        rows.append(cells)
+    if not rows:
+        return md
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    base, extra = divmod(100, width)
+    widths = [base] * width
+    widths[0] += extra
+    out = [
+        ".. list-table::",
+        "   :header-rows: 1",
+        f"   :widths: {' '.join(str(w) for w in widths)}",
+        "",
+    ]
+    for row in rows:
+        for j, cell in enumerate(row):
+            cell = re.sub(r"`([^`]+)`", r"``\1``", cell)
+            out.append(("   * - " if j == 0 else "     - ") + cell)
+    return "\n".join(out)
+
 
 #: Display order and label for each corpus, independent of run order (the
 #: harness runs cheapest-first; the table reads best largest-first).
@@ -344,7 +391,12 @@ RENDERERS = {
 #: Which generated blocks each file may contain. A file is only rewritten if
 #: it actually carries the markers, so adding a table to a new page is a
 #: matter of pasting the marker pair into it.
-TARGETS = ["README.md", "MIGRATION.md", "docs/index.md", "docs/performance.md"]
+TARGETS = [
+    "README.md",
+    "MIGRATION.md",
+    "docs/source/index.rst",
+    "docs/source/content/performance.rst",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -352,13 +404,17 @@ TARGETS = ["README.md", "MIGRATION.md", "docs/index.md", "docs/performance.md"]
 # ---------------------------------------------------------------------------
 
 
-def inject(text: str, name: str, body: str) -> tuple[str, bool]:
-    begin, end = BEGIN.format(name=name), END.format(name=name)
+def inject(text: str, name: str, body: str, *, rel: str = "") -> tuple[str, bool]:
+    fmt_begin, fmt_end = _markers(rel)
+    begin, end = fmt_begin.format(name=name), fmt_end.format(name=name)
     if begin not in text or end not in text:
         return text, False
     head, rest = text.split(begin, 1)
     _, tail = rest.split(end, 1)
-    return f"{head}{begin}\n{body}\n{end}{tail}", True
+    # RST needs the marker comments separated from the body by a blank line;
+    # without it the comment swallows the directive that follows it.
+    gap = "\n\n" if rel.endswith(".rst") else "\n"
+    return f"{head}{begin}{gap}{body}{gap}{end}{tail}", True
 
 
 def process(data: dict, *, write: bool) -> list[str]:
@@ -367,14 +423,24 @@ def process(data: dict, *, write: bool) -> list[str]:
     for rel in TARGETS:
         path = ROOT / rel
         if not path.is_file():
+            # NOT `continue`. A missing target used to be skipped in silence,
+            # so `--check` reported "tables are current" while two of its four
+            # targets had been deleted in a docs migration -- a guard that
+            # passes because it has nothing left to guard.
+            problems.append(f"{rel} (missing)")
             continue
         original = path.read_text(encoding="utf-8")
         updated = original
         touched = False
         for name, body in rendered.items():
-            updated, found = inject(updated, name, body)
+            if rel.endswith(".rst"):
+                body = markdown_table_to_list_table(body)
+            updated, found = inject(updated, name, body, rel=rel)
             touched = touched or found
-        if not touched or updated == original:
+        if not touched:
+            problems.append(f"{rel} (no generated block found)")
+            continue
+        if updated == original:
             continue
         if write:
             path.write_text(updated, encoding="utf-8")

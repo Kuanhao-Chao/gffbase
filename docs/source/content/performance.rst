@@ -15,14 +15,14 @@ behind it, so these cannot drift from what was actually measured. How the
 measurements are taken — and what they do and do not claim — is on the
 :doc:`Methodology <methodology>` page.
 
-.. raw:: html
+.. BEGIN GENERATED: benchmark-provenance
 
-   <!-- BEGIN GENERATED: benchmark-provenance -->
+**Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O  
+**Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13  
+**Commit:** `1d52bf6738e0` · **Run:** 2026-08-15T22:56:50Z  
+*Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 
-| **Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O
-| **Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13
-| **Commit:** ``1d52bf6738e0`` · **Run:** 2026-08-15T22:56:50Z
-| *Generated from ``benchmarks/results/06_mega.json`` by ``tools/gen_benchmark_tables.py``. Do not edit by hand.*
+.. END GENERATED: benchmark-provenance
 
 ----
 
@@ -31,9 +31,7 @@ measurements are taken — and what they do and do not claim — is on the
 Historical Mac sweep
 --------------------
 
-.. raw:: html
-
-   <!-- BEGIN GENERATED: corpus-table -->
+.. BEGIN GENERATED: corpus-table
 
 .. list-table::
    :header-rows: 1
@@ -85,9 +83,7 @@ Historical Mac sweep
      - **2,086**
      - 80 ms / 156 k desc
 
-.. raw:: html
-
-   <!-- END GENERATED: corpus-table -->
+.. END GENERATED: corpus-table
 
 “Censored at” means that comparator was **killed at the safety valve without
 finishing**. The cap is shown as censoring evidence; no wall or speedup is
@@ -184,9 +180,7 @@ worth being explicit about what:
 The two costs that can be measured are, so they are generated from the same
 run as the speed numbers rather than retyped:
 
-.. raw:: html
-
-   <!-- BEGIN GENERATED: tradeoffs-table -->
+.. BEGIN GENERATED: tradeoffs-table
 
 .. list-table::
    :header-rows: 1
@@ -204,6 +198,8 @@ run as the speed numbers rather than retyped:
      - 610.51 MB – 4.95 GB
      - 472.90 MB – 3.79 GB
      - 1.29–1.36×
+
+.. END GENERATED: tradeoffs-table
 
 *Measured across 3 corpora; ratios are gffbase ÷ legacy.*
 

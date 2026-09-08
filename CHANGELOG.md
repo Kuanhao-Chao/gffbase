@@ -216,14 +216,14 @@ nobody can install would only mislead. Everything below is the delta from
   old host reappears anywhere.
 
 - **New pages for everything a first-time reader needed and could not find:**
-  [Installation](https://khchao.com/gffbase/getting-started/installation/),
-  a linear [Quickstart](https://khchao.com/gffbase/getting-started/quickstart/)
+  [Installation](https://khchao.com/gffbase/content/installation.html),
+  a linear [Quickstart](https://khchao.com/gffbase/content/quickstart.html)
   (every snippet executed before publishing),
-  [Compatibility & strict modes](https://khchao.com/gffbase/guides/modes/) —
+  [Compatibility & strict modes](https://khchao.com/gffbase/content/modes.html) —
   a core concept previously explained only in passing —
-  [Connections & concurrency](https://khchao.com/gffbase/guides/connections/),
-  [Troubleshooting & FAQ](https://khchao.com/gffbase/guides/troubleshooting/),
-  and [Benchmark methodology](https://khchao.com/gffbase/performance/methodology/).
+  [Connections & concurrency](https://khchao.com/gffbase/content/connections.html),
+  [Troubleshooting & FAQ](https://khchao.com/gffbase/content/troubleshooting.html),
+  and [Benchmark methodology](https://khchao.com/gffbase/content/methodology.html).
   The changelog, contributing guide and security policy are now on the site
   rather than GitHub-only.
 

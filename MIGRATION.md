@@ -121,7 +121,7 @@ with FeatureDB("annotation.duckdb", read_only=True) as db:
     ...
 ```
 
-Full detail: [Connections & concurrency](https://khchao.com/gffbase/guides/connections/).
+Full detail: [Connections & concurrency](https://khchao.com/gffbase/content/connections.html).
 
 All `FeatureDB` methods (`children`, `parents`, `region`,
 `features_of_type`, `interfeatures`, `merge`, `bed12`, `update`,
@@ -160,7 +160,7 @@ annotation releases:
 
 “Censored at” marks a legacy run killed at its safety valve without finishing;
 it supplies neither a completed wall nor a speedup. Method and fairness
-constraints: [Methodology](https://khchao.com/gffbase/performance/methodology/).
+constraints: [Methodology](https://khchao.com/gffbase/content/methodology.html).
 
 | Single-call workload | Versus legacy |
 |---|---|
@@ -187,7 +187,7 @@ of tens of thousands of anchors the row-by-row gffbase loop is the slowest
 option available and the batched call is the fastest, by a wide margin in both
 directions — because the batched call issues one set-based query and never
 constructs a Python `Feature`. Current measurements:
-[Performance](https://khchao.com/gffbase/performance/).
+[Performance](https://khchao.com/gffbase/content/performance.html).
 
 ### Vectorized methods at a glance
 
@@ -269,7 +269,7 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
 - **Disk size**: GFFBase databases are ~1.5× larger than legacy
   SQLite -- the price of materializing the transitive closure and the R-tree,
   which is what turns hierarchy and spatial queries into indexed lookups.
-  Current measurements: [Performance](https://khchao.com/gffbase/performance/).
+  Current measurements: [Performance](https://khchao.com/gffbase/content/performance.html).
 - **Peak ingest RSS**: substantially higher -- a couple of GB against roughly
   150 MB, on a whole-genome corpus. DuckDB allocates a vectorized ingest
   buffer pool; cap it with `GFFBASE_THREADS` or
@@ -338,7 +338,7 @@ isolation; each can change what your script computes.
 ### Command line
 
 `gffutils-cli` becomes `gffbase`, with the same argument names. Seven of its
-commands work there; ten work here. See [the CLI reference](https://khchao.com/gffbase/cli/) for
+commands work there; ten work here. See [the CLI reference](https://khchao.com/gffbase/content/cli.html) for
 the mapping, including the four upstream commands that raise on every
 invocation.
 
