@@ -114,8 +114,11 @@ def test_rtree_sql_uses_st_intersects(gtf_db):
 def test_btree_sql_uses_range(gtf_db_no_rtree):
     sql, params = gtf_db_no_rtree._region_sql_btree("chr1", 100, 500, None, None, False)
     assert "ST_Intersects" not in sql
-    assert "start <= ?" in sql
-    assert '"end" >= ?' in sql
+    # LEAST/GREATEST rather than the bare columns: a reversed row (`end <
+    # start`) is normalized here exactly as `ST_MakeEnvelope` normalizes it on
+    # the R-tree path, so the two paths cannot disagree about the same row.
+    assert 'LEAST(start, "end") <= ?' in sql
+    assert 'GREATEST(start, "end") >= ?' in sql
 
 
 def test_region_seqid_only_returns_all_on_seqid(gtf_db):

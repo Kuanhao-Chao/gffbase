@@ -904,9 +904,27 @@ def _prepare_gtf_parent_map(
         authored_ids = {location[5] for location in locations if location[3]}
         raw_id_collision = synthesize_missing and raw_id in taken and raw_id not in authored_ids
         if raw_id_collision and merge_strategy != "create_unique":
-            occupied_type = con.execute(
-                "SELECT featuretype FROM features WHERE id = ?", [raw_id]
-            ).fetchone()[0]
+            occupied_type, occupied_is_synthetic = con.execute(
+                "SELECT featuretype, is_synthetic FROM features WHERE id = ?", [raw_id]
+            ).fetchone()
+            # `gene_id "X"; transcript_id "X"` is the UCSC knownGene
+            # convention, not an ambiguity: one locus, one identifier reused
+            # across two levels. Transcripts are resolved before genes, so by
+            # the time the gene pass runs, the id is held by a transcript THIS
+            # INGEST JUST INVENTED from the very same line -- and refusing to
+            # continue means refusing the whole file. Two upstream fixtures and
+            # every GTF corpus tripped it.
+            #
+            # The oracle's rule, measured rather than assumed: keep the inner
+            # parent, skip the outer one. Children stay attached to the
+            # transcript; there is simply no gene level.
+            #
+            # An AUTHORED occupant is a genuinely different feature that the
+            # source named itself, usually at another locus, so it still
+            # raises. Skipping there would silently detach that parent's
+            # children from the hierarchy.
+            if occupied_is_synthetic:
+                continue
             raise SynthesisConflictError(
                 f"cannot synthesize {parent_type} {raw_id!r}: that ID is already used "
                 f'by featuretype {occupied_type!r}. Use merge_strategy="create_unique" '
@@ -1421,9 +1439,15 @@ def _build_database(
             con.execute(
                 "UPDATE features "
                 "SET seqid_y = m.seqid_y, "
-                "    bbox = ST_MakeEnvelope("
-                "        features.start, m.seqid_y, "
-                '        features."end", m.seqid_y + 1) '
+                # NULL coordinates yield a NULL envelope, matching the bulk
+                # insert above. This site had no guard at all, so a
+                # synthesized parent with an unset coordinate produced a bbox
+                # the validator's INV-8 would then flag.
+                "    bbox = CASE WHEN features.start IS NULL "
+                '              OR features."end" IS NULL THEN NULL '
+                "         ELSE ST_MakeEnvelope("
+                "             features.start, m.seqid_y, "
+                '             features."end", m.seqid_y + 1) END '
                 "FROM seqid_map m "
                 "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
             )

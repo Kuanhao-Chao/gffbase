@@ -332,3 +332,62 @@ def test_create_unique_suffixes_a_wrong_type_parent_collision_with_provenance(tm
     assert db.conn.execute(
         "SELECT raw_id, resolved_id, kind FROM id_conflicts WHERE kind = 'gtf_synthesis_split'"
     ).fetchall() == [("T1", "T1_1", "gtf_synthesis_split")]
+
+
+# ---------------------------------------------------------------------------
+# gene_id == transcript_id
+# ---------------------------------------------------------------------------
+#
+# UCSC knownGene, and every GTF derived from it, names the gene and the
+# transcript with the same accession. That is a naming convention, not an
+# ambiguity: there is one locus, and the identifier is reused across two levels
+# of the hierarchy rather than across two unrelated features.
+#
+# gffbase used to reject it. Synthesis walked transcripts first, invented
+# `transcript X`, then walked genes, found `X` already taken, and raised
+# SynthesisConflictError -- against a feature it had just invented itself, from
+# the same line. That made two upstream fixtures and the whole GTF corpus
+# unreadable, which is how the parity suite caught it.
+#
+# The oracle's rule, measured rather than assumed: skip the outer parent and
+# keep the inner one. The collision above is distinct from the one pinned by
+# `test_wrong_type_parent_id_collision_is_rejected_by_default`, where the
+# occupied id belongs to an AUTHORED feature at a different locus. That stays
+# an error -- nothing about it is a convention.
+
+
+SELF_NAMED_GTF = 'chr1\trs\texon\t100\t200\t.\t+\t.\tgene_id "X"; transcript_id "X";\n'
+
+
+def test_a_gene_id_equal_to_its_transcript_id_is_not_a_conflict(tmp_path):
+    """The UCSC convention loads, and yields the oracle's hierarchy."""
+    db = create_db(str(_write(tmp_path, SELF_NAMED_GTF)), ":memory:")
+
+    assert db.conn.execute(
+        "SELECT featuretype, id FROM features ORDER BY featuretype, id"
+    ).fetchall() == [("exon", "exon_1"), ("transcript", "X")]
+
+
+def test_the_surviving_parent_still_owns_its_children(tmp_path):
+    """Skipping the gene must not orphan the exon from its transcript."""
+    db = create_db(str(_write(tmp_path, SELF_NAMED_GTF)), ":memory:")
+
+    assert db.conn.execute("SELECT parent, child FROM edges").fetchall() == [("X", "exon_1")]
+    assert db.validate(level="full").ok
+
+
+def test_an_authored_feature_of_another_type_still_blocks_synthesis(tmp_path):
+    """The narrow exemption above must not swallow a real conflict.
+
+    Here `T1` is an authored exon at 100-200 and the inferred transcript would
+    be a different feature at 300-400. Silently dropping that parent would
+    detach `E2` from the hierarchy with nothing raised.
+    """
+    text = (
+        'chr1\trs\texon\t100\t200\t.\t+\t.\tID "T1";\n'
+        'chr1\trs\texon\t300\t400\t.\t+\t.\tID "E2"; transcript_id "T1";\n'
+    )
+    id_spec = {"gene": "gene_id", "transcript": "transcript_id", "exon": "ID"}
+
+    with pytest.raises(SynthesisConflictError, match=r"transcript.*T1.*already used"):
+        create_db(str(_write(tmp_path, text)), ":memory:", id_spec=id_spec)

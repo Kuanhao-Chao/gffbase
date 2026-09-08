@@ -204,7 +204,12 @@ def test_reverse_applies_to_every_key(db):
     """gffutils appends the direction once, which in SQL reverses only the last
     key. Multi-key sorting did not work here at all before, so there is no
     behaviour to preserve and copying that would be copying a defect."""
-    assert FeatureDB._order_clause(("seqid", "start"), reverse=True) == ("seqid DESC, start DESC")
+    # `id ASC` stays ASC under reverse: the tiebreak exists to be stable, not
+    # to be meaningful, and flipping it would stop `reverse=True` being the
+    # exact reverse of the forward order for tied rows.
+    assert FeatureDB._order_clause(("seqid", "start"), reverse=True) == (
+        "seqid DESC, start DESC, id ASC"
+    )
     assert [f.id for f in db.all_features(order_by=("seqid", "start"), reverse=True)] == [
         "g2",
         "g1",
@@ -213,22 +218,28 @@ def test_reverse_applies_to_every_key(db):
 
 
 def test_the_default_is_still_file_order(db):
-    assert FeatureDB._order_clause(None, reverse=False) == "file_order ASC"
+    # `file_order` is NOT unique -- GTF synthesis stamps a synthesized parent
+    # with MIN(file_order) of its children -- so the default needs the
+    # tiebreak as much as any explicit key.
+    assert FeatureDB._order_clause(None, reverse=False) == "file_order ASC, id ASC"
     assert [f.id for f in db.all_features()] == ["g2", "g1", "g3"]
 
 
 def test_end_is_quoted_and_length_is_an_expression():
     """`end` is a SQL reserved word, and `length` is gffbase's own sort key
     rather than a column at all."""
-    assert FeatureDB._order_clause("end", reverse=False) == '"end" ASC'
-    assert FeatureDB._order_clause("length", reverse=False) == '("end" - start) ASC'
-    assert FeatureDB._order_clause_qualified("length", False, "f") == '(f."end" - f.start) ASC'
+    assert FeatureDB._order_clause("end", reverse=False) == '"end" ASC, id ASC'
+    assert FeatureDB._order_clause("length", reverse=False) == '("end" - start) ASC, id ASC'
+    assert (
+        FeatureDB._order_clause_qualified("length", False, "f")
+        == '(f."end" - f.start) ASC, f.id ASC'
+    )
 
 
 def test_the_qualified_form_qualifies_every_key():
     assert (
         FeatureDB._order_clause_qualified(("seqid", "end"), False, "f")
-        == 'f.seqid ASC, f."end" ASC'
+        == 'f.seqid ASC, f."end" ASC, f.id ASC'
     )
 
 
