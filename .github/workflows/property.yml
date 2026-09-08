@@ -1,0 +1,36 @@
+name: Extended property tests
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # The bounded profile runs in ordinary CI. This deeper deterministic pass
+    # is intentionally off the pull-request critical path.
+    - cron: "23 5 * * 1"
+
+concurrency:
+  group: property-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extended-property:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.83
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> rust/target
+      - name: Build candidate and install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: Run extended generated invariants
+        env:
+          GFFBASE_HYPOTHESIS_PROFILE: extended
+        run: pytest -m property -q
+

@@ -33,13 +33,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "python"))
 
 from benchmarks.common import (
     GENCODE_GFF3,
     GFFBASE_DB,
     LEGACY_DB,
     OUT,
+    benchmark_env,
     du,
     pretty_bytes,
     pretty_seconds,
@@ -48,15 +48,17 @@ from benchmarks.common import (
 )
 
 
-def ingest_gffbase() -> dict:
+def ingest_gffbase(threads: int = 1) -> dict:
     if GFFBASE_DB.exists():
         GFFBASE_DB.unlink()
     script = f"""
-import json, time, sys
-sys.path.insert(0, {str(ROOT / "python")!r})
+import json, time
 from gffbase import create_db
 t0 = time.perf_counter()
-db = create_db({str(GENCODE_GFF3)!r}, {str(GFFBASE_DB)!r}, force=True)
+db = create_db(
+    {str(GENCODE_GFF3)!r}, {str(GFFBASE_DB)!r}, force=True,
+    merge_strategy="create_unique", pragmas={{"threads": {threads}}},
+)
 elapsed = time.perf_counter() - t0
 print(json.dumps({{
     "wall_seconds": elapsed,
@@ -65,10 +67,15 @@ print(json.dumps({{
     "fmt": db.fmt,
 }}))
 """
-    return run_subprocess(script, label="gffbase create_db", timeout=1200)
+    return run_subprocess(
+        script,
+        label="gffbase create_db",
+        timeout=1200,
+        env_extra=benchmark_env(threads),
+    )
 
 
-def ingest_legacy(timeout: int = 7200) -> dict:
+def ingest_legacy(timeout: int = 7200, *, threads: int = 1) -> dict:
     if LEGACY_DB.exists():
         LEGACY_DB.unlink()
     script = f"""
@@ -83,17 +90,25 @@ db = gffutils.create_db(
 elapsed = time.perf_counter() - t0
 print(json.dumps({{"wall_seconds": elapsed, "n_features": db.count_features_of_type()}}))
 """
-    return run_subprocess(script, label="legacy gffutils create_db", timeout=timeout)
+    return run_subprocess(
+        script,
+        label="legacy gffutils create_db",
+        timeout=timeout,
+        env_extra=benchmark_env(threads),
+    )
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--legacy-timeout", type=int, default=7200)
+    ap.add_argument("--threads", type=int, default=1)
     args = ap.parse_args()
+    if args.threads < 1:
+        ap.error("--threads must be >= 1")
 
     OUT.mkdir(parents=True, exist_ok=True)
     print("[ingest] gffbase ingest (subprocess)…", flush=True)
-    gffbase_info = ingest_gffbase()
+    gffbase_info = ingest_gffbase(args.threads)
     gffbase_info["disk_bytes"] = du(GFFBASE_DB)
     print(
         f"  wall={pretty_seconds(gffbase_info['wall_seconds'])}, "
@@ -103,7 +118,7 @@ def main():
     )
 
     print("[ingest] legacy gffutils ingest (subprocess)…", flush=True)
-    legacy_info = ingest_legacy(args.legacy_timeout)
+    legacy_info = ingest_legacy(args.legacy_timeout, threads=args.threads)
     legacy_info["disk_bytes"] = du(LEGACY_DB)
     if legacy_info.get("wall_seconds"):
         print(

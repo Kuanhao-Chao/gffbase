@@ -2,13 +2,13 @@ name: Release wheels & PyPI publish
 
 on:
   push:
-    # Stable release tags only. Release-candidate tags (v*-rc.*) are
+    # Stable release tags only. Release-candidate tags (v*rc*) are
     # routed to testpypi-release.yml for the TestPyPI dress rehearsal —
     # without this exclusion, an RC tag would fire BOTH workflows and
     # publish unvalidated wheels to PyPI production.
     tags:
       - 'v*'
-      - '!v*-rc.*'
+      - '!v*rc*'
   workflow_dispatch: {}
 
 # Concurrency: never race two release tags against each other.
@@ -20,44 +20,69 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  qualification:
+    name: Complete release qualification
+    uses: ./.github/workflows/qualification.yml
+
   # ------------------------------------------------------------------------
-  # Gate. `ci.yml` runs on pushes to main and release/*, and NOT on tags --
-  # so without this job a tag could be pushed from a red tree and published
-  # straight to PyPI. Every wheel job now waits on it.
-  #
-  # This is deliberately not the whole 14-cell matrix: that runs on the branch
-  # before the tag exists. What it must catch is "this exact commit does not
-  # build and pass", which one representative cell answers.
+  # The reusable qualification workflow above runs every named release gate.
+  # This second gate is artifact-specific: it rejects the wrong tag class,
+  # builds a wheel from this exact commit, installs that wheel in isolation,
+  # and compares tag, distribution, Python, and native identities.
   # ------------------------------------------------------------------------
   verify:
     name: Verify the tagged commit
     runs-on: ubuntu-latest
+    needs: qualification
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.83
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: Build and install
+      - name: Production tag policy
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
         run: |
-          python -m pip install --upgrade pip
-          # `pip install -e .` rather than `maturin develop`: maturin refuses
-          # to run `develop` without an active virtualenv, which the runner
-          # does not have. maturin is the PEP 517 backend, so this builds the
-          # same extension.
-          pip install -e ".[test,all]"
-      - name: Native extension is present
-        run: python -c "import gffbase, sys; sys.exit(0 if gffbase.native_available() else 'native extension missing')"
-      - name: Test suite
-        run: pytest -q
-      - name: The tag must match the version
+          pip install 'packaging>=24'
+          python - <<'PY'
+          import os
+          from packaging.version import InvalidVersion
+          import packaging.version
+
+          ref = os.environ["RELEASE_REF"]
+          if not ref.startswith("v"):
+              raise SystemExit("Production publication requires a version tag, including workflow_dispatch")
+          try:
+              version = packaging.version.Version(ref[1:])
+          except InvalidVersion as exc:
+              raise SystemExit(f"invalid release tag {ref!r}: {exc}") from exc
+          if ref != f"v{version}":
+              raise SystemExit(f"release tag {ref!r} is not canonical PEP 440 (expected v{version})")
+          if version.is_prerelease:
+              raise SystemExit("Production publication refuses release-candidate versions")
+          PY
+      - name: Build and install the exact wheel under review
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          declared=$(python -c "import gffbase; print(gffbase.__version__)")
-          if [ "$tag" != "$declared" ]; then
-            echo "::error ::tag $GITHUB_REF_NAME does not match gffbase.__version__ $declared"
-            exit 1
-          fi
-          echo "tag $GITHUB_REF_NAME matches version $declared"
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+          python -m venv /tmp/gffbase-release-identity
+          /tmp/gffbase-release-identity/bin/pip install --force-reinstall 'packaging>=24' dist/*.whl
+      - name: Built metadata, Python, native, and tag identities agree
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          /tmp/gffbase-release-identity/bin/python - <<'PY'
+          import importlib.metadata
+          import os
+          import gffbase
+          import gffbase._native as native
+          from packaging.version import Version
+
+          expected = os.environ["RELEASE_REF"][1:]
+          installed = importlib.metadata.version("gffbase")
+          assert str(Version(installed)) == expected
+          assert installed == gffbase.__version__ == native.__version__ == expected
+          PY
 
   # ------------------------------------------------------------------------
   # Linux wheels — manylinux via maturin-action's Docker image.

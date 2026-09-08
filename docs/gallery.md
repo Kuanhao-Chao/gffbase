@@ -144,6 +144,7 @@ print(exons.num_rows, "exons;", exons.schema.names[:6])
 
 Restrict to a locus with `limit=`, and get a dataframe instead:
 
+<!-- docs-test: pandas -->
 ```python
 region = db.to_table("exon", limit=("chr1", 100, 300), format="df")
 print(len(region), "exons in chr1:100-300")

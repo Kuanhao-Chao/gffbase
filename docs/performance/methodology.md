@@ -58,9 +58,10 @@ GTF and the GFF3 release of the same biology), RefSeq GRCh38.p14, MANE v1.5
   gffbase under one duplicate-ID policy against gffutils under another would
   compare two different workloads on exactly the axis that decides whether the
   run completes.
-- Legacy `gffutils` runs with parent inference **enabled**. Disabling it would
-  skip the very work that makes GTF ingest slow, which is the phenomenon under
-  study.
+- The primary GENCODE GTF comparison disables parent inference for **both**
+  engines, which makes the authored records directly comparable. Separate
+  non-headline controls exercise default inference and a parent-stripped GTF;
+  their results are never mixed into the primary namespace.
 - Each engine runs in its own subprocess, so peak RSS is attributable and
   neither inherits the other's warm caches.
 - Both write to the same filesystem.
@@ -79,10 +80,11 @@ GTF and the GFF3 release of the same biology), RefSeq GRCh38.p14, MANE v1.5
 
 ## Capped runs, and why there are no extrapolated numbers
 
-Legacy `gffutils` ingest of GENCODE v49 **GTF** does not finish in any
-reasonable time — GTF has no explicit parents, so every gene and transcript row
-has to be invented, one Python↔SQLite round trip at a time. The harness caps it
-with `--legacy-timeout` (default 90 minutes).
+The default-inference GENCODE v49 **GTF control** can exceed a practical run
+window: GTF has no explicit parents, so every gene and transcript row must be
+invented through the legacy Python/SQLite path. Every comparator arm therefore
+has a `--legacy-timeout` safety valve (default 90 minutes), including arms that
+normally finish well below it.
 
 **A capped run is censored, not measured.** In a current result its state is
 `timed_out`, `cap_seconds` records the safety valve, and `wall_seconds` is

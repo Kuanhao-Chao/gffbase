@@ -4,10 +4,12 @@ title: Performance
 
 # Performance
 
-Head-to-head against legacy [`gffutils`](https://github.com/daler/gffutils) on
-the five canonical human-genome annotation releases.
+Historical head-to-head measurements against legacy
+[`gffutils`](https://github.com/daler/gffutils). The retained Mac run covers
+four canonical human-genome annotations; the Linux five-corpus campaign is a
+separate result set.
 
-Every number below is **generated from a committed measurement file**
+Every number below is **generated from the committed historical Mac file**
 (`benchmarks/results/06_mega.json`) by `tools/gen_benchmark_tables.py`. A test
 in the release-hygiene suite fails if a published table stops matching the data
 behind it, so these cannot drift from what was actually measured. How the
@@ -23,7 +25,7 @@ measurements are taken — and what they do and do not claim — is on the
 
 ---
 
-## Across every canonical corpus
+## Historical Mac sweep
 
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
@@ -57,41 +59,24 @@ derived from it. See
 
 ---
 
-## The GTF synthesis gap
+## Controlled GTF inference and synthesis
 
-GENCODE v49 ships in **both** GTF and GFF3 — the same genes, the same
-transcripts, the same exons, differing only in surface format. That pairing is
-the cleanest available measurement of where the ingest cost actually lives,
-because everything except the format is held constant.
+GENCODE v49 ships related GTF and GFF3 annotations, but the GTF is not
+leaf-only: it contains explicit gene and transcript rows. Default gffutils
+inference may therefore perform redundant work. The historical table retained
+that default and cannot establish that synthesis caused the observed gap.
 
-**GFF3 states parentage; GTF implies it.** A GFF3 file carries explicit `gene`
-and `mRNA` rows and a `Parent=` attribute on every child, so building the
-hierarchy is a matter of reading edges that are already written down. A GTF
-file has neither: it contains only the leaf features, each tagged with
-`gene_id` and `transcript_id`, and the gene and transcript rows have to be
-**invented** — their coordinates derived from the span of their children.
+The Linux campaign corrects the design with three separately reported arms:
 
-The two engines invent them very differently.
+1. Unmodified GENCODE GTF with each engine's default compatibility behavior.
+2. The same bytes with gene and transcript inference disabled in both engines;
+   this is the recommended real-data headline.
+3. A generated parent-stripped GTF with inference enabled in both engines;
+   its source hash, transformation recipe, removed-row counts, and output hash
+   make this the controlled synthesis workload.
 
-=== "legacy `gffutils`"
-
-    A Python loop over every feature, and for each missing parent a correlated
-    SQL subquery to find the extent of its children — millions of
-    Python ↔ SQLite round trips, each one a separate query plan, on a database
-    that is being written to at the same time.
-
-=== "gffbase"
-
-    Two set-based `GROUP BY` aggregations and one recursive CTE, evaluated
-    inside DuckDB. The same three statements run whether the parents were read
-    from `Parent=` columns or aggregated from `gene_id` strings, which is why
-    the gffbase column barely moves between the two GENCODE rows while the
-    legacy column changes by more than an order of magnitude.
-
-This is also why the speedups on the GFF3-only corpora are modest. Where
-parentage is explicit, legacy ingest is close to a streaming `INSERT` and there
-is little synthesis work to win back — the gain there comes from the parser and
-the columnar write path, not from the algorithm.
+Only the third arm supports conclusions about synthesis. No speedup is shown
+for any arm unless normalized feature and relationship signatures agree.
 
 ---
 
