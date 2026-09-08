@@ -149,9 +149,14 @@ def test_order_clause_comma_separated_string():
     """A comma-separated string used to be interpolated verbatim, so it reached
     SQL as one opaque expression. Each name is now resolved and ordered on
     individually -- which is what the caller meant, and is what closes the
-    injection this branch used to be."""
+    injection this branch used to be.
+
+    The trailing ``id ASC`` is the total-order tiebreak: none of the sort
+    keys is unique, and DuckDB's parallel sort does not preserve ties, so
+    without it the same query returned different orders across runs.
+    """
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    assert db._order_clause("seqid, start", reverse=False) == "seqid ASC, start ASC"
+    assert db._order_clause("seqid, start", reverse=False) == "seqid ASC, start ASC, id ASC"
 
 
 def test_order_clause_rejects_anything_not_whitelisted():
@@ -785,7 +790,7 @@ def test_order_clause_qualified_applies_the_same_whitelist():
     pass-through escape hatch, so `children(..., order_by=<payload>)` was
     injectable exactly like `all_features`."""
     out = FeatureDB._order_clause_qualified(("seqid", "start"), reverse=True, qualifier="f")
-    assert out == "f.seqid DESC, f.start DESC"
+    assert out == "f.seqid DESC, f.start DESC, f.id ASC"
     with pytest.raises(ValueError, match="cannot order by"):
         FeatureDB._order_clause_qualified("f.seqid", reverse=True, qualifier="f")
 
