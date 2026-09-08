@@ -163,7 +163,11 @@ _RESOURCE_KEYS = {
     "executable_identities",
     "thresholds",
 }
-_MOUNT_KEYS = {"raw", "fstype", "probe_path"}
+#: `supports_noreplace_rename` is a measured bool, not a string: it records
+#: whether the campaign root can perform the atomic publish `safe_io` depends
+#: on. See `cluster_campaign._probe_noreplace_rename`.
+_MOUNT_STRING_KEYS = {"raw", "fstype", "probe_path"}
+_MOUNT_KEYS = _MOUNT_STRING_KEYS | {"supports_noreplace_rename"}
 _EXECUTABLE_ROLES = {"findmnt", "taskset", "tmux"}
 _THRESHOLD_KEYS = {
     "free_bytes",
@@ -1388,9 +1392,15 @@ def _validate_resource_snapshot(value: object, label: str) -> dict[str, object]:
         if type(record[key]) is not int or record[key] < 1:
             raise model.CampaignError(f"{label}.{key} is invalid")
     mount = model.require_exact_keys(record["mount"], _MOUNT_KEYS, f"{label}.mount")
-    for key, item in mount.items():
+    for key in _MOUNT_STRING_KEYS:
+        item = mount[key]
         if type(item) is not str or not item:
             raise model.CampaignError(f"{label}.mount.{key} is invalid")
+    # `type(...) is not bool`, not a truthiness test: the string "false" is
+    # truthy, and accepting it would turn a fail-closed capability check into a
+    # decorative one.
+    if type(mount["supports_noreplace_rename"]) is not bool:
+        raise model.CampaignError(f"{label}.mount.supports_noreplace_rename is invalid")
     for key in ("executables", "executable_versions", "executable_identities"):
         mapping = model.require_exact_keys(record[key], _EXECUTABLE_ROLES, f"{label}.{key}")
         if key != "executable_identities":
