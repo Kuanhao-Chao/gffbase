@@ -69,6 +69,10 @@ linkcheck_ignore = [
 ]
 linkcheck_timeout = 20
 
+#: The canonical published location. GitHub Pages serves this project repo at
+#: a path under the user site, which owns the apex domain.
+html_baseurl = "https://khchao.com/gffbase/"
+
 html_theme = "furo"
 html_title = "GFFBase"
 html_static_path = ["_static"]

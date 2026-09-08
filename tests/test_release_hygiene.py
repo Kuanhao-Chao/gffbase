@@ -458,7 +458,7 @@ def test_the_documentation_url_is_canonical_everywhere():
     where this author's other projects already live. The old host is retired,
     so a surviving reference is a dead link rather than a redirect.
 
-    `docs/CNAME` in particular must stay deleted: mkdocs copies it into the
+    `docs/CNAME` in particular must stay deleted: a CNAME is copied into the
     published site, and its presence is what makes GitHub redirect
     `khchao.com/gffbase/` back to the subdomain.
     """
@@ -467,7 +467,7 @@ def test_the_documentation_url_is_canonical_everywhere():
     )
 
     canonical = "https://khchao.com/gffbase/"
-    assert f"site_url: {canonical}" in _read("mkdocs.yml")
+    assert f'html_baseurl = "{canonical}"' in _read("docs/source/conf.py")
 
     # A LINK to the retired host, not a mention of it. The changelog entry that
     # records the move necessarily names the old subdomain, and that is correct
@@ -587,7 +587,7 @@ def test_release_qualification_names_every_required_gate():
         "python -m build --wheel --sdist",
         'tests/test_docs_snippets.py -m "not pandas_docs"',
         "tests/test_docs_snippets.py -m pandas_docs",
-        "mkdocs build --strict",
+        'make -C docs html SPHINXOPTS="-W --keep-going"',
     ]
     missing = [command for command in required_commands if command not in qualification]
     assert not missing, f"release qualification is missing explicit gates: {missing}"
@@ -669,56 +669,81 @@ def test_every_cli_command_is_documented():
 
 
 def test_every_nav_entry_resolves_and_every_page_is_reachable():
-    """`mkdocs.yml` sets `strict: true`, so a page outside the nav fails the
-    build. Catch it here rather than in a deploy that only runs on `main`."""
-    import re
+    """Every toctree entry exists, and every page is in a toctree.
 
-    mkdocs = _read("mkdocs.yml")
-    nav = mkdocs.split("nav:", 1)[1]
-    refs = set(re.findall(r"([\w/.-]+\.md)\s*$", nav, re.M))
-    docs = REPO_ROOT / "docs"
+    The Sphinx build runs under `-W`, so it already fails on a page outside the
+    toctree -- but that build needs the docs extra and a 3.12 interpreter,
+    while this runs in the ordinary suite. It is the fast check that catches
+    the mistake before the slow one has to.
+    """
+    source = REPO_ROOT / "docs" / "source"
+    refs: set[str] = set()
+    for rst in source.rglob("*.rst"):
+        in_toctree = False
+        for line in rst.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith(".. toctree::"):
+                in_toctree = True
+                continue
+            if not in_toctree:
+                continue
+            if not line.strip():
+                continue
+            # A toctree block ends at the first line that is not indented.
+            if not line[:1].isspace():
+                in_toctree = False
+                continue
+            entry = line.strip()
+            if entry.startswith(":"):  # an option, not an entry
+                continue
+            base = source if entry.startswith("/") else rst.parent
+            refs.add((base / entry.lstrip("/")).resolve().relative_to(source.resolve()).as_posix())
 
-    missing = sorted(r for r in refs if not (docs / r).is_file())
-    assert not missing, f"nav references pages that do not exist: {missing}"
+    missing = sorted(r for r in refs if not (source / f"{r}.rst").is_file())
+    assert not missing, f"toctree references pages that do not exist: {missing}"
 
-    excluded = set()
-    if "exclude_docs:" in mkdocs:
-        block = mkdocs.split("exclude_docs:", 1)[1].split("\n\n", 1)[0]
-        excluded = {line.strip() for line in block.splitlines() if line.strip().endswith(".md")}
+    excluded: set[str] = set()
 
-    # `as_posix()`, not `str()`: on Windows the latter yields `api\compat.md`,
-    # which never matches the `api/compat.md` in the nav, so every nested page
-    # was reported as an orphan and the test failed on Windows alone.
-    on_disk = {p.relative_to(docs).as_posix() for p in docs.rglob("*.md")}
+    # `as_posix()`, not `str()`: on Windows the latter yields `content\api`,
+    # which never matches the `content/api` in the toctree, so every nested
+    # page was reported as an orphan and the test failed on Windows alone.
+    on_disk = {
+        p.relative_to(source).with_suffix("").as_posix()
+        for p in source.rglob("*.rst")
+        if p.name != "index.rst"
+    }
     orphans = sorted(on_disk - refs - excluded)
     assert not orphans, (
-        f"pages outside the nav would fail the strict build: {orphans}. "
-        f"Add them to nav, or to exclude_docs if they are deliberately unpublished."
+        f"pages outside the toctree fail the -W build: {orphans}. "
+        f"Add them to a toctree, or move them out of docs/source/ if they are "
+        f"deliberately unpublished -- as the unsent gffutils report is."
     )
 
 
 def test_readme_deep_links_resolve_to_pages_that_exist():
-    """README links are absolute URLs, so `mkdocs build --strict` cannot see them.
+    """README links are absolute URLs, so the docs build cannot see them.
 
-    `mkdocs` validates relative links inside `docs/`, but the README is
+    Sphinx validates `:doc:` roles inside the source tree, but the README is
     rendered by GitHub and PyPI and therefore links to the published site by
     full URL. Nothing checked those, so a page rename would leave the two
-    most-read documents in the project pointing at 404s.
+    most-read documents in the project pointing at 404s -- which is exactly
+    what the MkDocs-to-Sphinx move would have done to all thirteen of them.
     """
     import re
 
     readme = _read("README.md")
-    docs = REPO_ROOT / "docs"
+    source = REPO_ROOT / "docs" / "source"
     broken = []
 
-    for url in sorted(set(re.findall(r"https://khchao\.com/gffbase/([\w/-]*)", readme))):
+    for url in sorted(set(re.findall(r"https://khchao\.com/gffbase/([\w/.-]*)", readme))):
         slug = url.strip("/")
         if not slug:  # the site root
             continue
-        # mkdocs serves `docs/a/b.md` at `/a/b/`, and `docs/a/index.md` at `/a/`.
-        candidates = [docs / f"{slug}.md", docs / slug / "index.md"]
-        if not any(c.is_file() for c in candidates):
-            broken.append(f"/{slug}/")
+        # Sphinx serves `docs/source/content/x.rst` at `/content/x.html`.
+        if not slug.endswith(".html"):
+            broken.append(f"/{slug} (not a Sphinx page URL)")
+            continue
+        if not (source / slug.removesuffix(".html")).with_suffix(".rst").is_file():
+            broken.append(f"/{slug}")
 
     assert not broken, (
         f"README links to published pages that do not exist: {broken}. "
@@ -867,7 +892,7 @@ def test_the_g_descender_clears_the_exon_block(svg_name):
     """
     import re
 
-    svg = (REPO_ROOT / "docs" / "assets" / svg_name).read_text()
+    svg = (REPO_ROOT / "docs" / "source" / "_static" / svg_name).read_text()
 
     exons = [
         (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
@@ -923,7 +948,7 @@ def test_the_wordmark_sits_on_one_baseline(svg_name):
     """
     import re
 
-    svg = (REPO_ROOT / "docs" / "assets" / svg_name).read_text()
+    svg = (REPO_ROOT / "docs" / "source" / "_static" / svg_name).read_text()
     paths = re.findall(r'<path d="([^"]+)"', svg)
     # Document order: g, f, f, cylinder, band, a, s, e.
     by_label = {
