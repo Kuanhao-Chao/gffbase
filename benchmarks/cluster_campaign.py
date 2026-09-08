@@ -1227,8 +1227,9 @@ def worker_environment(
     env.update(
         {
             "GFFBASE_BENCH_OUT": str(Path(attempt_dir).resolve() / "scratch"),
+            # See `model.worker_environment`: the consumer stats this value.
             "GFFBASE_BENCH_WHEEL": str(
-                ((_campaign_spec(campaign).get("candidate") or {}).get("wheel") or {}).get("name")
+                ((_campaign_spec(campaign).get("candidate") or {}).get("wheel") or {}).get("path")
             ),
             "GFFBASE_BENCH_WHEEL_SHA256": str(
                 ((_campaign_spec(campaign).get("candidate") or {}).get("wheel") or {}).get("sha256")

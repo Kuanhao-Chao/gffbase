@@ -49,7 +49,15 @@ def _inputs(root: Path) -> dict[str, dict[str, object]]:
 def _campaign(tmp_path: Path) -> dict[str, object]:
     spec = {
         "repo": {},
-        "candidate": {"wheel": {"name": "gffbase-0.2.0rc1.whl", "sha256": "a" * 64}},
+        # `path` as well as `name`: preflight records both, and the worker
+        # environment has to hand the CONSUMER a path it can stat.
+        "candidate": {
+            "wheel": {
+                "name": "gffbase-0.2.0rc1.whl",
+                "path": "/staged/wheels/gffbase-0.2.0rc1.whl",
+                "sha256": "a" * 64,
+            }
+        },
         "interpreters": {
             role: {"resolved_executable": str(tmp_path / role / "bin" / "python")}
             for role in model.INTERPRETER_ROLES
@@ -398,7 +406,9 @@ def test_worker_environment_is_bounded_and_ambient_secret_free(tmp_path: Path) -
     assert env["PATH"] == "/usr/bin"
     assert env["HOME"] == "/safe/home"
     assert env["GFFBASE_THREADS"] == env["GFFUTILS2_THREADS"] == "1"
-    assert env["GFFBASE_BENCH_WHEEL"] == "gffbase-0.2.0rc1.whl"
+    # The path, not the name: the consumer stats it. See
+    # `test_the_candidate_wheel_is_passed_as_a_usable_path`.
+    assert env["GFFBASE_BENCH_WHEEL"] == "/staged/wheels/gffbase-0.2.0rc1.whl"
     assert env["GFFBASE_BENCH_WHEEL_SHA256"] == "a" * 64
     assert env["GFFBASE_BENCH_OUT"] == str((tmp_path / "attempt" / "scratch").resolve())
     assert "PYTHONPATH" not in env
@@ -433,7 +443,7 @@ def test_worker_environment_default_is_independent_of_ambient_values(
     assert not {"PATH", "HOME", "PYTHONPATH", "LD_PRELOAD", "SECRET_TOKEN"} & set(first)
 
 
-@pytest.mark.parametrize("missing", ["name", "sha256"])
+@pytest.mark.parametrize("missing", ["path", "sha256"])
 def test_worker_environment_rejects_missing_candidate_wheel_identity(
     tmp_path: Path, missing: str
 ) -> None:
@@ -443,3 +453,34 @@ def test_worker_environment_rejects_missing_candidate_wheel_identity(
     job = model.campaign_jobs(campaign)[0]
     with pytest.raises(model.CampaignError, match="wheel"):
         model.worker_environment(campaign, job, tmp_path / "attempt")
+
+
+# ---------------------------------------------------------------------------
+# The candidate wheel travels as a PATH
+# ---------------------------------------------------------------------------
+#
+# `common._candidate_wheel_artifact` reads `GFFBASE_BENCH_WHEEL`, calls
+# `Path(...).is_file()` on it, and refuses to stamp an environment if that
+# fails. `worker_environment` was passing the wheel's NAME, which resolves
+# against the worker's cwd -- the repo root -- where no wheel exists, so every
+# job died after finishing its measurement:
+#
+#     ValueError: candidate wheel path is not a file
+#
+# Both sides were tested and neither test could fail: the consumer's test sets
+# the variable to a real path, and the producer's asserted only that the key
+# was present. The contract between them is what nobody checked.
+
+
+def test_the_candidate_wheel_is_passed_as_a_usable_path(tmp_path: Path) -> None:
+    campaign = _campaign(tmp_path)
+    job = model.campaign_jobs(campaign)[0]
+    env = model.worker_environment(campaign, job, tmp_path / "attempt")
+
+    wheel = campaign["spec"]["candidate"]["wheel"]
+    assert env["GFFBASE_BENCH_WHEEL"] == wheel["path"]
+    assert env["GFFBASE_BENCH_WHEEL"] != wheel["name"], (
+        "a bare filename resolves against the worker's cwd, not the wheel"
+    )
+    assert Path(env["GFFBASE_BENCH_WHEEL"]).is_absolute()
+    assert env["GFFBASE_BENCH_WHEEL_SHA256"] == wheel["sha256"]
