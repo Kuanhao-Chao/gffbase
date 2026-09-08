@@ -25,11 +25,20 @@
 #
 #   * NO PYTHONPATH. The campaign runs children with a bounded environment, so
 #     what is measured is the installed artifact, not the working tree.
+#
+#   * THE CAMPAIGN ROOT MUST BE LOCAL, AND BIG. `safe_io` publishes results with
+#     `renameat2(RENAME_NOREPLACE)`, which NFS answers with EINVAL -- so the
+#     default root inside the repo cannot work, because the repo is on NFS. It
+#     also wants 80 GiB free (`MIN_FREE_BYTES`), since every attempt keeps its
+#     own scratch database and nothing is cleaned up between jobs. On this
+#     cluster that means the local NVMe, not /tmp (16 G) or /var/tmp (30 G).
+#     Override with CAMPAIGN_ROOT=... if your host differs.
 set -euo pipefail
 
 REPO=/ccb/salz3/kh.chao/gffbase
 STAGE=/ccb/salz3/kh.chao/.gffbase-tmp
 RUN_ID="${RUN_ID:-linux-$(date +%Y%m%d)-v020rc1}"
+CAMPAIGN_ROOT="${CAMPAIGN_ROOT:-/srv/nvme1/$USER/gffbase-campaign}"
 WHEEL="$STAGE/wheels/gffbase-0.2.0rc1-cp310-abi3-linux_x86_64.whl"
 PRIMARY="$STAGE/conda_primary/bin/python3.11"
 GFFBASE_010="$STAGE/conda_gffbase010/bin/python3.11"
@@ -94,16 +103,52 @@ PY
 [ -f "$WHEEL" ] || { echo "  FAIL: candidate wheel not found at $WHEEL"; exit 1; }
 echo "  candidate wheel present"
 
-# The campaign root and every component of it must be private mode 0700, and a
-# directory created under a setgid parent inherits 2700 -- which the check
-# rejects. Clear it here rather than failing five minutes in.
-mkdir -p benchmarks/out/cluster
-chmod 0700 benchmarks/out benchmarks/out/cluster
-chmod g-s  benchmarks/out benchmarks/out/cluster 2>/dev/null || true
+say "campaign root"
+# Every component must be private mode 0700, and a directory created under a
+# setgid parent inherits 2700 -- which the check rejects. Clear it here rather
+# than failing five minutes in.
+mkdir -p "$CAMPAIGN_ROOT"
+chmod 0700 "$CAMPAIGN_ROOT"
+chmod g-s  "$CAMPAIGN_ROOT" 2>/dev/null || true
+printf '  %s  free=%s  fs=%s\n' "$CAMPAIGN_ROOT" \
+       "$(df -hP "$CAMPAIGN_ROOT" | tail -1 | awk '{print $4}')" \
+       "$(stat -f -c %T "$CAMPAIGN_ROOT")"
+
+# Prove the two properties rather than discovering them mid-run.
+"$PRIMARY" - "$CAMPAIGN_ROOT" <<'PY'
+import os, pathlib, shutil, sys
+sys.path.insert(0, "benchmarks")
+from campaign import safe_io
+
+root = pathlib.Path(sys.argv[1])
+free = shutil.disk_usage(root).free
+need = 80 * (1 << 30)
+if free < need:
+    sys.exit(f"  FAIL: campaign needs {need / 2**30:.0f} GiB free, "
+             f"{root} has {free / 2**30:.1f} GiB")
+(root / "_probe_src").write_text("x")
+fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+try:
+    safe_io._rename_noreplace_at(fd, "_probe_src", fd, "_probe_dst")
+    (root / "_probe_dst").unlink()
+    print(f"  RENAME_NOREPLACE supported, {free / 2**30:.0f} GiB free")
+except Exception as exc:
+    sys.exit(f"  FAIL: {root} cannot host the campaign: {exc}\n"
+             f"  NFS answers renameat2(RENAME_NOREPLACE) with EINVAL. "
+             f"Set CAMPAIGN_ROOT to a local filesystem with 80+ GiB.")
+finally:
+    os.close(fd)
+    for name in ("_probe_src", "_probe_dst"):
+        try:
+            (root / name).unlink()
+        except OSError:
+            pass
+PY
 
 say "1/4 preflight  (hashes every corpus, probes each interpreter, builds the parent-stripped GTF control)"
 "$PRIMARY" benchmarks/cluster_campaign.py preflight \
     --run-id "$RUN_ID" \
+    --campaign-root "$CAMPAIGN_ROOT" \
     --candidate-wheel "$WHEEL" \
     --primary-python "$PRIMARY" \
     --gffbase-010-python "$GFFBASE_010" \
@@ -112,13 +157,13 @@ say "1/4 preflight  (hashes every corpus, probes each interpreter, builds the pa
     --execute
 
 say "2/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped here)"
-"$PRIMARY" benchmarks/cluster_campaign.py canonical --run-id "$RUN_ID" --execute
+"$PRIMARY" benchmarks/cluster_campaign.py canonical --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT" --execute
 
 say "3/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
-"$PRIMARY" benchmarks/cluster_campaign.py launch --run-id "$RUN_ID" --execute
+"$PRIMARY" benchmarks/cluster_campaign.py launch --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT" --execute
 
 say "4/4 status"
-"$PRIMARY" benchmarks/cluster_campaign.py status --run-id "$RUN_ID"
+"$PRIMARY" benchmarks/cluster_campaign.py status --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT"
 
 cat <<'NEXT'
 
