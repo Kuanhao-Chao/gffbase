@@ -1824,3 +1824,78 @@ def test_internal_worker_rejects_wrong_campaign_digest_before_mutation(tmp_path)
     )
     assert code == 2
     assert not owner.exists()
+
+
+# ---------------------------------------------------------------------------
+# The campaign root: probe the capability, do not infer it from the fstype
+# ---------------------------------------------------------------------------
+#
+# `verify_topology` used to require the campaign root be NFS-backed, while
+# `safe_io` publishes every result through `renameat2(RENAME_NOREPLACE)` --
+# which NFS answers with EINVAL. The two requirements were mutually exclusive,
+# so the campaign could not run on any filesystem:
+#
+#     on NFS   -> "filesystem does not support atomic no-replace rename"
+#     on xfs   -> "campaign root must be NFS-backed, found xfs"
+#
+# It survived 511 tests because they feed a STUBBED mount probe claiming
+# `fstype: nfs4` while exercising the rename primitive on a local `tmp_path`.
+# No test could have caught it, because no test put the two together.
+#
+# What matters is not the name of the filesystem but whether it supports the
+# primitive the design depends on, so that is what is checked now.
+
+
+def _topology(**overrides):
+    probe = {
+        "platform": "Linux",
+        "machine": "x86_64",
+        "allowed_cpus": list(range(50)),
+        "online_cpus": list(range(64)),
+        "physical_cpu_ids": {str(index): [str(index), "0"] for index in range(50)},
+        "numa_nodes": {"node0": list(range(64))},
+        "free_bytes": campaign.MIN_FREE_BYTES,
+        "available_ram_bytes": campaign.MIN_AVAILABLE_RAM_BYTES,
+        "mount": {
+            "raw": "/dev/nvme1n1 xfs /srv/nvme1 rw",
+            "fstype": "xfs",
+            "probe_path": "/srv/nvme1",
+            "supports_noreplace_rename": True,
+        },
+        "executables": {
+            "findmnt": "/usr/bin/findmnt",
+            "taskset": "/usr/bin/taskset",
+            "tmux": "/usr/bin/tmux",
+        },
+        "executable_versions": {"findmnt": "findmnt 1", "taskset": "taskset 1", "tmux": "tmux 3"},
+        "executable_identities": {"findmnt": {}, "taskset": {}, "tmux": {}},
+        "thresholds": {
+            "free_bytes": campaign.MIN_FREE_BYTES,
+            "available_ram_bytes": campaign.MIN_AVAILABLE_RAM_BYTES,
+        },
+    }
+    probe.update(overrides)
+    return probe
+
+
+def test_a_local_root_that_supports_the_primitive_is_accepted() -> None:
+    """xfs on local NVMe is the only thing on this cluster that can host a
+    campaign: it supports the rename AND has the 80 GiB the run needs."""
+    campaign.verify_topology(_topology())
+
+
+def test_a_root_that_cannot_do_a_no_replace_rename_is_rejected() -> None:
+    """The failure the fstype check was reaching for, stated directly."""
+    probe = _topology()
+    probe["mount"] = dict(probe["mount"], fstype="nfs4", supports_noreplace_rename=False)
+    with pytest.raises(campaign.CampaignError, match="no-replace rename"):
+        campaign.verify_topology(probe)
+
+
+def test_an_unprobed_root_is_rejected_rather_than_assumed_good() -> None:
+    """A probe from an older campaign has no such key. Treating a missing
+    capability as present is how a fail-closed check becomes decorative."""
+    probe = _topology()
+    probe["mount"] = {k: v for k, v in probe["mount"].items() if k != "supports_noreplace_rename"}
+    with pytest.raises(campaign.CampaignError, match="no-replace rename"):
+        campaign.verify_topology(probe)
