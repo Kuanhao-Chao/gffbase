@@ -82,7 +82,21 @@ class ParsedFeature:
 
     @classmethod
     def from_tuple(cls, tup) -> ParsedFeature:
-        """Build from the 11-tuple shape that the Rust extension yields."""
+        """Build from the 11-tuple shape that the Rust extension yields.
+
+        The fields are stored as handed over. `rust/src/lib.rs` already builds
+        a `PyBytes` for the blob, a `PyList` of `PyTuple(str, str, int)` for
+        the pairs, and a fresh `PyList` for `extra` -- so the coercions that
+        used to sit here (`bytes(blob)`, `int(i)` in a rebuilt list
+        comprehension, `list(extra)`) never converted anything. They allocated
+        a second copy of every attribute list, 6,068,892 times on GENCODE:
+        20.4 s in the comprehension alone, and 13.5% of the whole parse stage.
+
+        Nothing else can reach this method. `parser.py` calls it only when
+        `self._native` is true; the pure-Python fallback constructs
+        `ParsedFeature` directly with values it has already normalized. The
+        coercions were defending against a caller that does not exist.
+        """
         (
             seqid,
             source,
@@ -105,9 +119,9 @@ class ParsedFeature:
             score=score,
             strand=strand,
             frame=frame,
-            attributes_blob=bytes(blob) if not isinstance(blob, bytes) else blob,
-            attributes_pairs=[(k, v, int(i)) for (k, v, i) in pairs],
-            extra=list(extra),
+            attributes_blob=blob,
+            attributes_pairs=pairs,
+            extra=extra,
         )
 
 
