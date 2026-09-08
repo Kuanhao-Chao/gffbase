@@ -145,6 +145,9 @@ finally:
             pass
 PY
 
+if [ -d "$CAMPAIGN_ROOT/$RUN_ID/attempts" ] || [ -f "$CAMPAIGN_ROOT/$RUN_ID/campaign.json" ]; then
+  say "1/4 preflight  (campaign already exists; reusing it)"
+else
 say "1/4 preflight  (hashes every corpus, probes each interpreter, builds the parent-stripped GTF control)"
 "$PRIMARY" benchmarks/cluster_campaign.py preflight \
     --run-id "$RUN_ID" \
@@ -155,26 +158,29 @@ say "1/4 preflight  (hashes every corpus, probes each interpreter, builds the pa
     --gffutils-013-python "$GFFUTILS_013" \
     --prepare-parent-stripped \
     --execute
+fi
+
+CAMPAIGN_DIR="$CAMPAIGN_ROOT/$RUN_ID"
 
 say "2/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped here)"
-"$PRIMARY" benchmarks/cluster_campaign.py canonical --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT" --execute
+"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_DIR" --resume --execute
 
 say "3/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
-"$PRIMARY" benchmarks/cluster_campaign.py launch --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT" --execute
+"$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_DIR" --resume --execute
 
 say "4/4 status"
-"$PRIMARY" benchmarks/cluster_campaign.py status --run-id "$RUN_ID" --campaign-root "$CAMPAIGN_ROOT"
+"$PRIMARY" benchmarks/cluster_campaign.py status --campaign "$CAMPAIGN_DIR"
 
 cat <<'NEXT'
 
 === next ===
 Workers run in their own tmux sessions. Watch them with:
 
-    python benchmarks/cluster_campaign.py status --run-id <RUN_ID>
+    python benchmarks/cluster_campaign.py status --campaign <CAMPAIGN_DIR>
 
 When every job reports completed, merge and publish:
 
-    python benchmarks/cluster_campaign.py merge --run-id <RUN_ID> --publish --execute
+    python benchmarks/cluster_campaign.py merge --campaign <CAMPAIGN_DIR> --publish --execute
     python tools/gen_benchmark_tables.py --write
     make -C docs html SPHINXOPTS="-W --keep-going"
 
