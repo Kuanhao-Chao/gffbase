@@ -19,6 +19,11 @@ parser, DuckDB columnar storage, and a zero-copy PyArrow interface — with the
 pip install gffbase
 ```
 
+!!! warning "Release-candidate documentation"
+    PyPI currently provides 0.1.0. This site describes the unreleased 0.2.0rc1
+    candidate; verify the installed version and use an exact reviewed commit
+    for candidate testing.
+
 <!-- docs-test: skip reason="needs the GENCODE v49 corpus" -->
 ```python
 from gffbase import create_db
@@ -58,9 +63,11 @@ with create_db("gencode.v49.annotation.gtf.gz", "gencode.duckdb") as db:
 Three workloads, in the order people hit them:
 
 **Ingesting a whole-genome annotation.** A SIMD Rust parser feeds DuckDB
-through Arrow record batches, and the gene/transcript rows that GTF leaves
-implicit are synthesized with set-based SQL rather than a Python loop over
-millions of correlated subqueries. Gzipped input is read directly.
+through Arrow record batches. When a GTF genuinely omits gene or transcript
+rows, their parents are synthesized with set-based SQL. Modern GENCODE already
+contains those rows, so inference can be disabled for that workload. Gzipped
+input is accepted directly, although native parsing currently materializes the
+decompressed input before returning records.
 
 **Querying it.** `region()` picks an R-tree or a B-tree per query;
 `children()` picks a materialized transitive closure or a recursive CTE based
@@ -93,10 +100,12 @@ same contract, and `format="df"` / `"polars"` are there too.
 *Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
-Generated from a committed measurement file, and verified by the test suite —
-see [Performance](performance.md) and [Methodology](performance/methodology.md).
-“Censored at” marks a legacy run killed at the safety valve without finishing,
-so no comparator wall or ratio is reported.
+This is the retained historical Mac result, generated from a committed
+measurement file and verified by the test suite. It contains four corpora and
+must not be combined with Linux ratios. See [Performance](performance.md) and
+[Methodology](performance/methodology.md). “Censored at” marks a legacy run
+killed at the safety valve without finishing, so no comparator wall or ratio
+is reported.
 
 !!! note "One honest caveat"
     A **row-by-row loop** over many IDs (`for i in ids: db.children(i)`) is

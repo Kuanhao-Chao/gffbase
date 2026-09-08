@@ -101,6 +101,14 @@ benchmarks/data/
 benchmarks/out/
 *.log
 
+# Crash-safe campaign lock/history and retained forensic cleanup namespaces.
+# These can live beside protected benchmark data/results so the lock remains
+# stable when the protected child is atomically replaced.
+.gffbase-locks/
+.gffbase-active-lock-*
+.gffbase-retired/
+.gffbase-probes/
+
 # ...but `benchmarks/results/` IS committed, deliberately.
 #
 # The published performance tables have to be checkable against something. A

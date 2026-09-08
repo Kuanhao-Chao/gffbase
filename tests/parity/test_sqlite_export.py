@@ -98,6 +98,25 @@ def test_real_gffutils_opens_a_gffbase_export(exported):
     assert sorted(legacy.featuretypes()) == ["CDS", "gene", "mRNA"]
 
 
+def test_export_is_analyzed_before_a_legacy_reader_opens_it(exported):
+    """The exported database must not make gffutils warn on first open."""
+    _db, out = exported
+    con = sqlite3.connect(out)
+    try:
+        assert con.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sqlite_stat1'"
+        ).fetchone() == (1,)
+    finally:
+        con.close()
+
+    import gffutils
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        legacy = gffutils.FeatureDB(str(out))
+    legacy.conn.close()
+
+
 def test_real_gffutils_answers_every_query_shape(exported):
     _db, out = exported
     legacy = _oracle(out)

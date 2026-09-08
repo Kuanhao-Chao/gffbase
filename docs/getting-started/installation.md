@@ -4,13 +4,19 @@ title: Installation
 
 # Installation
 
+!!! warning "0.2.0rc1 is still a release candidate"
+    PyPI currently serves 0.1.0. The commands and APIs in this documentation
+    describe the 0.2.0rc1 candidate; verify `gffbase.__version__` after installing.
+    Until 0.2.0 is tagged, install the candidate from an exact reviewed commit
+    rather than assuming an unpinned `pip install` supplies it.
+
 ```bash
 pip install gffbase
 ```
 
-That is the whole thing for most people. GFFBase publishes **abi3 wheels**, so
-one binary per platform covers CPython 3.10 through 3.14 and **no Rust
-toolchain is needed at install time**.
+That will be the normal 0.2.0 installation after publication. GFFBase builds
+**abi3 wheels**, so one binary per platform covers CPython 3.10 through 3.14
+and **no Rust toolchain is needed when a matching wheel is available**.
 
 | Platform | Wheels |
 | --- | --- |

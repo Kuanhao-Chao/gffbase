@@ -20,9 +20,9 @@
 Files land in ``benchmarks/data/``:
 
   * ``gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz``  —
-    GENCODE GRCh38 v49 basic, GTF format (no explicit parents — gene
-    and transcript rows are *implicit*, defined only by the
-    aggregation of their child exons).
+    GENCODE GRCh38 v49 basic, GTF format. Modern GENCODE includes explicit
+    gene and transcript rows; controlled synthesis benchmarks derive a
+    parent-stripped input separately.
   * ``gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz`` —
     GENCODE GRCh38 v49 basic, GFF3 format (explicit Parent= columns).
     The GTF / GFF3 pair is the head-to-head fixture for the GTF
@@ -31,43 +31,25 @@ Files land in ``benchmarks/data/``:
   * ``MANE.GRCh38.v1.5.ensembl_genomic.gff.gz`` — MANE v1.5 (Ensembl IDs).
   * ``chess3.1.3.GRCh38.gff.gz`` — CHESS 3.1.3 (latest GitHub release).
 
-Idempotent: an existing file is skipped (compare by size + suffix).
+Idempotent: an existing file is skipped only after byte-size, SHA-256, and
+gzip CRC verification against the canonical registry.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "benchmarks" / "data"
+sys.path.insert(0, str(ROOT))
 
-CORPORA: dict[str, str] = {
-    # Primary GENCODE pair: same biological release in both formats so
-    # the GTF-vs-GFF3 head-to-head is apples-to-apples.
-    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz": (
-        "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/"
-        "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz"
-    ),
-    "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz": (
-        "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/"
-        "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz"
-    ),
-    "GCF_000001405.40_GRCh38.p14_genomic.gff.gz": (
-        "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/"
-        "GCF_000001405.40_GRCh38.p14/"
-        "GCF_000001405.40_GRCh38.p14_genomic.gff.gz"
-    ),
-    "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz": (
-        "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/release_1.5/"
-        "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz"
-    ),
-    "chess3.1.3.GRCh38.gff.gz": (
-        "https://github.com/chess-genome/chess/releases/download/v.3.1.3/chess3.1.3.GRCh38.gff.gz"
-    ),
-}
+from benchmarks.common import verify_corpus
+from benchmarks.corpora import BY_FILENAME, CORPORA
+
+DATA = ROOT / "benchmarks" / "data"
 
 
 def _human(n: int) -> str:
@@ -81,9 +63,18 @@ def _human(n: int) -> str:
 def fetch(name: str, url: str, *, force: bool = False) -> Path:
     DATA.mkdir(parents=True, exist_ok=True)
     dst = DATA / name
+    expected = BY_FILENAME[name]
     if dst.exists() and not force:
-        sz = dst.stat().st_size
-        print(f"[skip] {name} already present ({_human(sz)})", flush=True)
+        verified = verify_corpus(
+            dst,
+            expected_size=int(expected["bytes"]),
+            expected_sha256=str(expected["sha256"]),
+        )
+        print(
+            f"[skip] {name} verified ({_human(verified['bytes'])}, "
+            f"sha256 {verified['sha256'][:12]}…)",
+            flush=True,
+        )
         return dst
     tmp = dst.with_suffix(dst.suffix + ".part")
     print(f"[fetch] {name} ← {url}", flush=True)
@@ -102,8 +93,16 @@ def fetch(name: str, url: str, *, force: bool = False) -> Path:
                 sys.stdout.write(f"\r        {_human(seen)} / {_human(total)} ({pct:.1f}%)")
                 sys.stdout.flush()
         sys.stdout.write("\n")
-    tmp.rename(dst)
-    print(f"[ok]    {name} → {_human(dst.stat().st_size)}", flush=True)
+    verified = verify_corpus(
+        tmp,
+        expected_size=int(expected["bytes"]),
+        expected_sha256=str(expected["sha256"]),
+    )
+    os.replace(tmp, dst)
+    print(
+        f"[ok]    {name} → {_human(dst.stat().st_size)} (sha256 {verified['sha256'][:12]}…)",
+        flush=True,
+    )
     return dst
 
 
@@ -123,26 +122,9 @@ def main() -> None:
     if "gencode" in selected:
         selected.update({"gencode-gtf", "gencode-gff3"})
         selected.discard("gencode")
-    pick: dict[str, str] = {}
-    if "gencode-gtf" in selected:
-        name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz"
-        pick[name] = CORPORA[name]
-    if "gencode-gff3" in selected:
-        name = "gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz"
-        pick[name] = CORPORA[name]
-    if "refseq" in selected:
-        pick["GCF_000001405.40_GRCh38.p14_genomic.gff.gz"] = CORPORA[
-            "GCF_000001405.40_GRCh38.p14_genomic.gff.gz"
-        ]
-    if "mane" in selected:
-        pick["MANE.GRCh38.v1.5.ensembl_genomic.gff.gz"] = CORPORA[
-            "MANE.GRCh38.v1.5.ensembl_genomic.gff.gz"
-        ]
-    if "chess" in selected:
-        pick["chess3.1.3.GRCh38.gff.gz"] = CORPORA["chess3.1.3.GRCh38.gff.gz"]
-
-    for name, url in pick.items():
-        fetch(name, url, force=args.force)
+    for corpus in CORPORA:
+        if corpus["key"] in selected:
+            fetch(str(corpus["filename"]), str(corpus["url"]), force=args.force)
     print("\nAll requested corpora present in:", DATA, flush=True)
 
 

@@ -27,8 +27,8 @@ DATA_DIR = Path(__file__).parent / "data"
 # Property tests are ordinary, bounded CI tests by default. Maintainers can
 # opt into the deeper deterministic campaign without editing test code:
 # `GFFBASE_HYPOTHESIS_PROFILE=extended pytest -m property`.
-settings.register_profile("quick", max_examples=40, deadline=None)
-settings.register_profile("extended", max_examples=500, deadline=None)
+settings.register_profile("quick", max_examples=40, deadline=None, derandomize=True)
+settings.register_profile("extended", max_examples=500, deadline=None, derandomize=True)
 settings.load_profile(os.environ.get("GFFBASE_HYPOTHESIS_PROFILE", "quick"))
 
 

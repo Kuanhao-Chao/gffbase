@@ -32,13 +32,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "python"))
 
 
 from benchmarks.common import (
     GFFBASE_DB,
     LEGACY_DB,
     OUT,
+    benchmark_env,
+    configure_duckdb_connection,
     pretty_bytes,
     pretty_seconds,
     run_subprocess,
@@ -80,7 +81,7 @@ def _fmt_wall(info: dict) -> str:
     return "failed"
 
 
-def sample_common_ids(n: int, seed: int = 20260501):
+def sample_common_ids(n: int, seed: int = 20260501, *, threads: int = 1):
     """Pick gene IDs that exist in BOTH DBs so per-engine descendant counts
     can be compared apples-to-apples."""
     import random
@@ -89,6 +90,7 @@ def sample_common_ids(n: int, seed: int = 20260501):
     import duckdb
 
     duck = duckdb.connect(str(GFFBASE_DB), read_only=True)
+    configure_duckdb_connection(duck, threads)
     duck_genes = {
         r[0] for r in duck.execute("SELECT id FROM features WHERE featuretype = 'gene'").fetchall()
     }
@@ -112,12 +114,12 @@ def _ids_path_payload(gene_ids, tag: str) -> Path:
     return p
 
 
-def gffbase_batched_script(ids_path: Path):
+def gffbase_batched_script(ids_path: Path, threads: int = 1):
     return f"""
-import json, time, sys
-sys.path.insert(0, {str(ROOT / "python")!r})
+import json, time
 from gffbase import FeatureDB
-db = FeatureDB({str(GFFBASE_DB)!r})
+db = FeatureDB({str(GFFBASE_DB)!r}, read_only=True)
+db.conn.execute("PRAGMA threads = {threads}")
 gene_ids = json.load(open({str(ids_path)!r}))
 t0 = time.perf_counter()
 table = db.children_batched(gene_ids, format='arrow')
@@ -132,12 +134,12 @@ print(json.dumps({{
 """
 
 
-def gffbase_loop_script(ids_path: Path):
+def gffbase_loop_script(ids_path: Path, threads: int = 1):
     return f"""
-import json, time, sys
-sys.path.insert(0, {str(ROOT / "python")!r})
+import json, time
 from gffbase import FeatureDB
-db = FeatureDB({str(GFFBASE_DB)!r})
+db = FeatureDB({str(GFFBASE_DB)!r}, read_only=True)
+db.conn.execute("PRAGMA threads = {threads}")
 gene_ids = json.load(open({str(ids_path)!r}))
 t0 = time.perf_counter()
 total = 0
@@ -174,16 +176,19 @@ print(json.dumps({{
 """
 
 
-def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
+def run_one_scale(n: int, *, timeout_per_run: int = 1800, threads: int = 1) -> dict:
     print(f"\n[vectorized] sampling {n} common gene IDs…", flush=True)
-    gene_ids = sample_common_ids(n)
+    gene_ids = sample_common_ids(n, threads=threads)
     print(f"  sampled {len(gene_ids)} genes", flush=True)
 
     ids_path = _ids_path_payload(gene_ids, str(n))
 
     print("[vectorized] gffbase children_batched (format='arrow')…", flush=True)
     batched = run_subprocess(
-        gffbase_batched_script(ids_path), label=f"gffbase.batched(n={n})", timeout=timeout_per_run
+        gffbase_batched_script(ids_path, threads),
+        label=f"gffbase.batched(n={n})",
+        timeout=timeout_per_run,
+        env_extra=benchmark_env(threads),
     )
     print(
         f"  wall={pretty_seconds(batched['wall_seconds'])}, "
@@ -195,7 +200,10 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     print("[vectorized] gffbase row-by-row loop…", flush=True)
     g_loop = mark_timeout(
         run_subprocess(
-            gffbase_loop_script(ids_path), label=f"gffbase.loop(n={n})", timeout=timeout_per_run
+            gffbase_loop_script(ids_path, threads),
+            label=f"gffbase.loop(n={n})",
+            timeout=timeout_per_run,
+            env_extra=benchmark_env(threads),
         ),
         timeout_per_run,
     )
@@ -210,7 +218,10 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
     print("[vectorized] legacy gffutils loop…", flush=True)
     legacy = mark_timeout(
         run_subprocess(
-            legacy_loop_script(ids_path), label=f"legacy.loop(n={n})", timeout=timeout_per_run
+            legacy_loop_script(ids_path),
+            label=f"legacy.loop(n={n})",
+            timeout=timeout_per_run,
+            env_extra=benchmark_env(threads),
         ),
         timeout_per_run,
     )
@@ -235,6 +246,7 @@ def run_one_scale(n: int, *, timeout_per_run: int = 1800) -> dict:
 
     return {
         "n_genes": len(gene_ids),
+        "threads": threads,
         "gffbase_batched": batched,
         "gffbase_loop": g_loop,
         "legacy_loop": legacy,
@@ -261,12 +273,17 @@ def main():
         help="comma-separated batch sizes (default 500,5000,50000)",
     )
     ap.add_argument("--timeout-per-run", type=int, default=1800)
+    ap.add_argument("--threads", type=int, default=1)
     args = ap.parse_args()
+    if args.threads < 1:
+        ap.error("--threads must be >= 1")
 
     scales = [int(s) for s in args.scales.split(",") if s.strip()]
     payload: dict = {"scales": {}}
     for n in scales:
-        payload["scales"][str(n)] = run_one_scale(n, timeout_per_run=args.timeout_per_run)
+        payload["scales"][str(n)] = run_one_scale(
+            n, timeout_per_run=args.timeout_per_run, threads=args.threads
+        )
 
     p = write_results("05_vectorized", payload)
     print(f"\nResults → {p}", flush=True)

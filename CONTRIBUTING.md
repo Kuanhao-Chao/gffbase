@@ -94,7 +94,7 @@ maturin develop --release
 ### 3.4 Verify your install
 
 ```bash
-python -c "import gffbase; print(gffbase.__version__)"      # 0.2.0
+python -c "import gffbase; print(gffbase.__version__)"      # 0.2.0rc1
 python -c "from gffbase import native_available; print(native_available())"   # True
 ```
 

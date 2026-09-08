@@ -117,9 +117,10 @@ def test_version_is_consistent_across_all_declarations():
     assert gffbase.__version__ == py_version.group(1), (
         f"gffbase.__version__ ({gffbase.__version__}) != pyproject version ({py_version.group(1)})"
     )
-    assert gffbase.__version__ == cargo_version.group(1), (
-        f"gffbase.__version__ ({gffbase.__version__}) != "
-        f"rust/Cargo.toml version ({cargo_version.group(1)})"
+    cargo_public = cargo_version.group(1).replace("-rc.", "rc")
+    assert gffbase.__version__ == cargo_public, (
+        f"gffbase.__version__ ({gffbase.__version__}) != normalized "
+        f"rust/Cargo.toml version ({cargo_public})"
     )
 
 
@@ -134,14 +135,21 @@ def test_changelog_documents_the_current_version():
 #: stale value precisely because only `pyproject.toml`, `rust/Cargo.toml` and
 #: `__init__.py` were gated -- so the gate was extended to the full set rather
 #: than the set that happened to be easy.
-_VERSION_LITERALS = {
-    "CITATION.cff": r"^version: (.+)$",
-    "README.md": r"^  version = \{([^}]+)\},$",
-    "CONTRIBUTING.md": r"gffbase\.__version__\)\"\s+# (\S+)",
-}
+_VERSION_LITERALS = [
+    ("CITATION.cff", r"^version: (.+)$"),
+    ("README.md", r"^  version = \{([^}]+)\},$"),
+    ("CONTRIBUTING.md", r"gffbase\.__version__\)\"\s+# (\S+)"),
+    ("docs/citation.md", r"\(Version ([^)]+)\)"),
+    ("docs/index.md", r"describes the unreleased ([0-9A-Za-z.]+)\s+candidate"),
+    (
+        "docs/getting-started/installation.md",
+        r'warning "([0-9A-Za-z.]+) is still a release candidate"',
+    ),
+    ("docs/release-checklist.md", r"native extension report exactly `([^`]+)`"),
+]
 
 
-@pytest.mark.parametrize(("filename", "pattern"), sorted(_VERSION_LITERALS.items()))
+@pytest.mark.parametrize(("filename", "pattern"), sorted(_VERSION_LITERALS))
 def test_secondary_version_literals_agree(filename, pattern):
     """The citation block, CITATION.cff and CONTRIBUTING all state a version.
 
@@ -157,6 +165,15 @@ def test_secondary_version_literals_agree(filename, pattern):
         f"{filename} says {found.group(1).strip()!r}, "
         f"gffbase.__version__ is {gffbase.__version__!r}"
     )
+
+
+def test_candidate_version_is_the_canonical_pep440_rc():
+    """The candidate tag spelling is intentional and must stay canonical."""
+    from packaging.version import Version
+
+    version = Version(gffbase.__version__)
+    assert str(version) == gffbase.__version__ == "0.2.0rc1"
+    assert version.is_prerelease
 
 
 def test_every_advertised_extra_actually_exists():
@@ -513,6 +530,56 @@ def test_every_workflow_is_free_of_duplicate_keys():
     assert not failures, "GitHub Actions would refuse to load: " + "; ".join(failures)
 
 
+def test_release_workflows_partition_canonical_rc_and_stable_tags():
+    """An RC must reach TestPyPI and must never reach production PyPI."""
+    testpypi = _read(".github/workflows/testpypi-release.yml")
+    production = _read(".github/workflows/release.yml")
+
+    assert "'v*rc*'" in testpypi
+    assert "'!v*rc*'" in production
+    for workflow in (testpypi, production):
+        assert "packaging.version.Version" in workflow
+        assert "canonical" in workflow
+        assert "workflow_dispatch" in workflow
+
+    assert "candidate.is_prerelease" in testpypi
+    assert "version.is_prerelease" in production
+    assert "Production publication refuses release-candidate versions" in production
+
+
+def test_release_identity_is_checked_from_the_built_wheel():
+    """Source imports cannot stand in for inspecting the artifact we upload."""
+    for filename in (".github/workflows/release.yml", ".github/workflows/testpypi-release.yml"):
+        workflow = _read(filename)
+        assert "python -m build --wheel" in workflow
+        assert 'importlib.metadata.version("gffbase")' in workflow
+        assert "gffbase._native" in workflow
+        assert "pip install --force-reinstall" in workflow
+
+
+def test_release_qualification_names_every_required_gate():
+    """Publishing waits for the complete candidate qualification contract."""
+    qualification = _read(".github/workflows/qualification.yml")
+    required_commands = [
+        'pytest -m "not corpus and not parity and not slow and not property and not pandas_docs"',
+        "pytest -m slow",
+        "pytest -m parity",
+        "pytest -m corpus",
+        "cargo test --locked --release",
+        "python -m build --wheel --sdist",
+        'tests/test_docs_snippets.py -m "not pandas_docs"',
+        "tests/test_docs_snippets.py -m pandas_docs",
+        "mkdocs build --strict",
+    ]
+    missing = [command for command in required_commands if command not in qualification]
+    assert not missing, f"release qualification is missing explicit gates: {missing}"
+
+    for filename in (".github/workflows/release.yml", ".github/workflows/testpypi-release.yml"):
+        workflow = _read(filename)
+        assert "uses: ./.github/workflows/qualification.yml" in workflow
+        assert "needs: qualification" in workflow
+
+
 def test_the_documented_parity_percentage_is_derivable():
     """`docs/api/compat.md` quotes a parity figure; derive it, do not trust it.
 
@@ -641,12 +708,12 @@ def test_readme_deep_links_resolve_to_pages_that_exist():
     )
 
 
-def test_the_release_date_agrees_between_the_changelog_and_the_citation():
-    """Two files state the release date, so they can disagree -- and did.
+def test_release_date_is_consistent_or_candidate_is_explicitly_unreleased():
+    """A candidate must not carry a fabricated release date.
 
     `CITATION.cff` feeds GitHub's "Cite this repository" button and Zenodo;
-    the changelog is what a human reads. A reader who notices the mismatch has
-    no way to tell which one is wrong.
+    the changelog is what a human reads. Before publication both must describe
+    an unreleased candidate; after publication their dates must agree.
     """
     import re
 
@@ -658,17 +725,24 @@ def test_the_release_date_agrees_between_the_changelog_and_the_citation():
     version = version.group(1)
 
     heading = re.search(
-        rf"^## \[{re.escape(version)}\] — (\d{{4}}-\d{{2}}-\d{{2}})", changelog, re.M
+        rf"^## \[{re.escape(version)}\] — (Unreleased|\d{{4}}-\d{{2}}-\d{{2}})",
+        changelog,
+        re.M,
     )
-    assert heading, f"CHANGELOG.md has no dated section for {version}"
+    assert heading, f"CHANGELOG.md has no release-state section for {version}"
 
     released = re.search(r'^date-released:\s*"?(\d{4}-\d{2}-\d{2})"?', citation, re.M)
-    assert released, "CITATION.cff has no date-released, which the CFF 1.2.0 schema requires"
-
-    assert heading.group(1) == released.group(1), (
-        f"CHANGELOG.md dates {version} at {heading.group(1)} but CITATION.cff "
-        f"says {released.group(1)}"
-    )
+    if heading.group(1) == "Unreleased":
+        assert released is None, "unreleased candidate must not declare date-released"
+        assert "unreleased" in citation.lower(), (
+            "CITATION.cff must label candidate metadata as unreleased"
+        )
+    else:
+        assert released, "released version must declare date-released"
+        assert heading.group(1) == released.group(1), (
+            f"CHANGELOG.md dates {version} at {heading.group(1)} but CITATION.cff "
+            f"says {released.group(1)}"
+        )
 
 
 def test_the_citation_version_tracks_the_package_version():

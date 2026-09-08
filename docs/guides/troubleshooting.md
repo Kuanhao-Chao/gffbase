@@ -100,9 +100,11 @@ asking for the wrong level. `level=1` is direct children only:
 list(db.children("gene1", level=None))     # everything below, any depth
 ```
 
-For GTF input, `gene` and `transcript` rows are **synthesized** from
-`gene_id` / `transcript_id` attributes, because GTF has no explicit parents.
-If those attributes are missing, there is nothing to synthesize from.
+For GTF input, missing `gene` and `transcript` rows can be synthesized from
+`gene_id` / `transcript_id` attributes. Many modern GTFs—including GENCODE
+v49—already contain explicit parent rows; disable inference when you want to
+preserve exactly that supplied hierarchy. If parent rows and identifying
+attributes are both absent, there is nothing to connect or synthesize.
 
 ### Iterating is slower than `gffutils`
 

@@ -6,8 +6,13 @@ title: Citation
 
 If gffbase contributes to your research, please cite it.
 
+!!! note "Candidate metadata"
+    Version 0.2.0rc1 is not tagged or published yet. The citation below identifies
+    the development candidate; for reproducible work, include the exact commit
+    until a tagged release and DOI exist.
+
 > Chao, K.-H. (2026). *GFFBase: Rust-accelerated GFF3/GTF parser with a
-> DuckDB-backed storage engine and zero-copy PyArrow interface* (Version 0.2.0)
+> DuckDB-backed storage engine and zero-copy PyArrow interface* (Version 0.2.0rc1)
 > [Computer software]. <https://github.com/Kuanhao-Chao/gffbase>
 
 ## BibTeX
@@ -18,15 +23,16 @@ If gffbase contributes to your research, please cite it.
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.2.0},
+  version = {0.2.0rc1},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```
 
 The repository also ships a [`CITATION.cff`](https://github.com/Kuanhao-Chao/gffbase/blob/main/CITATION.cff),
-so GitHub's **"Cite this repository"** button produces an up-to-date reference
-without anyone maintaining a second copy by hand. Per-version DOIs are tracked
-on the [releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
+so GitHub's **"Cite this repository"** button has machine-readable metadata.
+The final release date is deliberately absent while 0.2.0rc1 is a candidate.
+Per-version DOIs, when available, are tracked on the
+[releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
 
 ---
 

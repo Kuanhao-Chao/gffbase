@@ -20,27 +20,29 @@ by table where the engine exposes a stat view.
 
 from __future__ import annotations
 
+import argparse
 import sqlite3
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "python"))
 
 import duckdb
 
 from benchmarks.common import (
     GFFBASE_DB,
     LEGACY_DB,
+    configure_duckdb_connection,
     du,
     pretty_bytes,
     write_results,
 )
 
 
-def gffbase_table_breakdown():
+def gffbase_table_breakdown(*, threads: int = 1):
     con = duckdb.connect(str(GFFBASE_DB), read_only=True)
+    configure_duckdb_connection(con, threads)
     # `pragma database_size` returns engine-level totals; per-table size is
     # not exposed in DuckDB's public catalog. We approximate via row counts +
     # average row width via `summary`.
@@ -82,6 +84,12 @@ def legacy_table_breakdown():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--threads", type=int, default=1)
+    args = parser.parse_args()
+    if args.threads < 1:
+        parser.error("--threads must be >= 1")
+
     gffbase_total = du(GFFBASE_DB)
     legacy_total = du(LEGACY_DB)
     print(f"[disk] gffbase .duckdb = {pretty_bytes(gffbase_total)}", flush=True)
@@ -94,7 +102,7 @@ def main():
         "gffbase": {
             "path": str(GFFBASE_DB),
             "total_bytes": gffbase_total,
-            "tables": gffbase_table_breakdown(),
+            "tables": gffbase_table_breakdown(threads=args.threads),
         },
         "legacy": {
             "path": str(LEGACY_DB),
@@ -105,6 +113,7 @@ def main():
             "gffbase_over_legacy": (gffbase_total / legacy_total) if legacy_total else None,
             "delta_bytes": gffbase_total - legacy_total,
         },
+        "threads": args.threads,
     }
     p = write_results("04_disk", payload)
     print(f"\nResults → {p}", flush=True)

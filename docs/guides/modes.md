@@ -120,6 +120,19 @@ Take three lines that all say `ID=cds-NP_001`:
     defensible and a silent choice would give you a whole-genome answer nobody
     picked.
 
+## Conflicting GTF parent identifiers
+
+A GTF can reuse one `gene_id` or `transcript_id` on different sequences or
+strands. One synthetic parent cannot represent those children: choosing an
+arbitrary sequence and a global coordinate envelope silently creates a false
+hierarchy. GFFBase raises `SynthesisConflictError` by default in both modes.
+
+`merge_strategy="create_unique"` is the explicit opt-in to splitting. The
+earliest source group retains the raw parent ID; later `(seqid, strand)` groups
+receive deterministic collision-free suffixes. Child attribute text remains
+unchanged, while resolved edges and conflict provenance record which synthetic
+parent each group uses.
+
 ---
 
 ## What the parser enforces

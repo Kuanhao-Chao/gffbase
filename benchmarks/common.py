@@ -2196,6 +2196,50 @@ def _legacy_shape_is_valid(legacy: dict) -> bool:
     return False
 
 
+def benchmark_candidate_evidence_is_valid(
+    candidate: dict | None,
+    *,
+    require_exhaustive: bool = False,
+    require_rtree: bool = False,
+) -> bool:
+    """Validate the complete closed candidate row emitted by ``06_mega``.
+
+    ``candidate_evidence_is_valid`` is intentionally usable by the ingest
+    harness before every diagnostic field has been assembled.  Campaign
+    acceptance is a stronger boundary: it also requires the frozen exact row
+    shape, resource measurements, caps, and validation metadata.
+    """
+
+    return bool(
+        isinstance(candidate, dict)
+        and _candidate_shape_is_valid(candidate)
+        and candidate_evidence_is_valid(
+            candidate,
+            require_exhaustive=require_exhaustive,
+            require_rtree=require_rtree,
+        )
+    )
+
+
+def benchmark_comparator_evidence_is_valid(comparator: dict | None) -> bool:
+    """Return whether a comparator is one closed completed/timeout variant."""
+
+    return bool(isinstance(comparator, dict) and _legacy_shape_is_valid(comparator))
+
+
+def benchmark_query_evidence_error(
+    section: str,
+    value: object,
+    candidate: dict,
+    params: dict,
+) -> str | None:
+    """Validate a frozen spatial or batched query record without I/O."""
+
+    if section not in {"spatial", "batched"}:
+        return "query section is invalid"
+    return _query_evidence_error(section, value, candidate, params)
+
+
 def _environment_is_valid(value: object, *, threads: int) -> bool:
     required = {
         "timestamp_utc",
@@ -2301,6 +2345,18 @@ def _environment_is_valid(value: object, *, threads: int) -> bool:
         )
         and _bounded_env_is_valid(value.get("env"), threads=threads)
     )
+
+
+def benchmark_environment_evidence_is_valid(value: object, *, threads: int) -> bool:
+    """Validate the complete closed primary-harness environment record."""
+
+    return _environment_is_valid(value, threads=threads)
+
+
+def benchmark_bounded_environment_is_valid(value: object, *, threads: int) -> bool:
+    """Validate the exact ten-variable benchmark child environment."""
+
+    return _bounded_env_is_valid(value, threads=threads)
 
 
 def benchmark_row_evidence_error(row: dict | None) -> str | None:
