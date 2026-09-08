@@ -177,12 +177,16 @@ campaign, label = sys.argv[1], sys.argv[2]
 deadline = time.monotonic() + 24 * 3600
 last = None
 while time.monotonic() < deadline:
-    out = subprocess.run(
+    probe = subprocess.run(
         [sys.executable, "benchmarks/cluster_campaign.py", "status",
          "--campaign", campaign, "--json"],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    status = json.loads(out)
+        capture_output=True, text=True,
+    )
+    if probe.returncode:
+        # Show what `status` actually said. Swallowing it turns a one-line
+        # diagnosis into a guess about which of 36 jobs went wrong.
+        sys.exit(f"  [{label}] status failed:\n{probe.stderr.strip() or probe.stdout.strip()}")
+    status = json.loads(probe.stdout)
     counts = status["counts"]
     outstanding = counts["pending"] + counts["running"]
     line = " ".join(f"{k}={v}" for k, v in sorted(counts.items()) if v)
