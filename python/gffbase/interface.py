@@ -2737,9 +2737,18 @@ class FeatureDB:
                 )
                 if merged.children
             ]
-            for merged in merged_in_group:
-                self._insert(merged)
-                result.append(merged)
+            # One batched `update`, not `_insert` per feature. `_insert`
+            # delegates to `update`, and every `update` ends by rebuilding the
+            # transitive closure -- a DELETE plus a recursive CTE over the
+            # whole `edges` table -- and re-reading the corpus depth
+            # statistics. Doing that once per merged feature made `merge_all`
+            # O(n_merged x full closure rebuild).
+            #
+            # The `add_relations` call a few lines below already avoids
+            # exactly this, and says so; the insert loop above it did not.
+            if merged_in_group:
+                self.update(merged_in_group, make_backup=False)
+                result.extend(merged_in_group)
 
             if exclude_components:
                 self.delete(
