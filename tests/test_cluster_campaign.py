@@ -1970,3 +1970,43 @@ def test_the_real_launcher_lives_in_the_worker_slice() -> None:
     from benchmarks.campaign import worker as campaign_worker
 
     assert callable(campaign_worker.build_tmux_launch_argv)
+
+
+# ---------------------------------------------------------------------------
+# A job needs a PATH
+# ---------------------------------------------------------------------------
+#
+# `cluster_campaign` defined `worker_environment` and then re-exported the
+# model's function over it, exactly as it did with `build_tmux_argv`. The
+# model's is the BOUNDED one: it copies allowlisted variables out of
+# `base_environment`, and the call site passed none -- so every job ran with no
+# PATH at all.
+#
+# `rustc` was then unresolvable, `common.environment()` recorded
+# `rustc_version: None`, and each job completed its measurement and was
+# rejected with "primary harness environment is invalid". Three restarts and a
+# tmux-server environment theory went by before `/proc/<pid>/environ` showed
+# the variable simply was not there.
+#
+# Named `job_environment` so the model's export cannot shadow it again.
+
+
+def test_a_job_environment_carries_a_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "/opt/toolchain/bin:/usr/bin")
+    value = _make_campaign(tmp_path)
+    job = campaign.campaign_jobs(value)[0]
+    env = campaign.job_environment(value, job, tmp_path / "attempt")
+    assert env["PATH"] == "/opt/toolchain/bin:/usr/bin"
+
+
+def test_a_job_environment_is_still_bounded(tmp_path, monkeypatch) -> None:
+    """Seeding it from the ambient environment must not smuggle everything in."""
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
+    monkeypatch.setenv("PYTHONPATH", "/workspace/python")
+    value = _make_campaign(tmp_path)
+    job = campaign.campaign_jobs(value)[0]
+    env = campaign.job_environment(value, job, tmp_path / "attempt")
+    assert "SECRET_TOKEN" not in env
+    assert "PYTHONPATH" not in env, "the campaign measures the INSTALLED artifact"
+    assert env["GFFBASE_THREADS"] == str(job.threads)

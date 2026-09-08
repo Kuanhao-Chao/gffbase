@@ -1205,24 +1205,24 @@ def build_worker_argv(
     return args
 
 
-def worker_environment(
-    campaign: Mapping[str, Any], job: JobSpec, attempt_dir: Path
-) -> dict[str, str]:
-    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    env.update(benchmark_env(job.threads))
-    env.update(
-        {
-            "GFFBASE_BENCH_OUT": str(Path(attempt_dir).resolve() / "scratch"),
-            # See `model.worker_environment`: the consumer stats this value.
-            "GFFBASE_BENCH_WHEEL": str(
-                ((_campaign_spec(campaign).get("candidate") or {}).get("wheel") or {}).get("path")
-            ),
-            "GFFBASE_BENCH_WHEEL_SHA256": str(
-                ((_campaign_spec(campaign).get("candidate") or {}).get("wheel") or {}).get("sha256")
-            ),
-        }
+def job_environment(campaign: Mapping[str, Any], job: JobSpec, attempt_dir: Path) -> dict[str, str]:
+    """The bounded environment a measurement job runs under.
+
+    Deliberately NOT called `worker_environment`. That name is re-exported from
+    `campaign.model` at the bottom of this module, so a local definition of it
+    is rebound at import time and silently does nothing -- which is exactly
+    what happened: the model's bounded builder was called with no
+    `base_environment`, so every job ran with no PATH, could not resolve
+    `rustc`, and was rejected for an invalid harness environment after
+    completing its measurement.
+
+    Seeded from `os.environ` so a job inherits PATH and TMPDIR, but through the
+    model's allowlist, so it inherits only those. PYTHONPATH in particular is
+    excluded: the campaign measures the INSTALLED artifact, not a working tree.
+    """
+    return _campaign_model.worker_environment(
+        campaign, job, attempt_dir, base_environment=os.environ
     )
-    return env
 
 
 def _load_campaign(path: Path) -> dict[str, Any]:
@@ -1456,7 +1456,7 @@ def run_job(
             if job.kind == "bridge"
             else build_mega_argv(job, attempt_dir, campaign)
         )
-        env = worker_environment(campaign, job, attempt_dir)
+        env = job_environment(campaign, job, attempt_dir)
         timeout = int(job.parameters.get("cap_seconds", job.parameters.get("gffbase_timeout", 0)))
         if job.kind != "bridge":
             timeout += 0 if job.kind == "scaling" else int(job.parameters["legacy_timeout"])
