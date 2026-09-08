@@ -1,0 +1,9 @@
+# Docs toolchain, matching the sibling Kuan-Hao Chao sites (shorkie / LiftOn /
+# OpenSpliceAI / splam). Sphinx 9.x requires Python >= 3.12 — the docs workflow
+# pins 3.12 for exactly this reason.
+#
+# sphinx-design must be >= 0.7.0: 0.6.x caps Sphinx below 9 and the resolve fails.
+Sphinx==9.1.0
+furo==2025.12.19
+sphinx-copybutton==0.5.2
+sphinx-design==0.7.0
