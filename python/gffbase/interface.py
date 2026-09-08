@@ -911,11 +911,10 @@ class FeatureDB:
         Raises:
             ValueError: `order_by` names something outside the whitelist.
 
-        Example:
-            ```python
+        Example::
+
             for feature in db.all_features(featuretype="exon", order_by="start"):
                 print(feature.id, feature.start)
-            ```
         """
         sql, params = self._build_scan_sql(
             base_where=[],
@@ -1320,7 +1319,12 @@ class FeatureDB:
             completely_within: With `limit`, require full containment.
 
         Returns:
-            A table in the shape named by `format`, with one row per feature and the columns of the `features` table (id, seqid, source, featuretype, start, end, score, strand, frame, file_order).
+            A table in the shape named by ``format``, one row per feature.
+
+        Columns are those of the ``features`` table::
+
+            id, seqid, source, featuretype, start, end, score, strand,
+            frame, file_order
 
         Raises:
             ValueError: `order_by` names something outside the whitelist, or
@@ -1396,14 +1400,16 @@ class FeatureDB:
             score and phase -- which is what a caller writing a coverage track
             or exporting to a line-oriented format actually needs.
 
-            Offered on the tabular APIs only, never on `region()` /
-            `children()` / `all_features()`: those must keep yielding
-            `Feature` objects, and letting `FeatureSegment` rows leak into
+            Offered on the tabular APIs only, never on ``region()`` /
+            ``children()`` / ``all_features()``: those must keep yielding
+            ``Feature`` objects, and letting ``FeatureSegment`` rows leak into
             them would corrupt legacy consumers.
 
-        Result columns are query_idx, query_seqid, query_start,
-        query_end, id, seqid, source, featuretype, start, end, score,
-        strand, frame, file_order -- plus seg_idx when `explode_segments`.
+        Result columns::
+
+            query_idx, query_seqid, query_start, query_end, id, seqid, source,
+            featuretype, start, end, score, strand, frame, file_order
+            -- plus seg_idx when explode_segments is set.
         """
         self._require_open("region_batched")
         if on_invalid not in {"raise", "skip"}:
@@ -1660,7 +1666,7 @@ class FeatureDB:
         The mirror of :meth:`children`, taking the same arguments and making
         the same routing decision. `level=1` is direct parents.
 
-        GFF3 permits a feature to name several `Parent`s, so the hierarchy is
+        GFF3 permits a feature to name several ``Parent`` attributes, so the hierarchy is
         a DAG rather than a tree and one ancestor can be reachable by more
         than one path. Each is returned once.
         """
@@ -1709,16 +1715,17 @@ class FeatureDB:
         featuretype : str | list[str] | None
             Optional filter on `features.featuretype`.
         format : "arrow" | "df" | "polars"
-            Return shape (default `"arrow"` — `pyarrow.Table`).
-
+            Return shape (default ``"arrow"`` -- ``pyarrow.Table``).
         explode_segments : bool
             Emit one row per physical INPUT LINE rather than one per logical
-            feature, adding a `seg_idx` column. Tabular APIs only -- see
-            `region_batched`.
+            feature, adding a ``seg_idx`` column. Tabular APIs only -- see
+            :meth:`region_batched`.
 
-        Result columns are anchor (the parent ID supplied),
-        descendant_id, seqid, source, featuretype, start, end, score,
-        strand, frame, file_order, depth -- plus seg_idx when
+        Result columns::
+
+            anchor (the parent ID supplied), descendant_id, seqid, source,
+            featuretype, start, end, score, strand, frame, file_order, depth
+            -- plus seg_idx when
         `explode_segments`.
         """
         return self._batched_relation(
@@ -3075,11 +3082,10 @@ class FeatureDB:
         Yields:
             A list per parent, the parent first followed by its children.
 
-        Example:
-            ```python
+        Example::
+
             for group in db.iter_by_parent_childs("gene"):
                 gene, children = group[0], group[1:]
-            ```
         """
         for parent in self.features_of_type(featuretype, order_by=order_by, reverse=reverse):
             kids = list(

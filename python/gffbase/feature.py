@@ -572,9 +572,12 @@ class Feature:
     # ----- legacy methods -----
 
     def astuple(self, encoding=None):
-        """Legacy 12-tuple shape used by the SQLite export path:
-        ``(id, seqid, source, featuretype, start, end, score, strand, frame,
-            attributes_json, extra_json, bin)``.
+        """Legacy 12-tuple shape used by the SQLite export path.
+
+        The elements, in order::
+
+            id, seqid, source, featuretype, start, end, score, strand,
+            frame, attributes_json, extra_json, bin
         """
         attrs_dict = {k: list(v) for k, v in self.attributes.items()}
         return (
