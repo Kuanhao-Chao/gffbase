@@ -99,7 +99,7 @@ import gffbase as gffutils    # one-line alias migration
 db = gffutils.create_db(...)  # everything else identical
 ```
 
-(But please read the [Migration Guide](https://khchao.com/gffbase/migration/) first — it has
+(But please read the [Migration Guide](https://khchao.com/gffbase/content/migration.html) first — it has
 **one** important note about ML loops.)
 
 ---
@@ -126,7 +126,7 @@ overlaps = db.region_batched(peaks, featuretype="CDS", format="arrow")
 ```
 
 See the [Machine Learning Workflows
-Cookbook](https://khchao.com/gffbase/cookbooks/machine_learning_workflows/) for end-to-end
+Cookbook](https://khchao.com/gffbase/content/cookbook_ml_workflows.html) for end-to-end
 pipelines with PyTorch and Hugging Face `datasets`.
 
 ---
@@ -176,7 +176,7 @@ one discontinuous feature backed by the `segments` table, which is what the
 GFF3 specification actually describes.
 
 📊 Method, fairness constraints and re-run instructions:
-**[Methodology](https://khchao.com/gffbase/performance/methodology/)**. Every
+**[Methodology](https://khchao.com/gffbase/content/methodology.html)**. Every
 number is generated from a committed measurement file by
 `tools/gen_benchmark_tables.py`, and a test fails if a published table stops
 matching it.
@@ -218,12 +218,12 @@ alternative constructs one Python `Feature` per result row, and at 1.6 M exons
 that allocation dominates everything else — in *both* libraries. Per-corpus
 batched throughput is in the
 [table above](#-measured-against-legacy-gffutils); the
-[Performance page](https://khchao.com/gffbase/performance/) breaks it down.
+[Performance page](https://khchao.com/gffbase/content/performance.html) breaks it down.
 
 Note the trade honestly: iterating `for x in ids: db.children(x)` in gffbase is
 **slower** than legacy's SQLite row-by-row path, because DuckDB pays
 vectorization startup per call. That is why the batched API exists, and why the
-[Migration guide](https://khchao.com/gffbase/migration/) puts it front and centre.
+[Migration guide](https://khchao.com/gffbase/content/migration.html) puts it front and centre.
 
 `region_batched(...)` and `parents_batched(...)` have the same
 zero-copy contract for spatial and parent workloads.
@@ -266,23 +266,27 @@ zero-copy contract for spatial and parent workloads.
 
 ## 📚 Documentation
 
-Full site rendered with MkDocs Material:
+Full site, built with Sphinx and the furo theme:
 **[https://khchao.com/gffbase/](https://khchao.com/gffbase/)**
 
 | Page                                                                                       | What's there                                                              |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| [Usage Gallery](https://khchao.com/gffbase/usage_gallery/)                     | Copy-pasteable snippets for every public API method                       |
-| [Performance comparison](https://khchao.com/gffbase/performance/)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
-| [Migration guide for `gffutils` users](https://khchao.com/gffbase/migration/)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
-| [Cookbooks](https://khchao.com/gffbase/cookbooks/)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
-| [API reference](https://khchao.com/gffbase/api/)                               | Every public method, full signatures + docstrings                         |
+| [Usage Gallery](https://khchao.com/gffbase/content/usage_gallery.html)                     | Copy-pasteable snippets for every public API method                       |
+| [Performance comparison](https://khchao.com/gffbase/content/performance.html)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
+| [Migration guide for `gffutils` users](https://khchao.com/gffbase/content/migration.html)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
+| [Cookbooks](https://khchao.com/gffbase/content/cookbooks.html)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
+| [API reference](https://khchao.com/gffbase/content/api.html)                               | Every public method, full signatures + docstrings                         |
 
 To build the docs locally:
 
 ```bash
-pip install -e .[docs]
-mkdocs serve            # http://localhost:8000
+pip install -e .[docs]       # needs Python >= 3.12; Sphinx 9 requires it
+make -C docs html            # -> docs/build/html/index.html
 ```
+
+The build runs with `-W --keep-going`, so a broken cross-reference or a page
+missing from the toctree is an error, not a quietly degraded page. That is the
+same command CI runs.
 
 ---
 

@@ -71,6 +71,7 @@ with boilerplate a reader would not need.
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -87,14 +88,29 @@ OPTIONAL_TOP_LEVEL_IMPORTS = frozenset({"gffutils", "torch"})
 
 #: Files whose Python blocks are executed. Everything a user is likely to
 #: copy from, which includes the two root documents rendered on GitHub and PyPI.
-DOC_ROOTS = ["docs", "README.md", "MIGRATION.md"]
+DOC_ROOTS = ["docs/source", "README.md", "MIGRATION.md"]
 
+#: Markdown fences. Still needed: the two root documents stay Markdown because
+#: GitHub and PyPI render them, even though the site itself is now RST.
 _FENCE = re.compile(
     r"(?P<directives>(?:^[ \t]*<!--[ \t]*docs-test:[^\n]*-->[ \t]*\n)*)"
     r"^```(?P<lang>python|text)\n(?P<body>.*?)^```",
     re.M | re.S,
 )
 _DIRECTIVE = re.compile(r"<!--\s*docs-test:\s*(?P<verb>\w+)(?P<rest>[^>]*?)-->")
+
+#: The RST equivalent. A `code-block` body is an indented block, so it runs
+#: until the first non-blank line that is not indented; the body is dedented
+#: before execution. Directives are RST comments carrying the same text the
+#: HTML comments did, so the vocabulary did not change with the markup.
+_RST_BLOCK = re.compile(
+    r"(?P<directives>(?:^[ \t]*\.\.[ \t]+docs-test:[^\n]*\n[ \t]*\n?)*)"
+    r"^\.\.[ \t]+code-block::[ \t]*(?P<lang>python|text)[ \t]*\n"
+    r"[ \t]*\n"
+    r"(?P<body>(?:(?:[ \t]+[^\n]*)?\n)+)",
+    re.M,
+)
+_RST_DIRECTIVE = re.compile(r"\.\.\s+docs-test:\s*(?P<verb>\w+)(?P<rest>[^\n]*)")
 _REASON = re.compile(r'reason\s*=\s*"(?P<reason>[^"]*)"')
 
 
@@ -130,11 +146,20 @@ class Snippet:
         return f"<Snippet {self.id} verb={self.verb!r}>"
 
 
+#: Pages under `docs/source/content/` that are generated mirrors of a root
+#: Markdown file. Both copies carry the same snippets, so parsing both would
+#: execute every one of them twice -- and report a skip count that had silently
+#: doubled. The root document is the canonical source: GitHub and PyPI render
+#: it, and it is what a contributor edits.
+_MIRRORED = {"migration", "changelog", "contributing", "security"}
+
+
 def _doc_files() -> list[Path]:
     files: list[Path] = []
     for root in DOC_ROOTS:
         path = REPO_ROOT / root
         if path.is_dir():
+            files.extend(sorted(p for p in path.rglob("*.rst") if p.stem not in _MIRRORED))
             files.extend(sorted(path.rglob("*.md")))
         elif path.is_file():
             files.append(path)
@@ -143,15 +168,23 @@ def _doc_files() -> list[Path]:
 
 def _parse(path: Path) -> list[Snippet]:
     text = path.read_text(encoding="utf-8")
+    rst = path.suffix == ".rst"
+    pattern = _RST_BLOCK if rst else _FENCE
+    directive_pattern = _RST_DIRECTIVE if rst else _DIRECTIVE
     out: list[Snippet] = []
-    for match in _FENCE.finditer(text):
+    for match in pattern.finditer(text):
         verb, reason = "run", ""
-        for directive in _DIRECTIVE.finditer(match.group("directives") or ""):
+        for directive in directive_pattern.finditer(match.group("directives") or ""):
             verb = directive.group("verb")
             found = _REASON.search(directive.group("rest") or "")
             reason = found.group("reason") if found else ""
         line = text.count("\n", 0, match.start("body")) + 1
-        out.append(Snippet(path, line, match.group("body"), verb, reason, match.group("lang")))
+        body = match.group("body")
+        if rst:
+            # The block is indented under its directive; run what the reader
+            # would copy, not the indentation the markup needed.
+            body = textwrap.dedent(body).strip("\n") + "\n"
+        out.append(Snippet(path, line, body, verb, reason, match.group("lang")))
 
     # Pair `console output` text blocks with the python block above them.
     # Writing the output by hand is exactly as rot-prone as the benchmark
@@ -424,7 +457,7 @@ def test_internal_unlisted_and_transitive_import_failures_are_not_skipped(
 #: the way `docs/guides/modes.md` and `docs/getting-started/quickstart.md` now
 #: do. That is a documentation improvement waiting to happen, and this number
 #: is the scoreboard for it.
-MAX_SKIPPED = 69
+MAX_SKIPPED = 67
 
 
 def test_the_skip_list_does_not_grow():

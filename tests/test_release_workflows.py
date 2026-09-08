@@ -349,7 +349,7 @@ def test_qualification_docs_are_strict_and_install_the_pinned_oracle():
     assert "6b84330f472dd2b4c69e36f319da7ade95bd5961" in commands
     assert 'tests/test_docs_snippets.py -m "not pandas_docs"' in commands
     assert "tests/test_docs_snippets.py -m pandas_docs" in commands
-    assert "mkdocs build --strict" in commands
+    assert 'make -C docs html SPHINXOPTS="-W --keep-going"' in commands
 
 
 def test_reusable_artifact_workflow_builds_each_release_target_once():
