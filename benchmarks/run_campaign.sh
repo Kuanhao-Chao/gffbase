@@ -164,11 +164,48 @@ CAMPAIGN_DIR="$CAMPAIGN_ROOT/$RUN_ID"
 # The loader wants the manifest itself, not the directory holding it.
 CAMPAIGN_JSON="$CAMPAIGN_DIR/campaign.json"
 
-say "2/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped here)"
-"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_JSON" --resume --execute
+# `launch` starts five tmux workers and returns immediately, and the canonical
+# phase REFUSES to start until every exploratory job has a valid result -- it
+# picks its thread count from them. So the order is launch, wait, canonical;
+# running canonical first fails with "requires valid exploratory result".
+wait_for_jobs() {
+    local label="$1"
+    "$PRIMARY" - "$CAMPAIGN_JSON" "$label" <<'PY'
+import json, subprocess, sys, time
 
-say "3/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
+campaign, label = sys.argv[1], sys.argv[2]
+deadline = time.monotonic() + 24 * 3600
+last = None
+while time.monotonic() < deadline:
+    out = subprocess.run(
+        [sys.executable, "benchmarks/cluster_campaign.py", "status",
+         "--campaign", campaign, "--json"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    status = json.loads(out)
+    counts = status["counts"]
+    outstanding = counts["pending"] + counts["running"]
+    line = " ".join(f"{k}={v}" for k, v in sorted(counts.items()) if v)
+    if line != last:
+        print(f"  [{label}] {line}", flush=True)
+        last = line
+    if counts["failed"] or counts["timed_out"] or counts["interrupted"]:
+        sys.exit(f"  [{label}] a job did not succeed; see `status` for which")
+    if outstanding == 0:
+        print(f"  [{label}] all jobs succeeded", flush=True)
+        sys.exit(0)
+    time.sleep(60)
+sys.exit(f"  [{label}] timed out after 24h")
+PY
+}
+
+say "2/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
 "$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_JSON" --resume --execute
+wait_for_jobs exploratory
+
+say "3/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped)"
+"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_JSON" --resume --execute
+wait_for_jobs canonical
 
 say "4/4 status"
 "$PRIMARY" benchmarks/cluster_campaign.py status --campaign "$CAMPAIGN_JSON"
