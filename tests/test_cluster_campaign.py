@@ -195,7 +195,12 @@ def _unit_resources(run_dir: Path) -> dict[str, object]:
         "numa_nodes": {"node0": list(range(50))},
         "free_bytes": 100,
         "available_ram_bytes": 100,
-        "mount": {"raw": "unit", "fstype": "unitfs", "probe_path": str(run_dir)},
+        "mount": {
+            "raw": "unit",
+            "fstype": "unitfs",
+            "probe_path": str(run_dir),
+            "supports_noreplace_rename": True,
+        },
         "executables": {name: f"/usr/bin/{name}" for name in names},
         "executable_versions": {name: "unit 1" for name in names},
         "executable_identities": {name: dict(executable_identity) for name in names},

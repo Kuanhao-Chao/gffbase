@@ -138,7 +138,12 @@ def _resources(run_dir: Path) -> dict[str, object]:
         "numa_nodes": {"node0": list(range(50))},
         "free_bytes": 100,
         "available_ram_bytes": 100,
-        "mount": {"raw": "unit", "fstype": "unitfs", "probe_path": str(run_dir)},
+        "mount": {
+            "raw": "unit",
+            "fstype": "unitfs",
+            "probe_path": str(run_dir),
+            "supports_noreplace_rename": True,
+        },
         "executables": {name: f"/usr/bin/{name}" for name in ("findmnt", "taskset", "tmux")},
         "executable_versions": {name: "unit 1" for name in ("findmnt", "taskset", "tmux")},
         "executable_identities": {
@@ -810,3 +815,50 @@ def test_filesystem_capability_probe_fails_closed_on_unsupported_primitive(
             target,
             token_provider=lambda: "b" * 32,
         )
+
+
+# ---------------------------------------------------------------------------
+# The mount record carries a measured capability, not just strings
+# ---------------------------------------------------------------------------
+#
+# `supports_noreplace_rename` records whether the campaign root can actually do
+# the atomic publish `safe_io` depends on. It is a bool, and every other value
+# in the mount block is a non-empty string, so the validator has to distinguish
+# them rather than rejecting the one that matters.
+
+
+def _mount(**overrides):
+    record = {
+        "raw": "/dev/nvme1n1 xfs /srv/nvme1 rw",
+        "fstype": "xfs",
+        "probe_path": "/srv/nvme1",
+        "supports_noreplace_rename": True,
+    }
+    record.update(overrides)
+    return record
+
+
+def test_the_measured_rename_capability_is_part_of_the_mount_record(tmp_path: Path) -> None:
+    resources = _resources(tmp_path)
+    resources["mount"] = _mount(probe_path=str(tmp_path))
+    preflight._validate_resource_snapshot(resources, "resources.before")
+
+
+def test_a_mount_record_without_the_capability_is_rejected(tmp_path: Path) -> None:
+    """A probe from before the key existed must not validate: the campaign
+    would then publish into a root nobody checked."""
+    resources = _resources(tmp_path)
+    record = _mount(probe_path=str(tmp_path))
+    del record["supports_noreplace_rename"]
+    resources["mount"] = record
+    with pytest.raises(model.CampaignError, match="mount"):
+        preflight._validate_resource_snapshot(resources, "resources.before")
+
+
+def test_the_capability_must_be_a_real_boolean(tmp_path: Path) -> None:
+    """`"false"` is a non-empty string and therefore truthy; accepting it would
+    turn a fail-closed check into a decorative one."""
+    resources = _resources(tmp_path)
+    resources["mount"] = _mount(probe_path=str(tmp_path), supports_noreplace_rename="false")
+    with pytest.raises(model.CampaignError, match="mount"):
+        preflight._validate_resource_snapshot(resources, "resources.before")
