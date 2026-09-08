@@ -1,218 +1,118 @@
 name: TestPyPI release (release-candidate dress rehearsal)
 
-# Mirrors the production release.yml job topology exactly so a green
-# run here proves the same build + OIDC publish mechanism will work
-# unchanged when we tag the stable release. Diffs from production:
-#   - Trigger only on canonical v*rc* tags (release.yml excludes them).
-#   - Different concurrency group + GitHub environment.
-#   - publish step adds repository-url to redirect uploads to TestPyPI.
+# Thin publisher for release candidates. Identical in shape to release.yml and
+# deliberately so: it calls the SAME reusable `release-artifacts.yml`, so the
+# artifacts rehearsed here are built exactly the way the production ones will
+# be. When each publisher carried its own build matrix, the dress rehearsal
+# could pass while production shipped something built differently.
+#
+# Differences from release.yml, and only these: the RC tag class, the testpypi
+# policy channel, a separate concurrency group and environment, and a
+# repository-url on the upload step.
 
 on:
   push:
+    # Release-candidate tags only. Stable tags route to release.yml.
     tags:
-      # Release-candidate tags only — stable tags route to release.yml.
       - 'v*rc*'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: >-
+          Publish to TestPyPI. Leave false for a build-only dry run. A manual
+          run still has to satisfy every tag and metadata check in
+          tools/release_policy.py; this only says the operator meant it.
+        type: boolean
+        default: false
+        required: true
 
-# Never race two RC publishes against the same TestPyPI version.
 concurrency:
-  group: testpypi-${{ github.ref }}
+  group: testpypi-release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
 
 jobs:
+  # ------------------------------------------------------------------------
+  # 1. Policy. Fail-closed, and first, so a run that may not publish is
+  #    rejected before it spends an hour building wheels.
+  # ------------------------------------------------------------------------
+  policy:
+    name: Release policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: Evaluate release policy
+        id: decide
+        run: |
+          python tools/release_policy.py \
+            --channel testpypi \
+            --event-name "${{ github.event_name }}" \
+            --ref-type "${{ github.ref_type }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --publish-requested "${{ inputs.publish || 'false' }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------------
+  # 2. Qualification. The same gates as production -- a rehearsal that skipped
+  #    them would not be rehearsing the release.
+  # ------------------------------------------------------------------------
   qualification:
     name: Complete release qualification
+    needs: policy
     uses: ./.github/workflows/qualification.yml
 
-  # Qualification above covers behavior. This job additionally proves the
-  # exact artifact under review is a canonical RC with four matching version
-  # identities before any wheel job or TestPyPI upload can start.
-  verify:
-    name: Verify the tagged commit
-    runs-on: ubuntu-latest
+  # ------------------------------------------------------------------------
+  # 3. Artifacts. The same reusable workflow production uses.
+  # ------------------------------------------------------------------------
+  artifacts:
+    name: Build and verify release artifacts
     needs: qualification
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.83
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - name: TestPyPI tag policy
-        env:
-          RELEASE_REF: ${{ github.ref_name }}
-        run: |
-          pip install 'packaging>=24'
-          python - <<'PY'
-          import os
-          from packaging.version import InvalidVersion
-          import packaging.version
-
-          ref = os.environ["RELEASE_REF"]
-          if not ref.startswith("v"):
-              raise SystemExit("TestPyPI publication requires an RC version tag, including workflow_dispatch")
-          try:
-              candidate = packaging.version.Version(ref[1:])
-          except InvalidVersion as exc:
-              raise SystemExit(f"invalid release tag {ref!r}: {exc}") from exc
-          if ref != f"v{candidate}":
-              raise SystemExit(f"release tag {ref!r} is not canonical PEP 440 (expected v{candidate})")
-          if not candidate.is_prerelease or candidate.pre is None or candidate.pre[0] != "rc":
-              raise SystemExit("TestPyPI publication requires a PEP 440 release candidate")
-          PY
-      - name: Build and install the exact wheel under review
-        run: |
-          python -m pip install --upgrade pip build
-          python -m build --wheel
-          python -m venv /tmp/gffbase-release-identity
-          /tmp/gffbase-release-identity/bin/pip install --force-reinstall 'packaging>=24' dist/*.whl
-      - name: Built metadata, Python, native, and tag identities agree
-        env:
-          RELEASE_REF: ${{ github.ref_name }}
-        run: |
-          /tmp/gffbase-release-identity/bin/python - <<'PY'
-          import importlib.metadata
-          import os
-          import gffbase
-          import gffbase._native as native
-          from packaging.version import Version
-
-          expected = os.environ["RELEASE_REF"][1:]
-          installed = importlib.metadata.version("gffbase")
-          assert str(Version(installed)) == expected
-          assert installed == gffbase.__version__ == native.__version__ == expected
-          PY
+    uses: ./.github/workflows/release-artifacts.yml
+    with:
+      expected_version: ${{ needs.policy.outputs.version }}
+      source_sha: ${{ github.sha }}
 
   # ------------------------------------------------------------------------
-  # Linux wheels — manylinux via maturin-action's Docker image.
-  # abi3-py310 means a single wheel per arch covers CPython 3.10-3.14.
-  # ------------------------------------------------------------------------
-  linux:
-    name: Linux ${{ matrix.target }}
-    runs-on: ubuntu-latest
-    needs: verify
-    strategy:
-      matrix:
-        target: [x86_64, aarch64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          manylinux: auto
-          args: --release --out dist --manifest-path rust/Cargo.toml
-          rust-toolchain: stable
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-${{ matrix.target }}
-          path: dist/*.whl
-
-  # ------------------------------------------------------------------------
-  # macOS wheels — both Intel and Apple Silicon. GitHub deprecated the
-  # macos-13 (Intel) runner image, so x86_64 wheels are cross-compiled
-  # from the Apple Silicon runner via maturin-action's rustup target.
-  # ------------------------------------------------------------------------
-  macos:
-    name: macOS ${{ matrix.target }}
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-apple-darwin
-            runner: macos-latest
-          - target: aarch64-apple-darwin
-            runner: macos-latest
-    runs-on: ${{ matrix.runner }}
-    needs: verify
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --manifest-path rust/Cargo.toml
-          rust-toolchain: stable
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-${{ matrix.target }}
-          path: dist/*.whl
-
-  # ------------------------------------------------------------------------
-  # Windows wheel — single arch (x86_64) for now.
-  # ------------------------------------------------------------------------
-  windows:
-    name: Windows x86_64
-    runs-on: windows-latest
-    needs: verify
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64-pc-windows-msvc
-          args: --release --out dist --manifest-path rust/Cargo.toml
-          rust-toolchain: stable
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows
-          path: dist/*.whl
-
-  # ------------------------------------------------------------------------
-  # Source distribution — for archs we don't ship a wheel for.
-  # ------------------------------------------------------------------------
-  sdist:
-    name: Source distribution
-    runs-on: ubuntu-latest
-    needs: verify
-    steps:
-      - uses: actions/checkout@v4
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist --manifest-path rust/Cargo.toml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist/*.tar.gz
-
-  # ------------------------------------------------------------------------
-  # Publish — gathers all artifacts and uploads to TestPyPI via OIDC.
+  # 4. Publish to TestPyPI, via OIDC.
   #
-  # TestPyPI trusted-publisher setup (one-time, on test.pypi.org's web UI):
-  #   Account → Publishing → Add a new pending publisher
-  #     PyPI Project Name:  gffbase
-  #     Owner:              Kuanhao-Chao
-  #     Repository name:    gffbase
-  #     Workflow name:      testpypi-release.yml
-  #     Environment name:   testpypi
-  # No API token is stored in repo secrets.
+  # TestPyPI trusted-publisher setup (one-time, on test.pypi.org):
+  #   Project -> Publishing -> Add a new publisher
+  #     Owner: Kuanhao-Chao   Repository: gffbase
+  #     Workflow: testpypi-release.yml   Environment: testpypi
+  #
+  # No GitHub Release is attached here: an RC is a rehearsal, and drafting a
+  # release for one would put candidate binaries on the repo's Releases page.
   # ------------------------------------------------------------------------
   publish-testpypi:
     name: Publish to TestPyPI
-    needs: [linux, macos, windows, sdist]
+    needs: artifacts
+    if: needs.policy.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: testpypi
       url: https://test.pypi.org/p/gffbase
     permissions:
-      id-token: write   # OIDC claim → TestPyPI Trusted Publisher
+      id-token: write   # OIDC claim -> TestPyPI Trusted Publisher
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
       - name: List artifacts
         run: ls -la dist/
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
-          repository-url: https://test.pypi.org/legacy/
           verbose: true
+          repository-url: https://test.pypi.org/legacy/

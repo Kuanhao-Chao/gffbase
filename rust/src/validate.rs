@@ -362,8 +362,31 @@ fn valid_percent_escapes(value: &str) -> bool {
     true
 }
 
+/// GTF2.2 requires quoting for free text, not for every value.
+///
+/// A bare token with no whitespace, quote or separator in it is unambiguous --
+/// there is exactly one way to read `level 2;` -- and the corpora depend on
+/// that: GENCODE puts `level 2;` on all 6,068,892 of its lines. Demanding
+/// quotes everywhere made `validation="ncbi"` unable to read GENCODE at all,
+/// and made compat mode record one warning per line for something that is not
+/// a defect.
+///
+/// A value containing a space, a semicolon or a quote still needs quoting.
+/// That is where the ambiguity this rule exists to catch actually lives:
+/// `note two words` cannot be told from a second key/value pair.
+///
+/// Kept byte-for-byte in step with `_pyfallback.parser._valid_gtf_quoted_value`;
+/// `tests/test_modes.py` parametrizes over both engines so neither can drift.
 fn valid_gtf_quoted_value(value: &str) -> bool {
-    if value.len() < 2 || !value.starts_with('"') || !value.ends_with('"') {
+    if value.is_empty() {
+        return false;
+    }
+    if !value.starts_with('"') {
+        return !value
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch == '"' || ch == ';');
+    }
+    if value.len() < 2 || !value.ends_with('"') {
         return false;
     }
     let inner = &value[1..value.len() - 1];

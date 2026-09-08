@@ -323,7 +323,24 @@ def _is_gtf_separator_whitespace(char: str) -> bool:
 
 
 def _valid_gtf_quoted_value(value: str) -> bool:
-    if len(value) < 2 or not value.startswith('"') or not value.endswith('"'):
+    """GTF2.2 requires quoting for free text, not for every value.
+
+    A bare token with no whitespace, quote or separator in it is
+    unambiguous -- there is exactly one way to read `level 2;` -- and the
+    corpora depend on that: GENCODE puts `level 2;` on all 6,068,892 of its
+    lines. Demanding quotes everywhere made `validation="ncbi"` unable to read
+    GENCODE at all, and made compat mode record one warning per line for
+    something that is not a defect.
+
+    A value containing a space, a semicolon or a quote still needs quoting.
+    That is where the ambiguity this rule exists to catch actually lives:
+    `note two words` cannot be told from a second key/value pair.
+    """
+    if not value:
+        return False
+    if not value.startswith('"'):
+        return not any(char.isspace() or char in '";' for char in value)
+    if len(value) < 2 or not value.endswith('"'):
         return False
     escaped = False
     for char in value[1:-1]:

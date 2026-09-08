@@ -212,3 +212,76 @@ def test_padded_coordinates_parse_in_both_engines(tmp_path, engine):
     path = _write(tmp_path, "##gff-version 3\nchr1\tsrc\tgene\t100 \t 200\t.\t+\t.\tID=g1\n")
     (feature,) = list(gffbase.parse_gff(path, engine=engine, validation="gffutils"))
     assert (feature.start, feature.end) == (100, 200)
+
+
+# ---------------------------------------------------------------------------
+# GTF quoting: what GTF2.2 actually requires
+# ---------------------------------------------------------------------------
+#
+# GTF2.2 says free-text attributes SHOULD be double-quoted. It does not require
+# quotes on numeric or enumerated values, and the corpora rely on that: GENCODE
+# emits `level 2;` on every one of its 6,068,892 lines, and `tag "..."`
+# alongside it.
+#
+# gffbase demanded quotes on every value. Two consequences, both measured on
+# the real file:
+#
+#   * `validation="ncbi"` -- the strict profile -- could not read GENCODE at
+#     all. It raised on line 6, which is the first annotation line.
+#   * compat mode accepted the file but recorded one InvalidAttribute warning
+#     per feature: 6,068,892 warnings, one for every line, for something that
+#     is not a defect.
+#
+# A bare token with no whitespace, quote or separator in it is unambiguous, so
+# it is accepted. Anything containing a space, a semicolon or a quote still
+# needs quoting -- that is where the ambiguity the rule exists to catch lives.
+#
+# Both engines carry this rule and both are changed; `engine` parametrizes over
+# them so neither can drift.
+
+GENCODE_STYLE_GTF = (
+    "chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\t"
+    'gene_id "ENSG00000290825.2"; gene_type "lncRNA"; level 2; '
+    'tag "overlaps_pseudogene";\n'
+)
+
+
+def test_an_unquoted_numeric_gtf_value_is_accepted(tmp_path, engine):
+    """`level 2;` is legal GTF2.2 and appears on every GENCODE line."""
+    src = tmp_path / "gencode_style.gtf"
+    src.write_text(GENCODE_STYLE_GTF)
+
+    features = list(gffbase.parse_gff(str(src), engine=engine, validation="ncbi", strict=True))
+
+    assert len(features) == 1
+    assert features[0].attributes_dict()["level"] == ["2"]
+
+
+def test_an_unquoted_value_records_no_warning_in_compat(tmp_path, engine):
+    """The compat cost of the old rule was one warning per line."""
+    src = tmp_path / "gencode_style.gtf"
+    src.write_text(GENCODE_STYLE_GTF)
+
+    it = gffbase.parse_gff(str(src), engine=engine, validation="gffutils", strict=False)
+    list(it)
+
+    assert [w for w in it.warnings if "quoted" in str(w)] == []
+
+
+def test_a_value_containing_a_space_still_needs_quotes(tmp_path, engine):
+    """The ambiguity the rule exists to catch: an unquoted value with a space
+    cannot be told from a second key/value pair."""
+    src = tmp_path / "spaced.gtf"
+    src.write_text('chr1\trs\texon\t1\t9\t.\t+\t.\tgene_id "G1"; note two words;\n')
+
+    with pytest.raises(gffbase.GFFFormatError, match="quoted"):
+        list(gffbase.parse_gff(str(src), engine=engine, validation="ncbi", strict=True))
+
+
+def test_a_quoted_value_is_still_accepted(tmp_path, engine):
+    """Relaxing the rule must not stop accepting what it accepted before."""
+    src = tmp_path / "quoted.gtf"
+    src.write_text('chr1\trs\texon\t1\t9\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n')
+
+    features = list(gffbase.parse_gff(str(src), engine=engine, validation="ncbi", strict=True))
+    assert features[0].attributes_dict()["gene_id"] == ["G1"]

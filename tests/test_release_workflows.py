@@ -398,7 +398,21 @@ def test_reusable_artifact_workflow_builds_each_release_target_once():
     assert "--locked" in str(workflow)
     assert all_commands.count("python -m build") == 0
     assert all_uses.count("actions/upload-artifact@") == 5
-    assert str(workflow).count("if-no-files-found") == 6  # five packages plus manifest
+
+    # Every upload must fail rather than publish nothing. Asserted as a
+    # property of each step, not as a count of the string across the whole
+    # file: the count said 6 while the step count said 5, and no arrangement
+    # satisfies both -- an upload step cannot carry the key twice. A magic
+    # total also goes stale the moment a job is matrixed, which is exactly how
+    # the two numbers drifted apart. This form cannot.
+    unguarded = [
+        f"{job_name}:{index}"
+        for job_name, job in jobs.items()
+        for index, step in enumerate(job.get("steps", []))
+        if "upload-artifact" in (step.get("uses") or "")
+        and step.get("with", {}).get("if-no-files-found") != "error"
+    ]
+    assert not unguarded, f"uploads that would silently ship nothing: {unguarded}"
 
 
 def test_every_release_wheel_is_install_tested_on_five_supported_pythons():
