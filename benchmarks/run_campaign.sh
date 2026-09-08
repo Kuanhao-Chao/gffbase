@@ -161,26 +161,28 @@ say "1/4 preflight  (hashes every corpus, probes each interpreter, builds the pa
 fi
 
 CAMPAIGN_DIR="$CAMPAIGN_ROOT/$RUN_ID"
+# The loader wants the manifest itself, not the directory holding it.
+CAMPAIGN_JSON="$CAMPAIGN_DIR/campaign.json"
 
 say "2/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped here)"
-"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_DIR" --resume --execute
+"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_JSON" --resume --execute
 
 say "3/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
-"$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_DIR" --resume --execute
+"$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_JSON" --resume --execute
 
 say "4/4 status"
-"$PRIMARY" benchmarks/cluster_campaign.py status --campaign "$CAMPAIGN_DIR"
+"$PRIMARY" benchmarks/cluster_campaign.py status --campaign "$CAMPAIGN_JSON"
 
 cat <<'NEXT'
 
 === next ===
 Workers run in their own tmux sessions. Watch them with:
 
-    python benchmarks/cluster_campaign.py status --campaign <CAMPAIGN_DIR>
+    python benchmarks/cluster_campaign.py status --campaign <CAMPAIGN_DIR>/campaign.json
 
 When every job reports completed, merge and publish:
 
-    python benchmarks/cluster_campaign.py merge --campaign <CAMPAIGN_DIR> --publish --execute
+    python benchmarks/cluster_campaign.py merge --campaign <CAMPAIGN_DIR>/campaign.json --publish --execute
     python tools/gen_benchmark_tables.py --write
     make -C docs html SPHINXOPTS="-W --keep-going"
 
