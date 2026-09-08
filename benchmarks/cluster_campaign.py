@@ -77,6 +77,17 @@ CORPUS_ORDER = _campaign_model.CORPUS_ORDER
 THREADS = _campaign_model.THREADS
 LANE_CPUS = _campaign_model.LANE_CPUS
 MIN_FREE_BYTES = 80 * (1 << 30)
+#: Umask the worker installs before it runs any job.
+#:
+#: Every file in an attempt's scratch must be 0600 -- `_scratch_expectations`
+#: enforces it, because the scratch holds a job's databases and its result and
+#: the campaign treats them as private evidence. The files themselves are
+#: created by DuckDB and by the benchmark scripts, which use the ambient umask
+#: and so produce 0664 for a shared-group account. Chasing that with a chmod
+#: after each write would mean chasing every writer, including ones inside
+#: DuckDB; setting the umask once, in the process that owns the scratch, makes
+#: everything they create private by construction.
+WORKER_UMASK = 0o077
 MIN_AVAILABLE_RAM_BYTES = 40 * (1 << 30)
 IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}$")
 TRANSFORM_DESCRIPTION = "remove rows whose third GTF column is gene or transcript"
@@ -2777,6 +2788,7 @@ def _reconcile_worker_job(
 
 
 def cmd_worker(args: argparse.Namespace) -> int:
+    os.umask(WORKER_UMASK)
     campaign = _load_worker_campaign(args.campaign)
     if args.campaign_sha256 != campaign_digest(campaign):
         raise CampaignError("internal worker campaign digest mismatch")

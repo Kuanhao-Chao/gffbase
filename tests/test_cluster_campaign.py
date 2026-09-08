@@ -1904,3 +1904,40 @@ def test_an_unprobed_root_is_rejected_rather_than_assumed_good() -> None:
     probe["mount"] = {k: v for k, v in probe["mount"].items() if k != "supports_noreplace_rename"}
     with pytest.raises(campaign.CampaignError, match="no-replace rename"):
         campaign.verify_topology(probe)
+
+
+# ---------------------------------------------------------------------------
+# The worker's umask
+# ---------------------------------------------------------------------------
+#
+# Every file in an attempt's scratch must be mode 0600 -- `_scratch_expectations`
+# enforces it, because the scratch holds a job's databases and results and the
+# campaign treats them as private evidence. But the files are created by DuckDB
+# and by the benchmark scripts, which use the ambient umask and so produce 0664
+# on a normal shared-group login:
+#
+#     campaign scratch file 'mane.duckdb' must use mode 0600
+#
+# chmod-after-the-fact would have to chase every writer, including ones inside
+# DuckDB. Setting the umask once, in the worker that owns the scratch, makes
+# every file any of them creates private by construction.
+
+
+def test_the_worker_runs_with_a_private_umask() -> None:
+    """0o077, so nothing a job creates in its scratch is group-readable."""
+    assert campaign.WORKER_UMASK == 0o077
+
+
+def test_the_private_umask_actually_yields_0600(tmp_path) -> None:
+    """The property that matters, asserted against the filesystem rather than
+    against the constant: a plain create under this umask must be 0600."""
+    import os
+    import stat as stat_module
+
+    previous = os.umask(campaign.WORKER_UMASK)
+    try:
+        target = tmp_path / "probe"
+        os.close(os.open(target, os.O_WRONLY | os.O_CREAT, 0o666))
+        assert stat_module.S_IMODE(target.stat().st_mode) == 0o600
+    finally:
+        os.umask(previous)
