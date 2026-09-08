@@ -538,23 +538,41 @@ def test_release_workflows_partition_canonical_rc_and_stable_tags():
     assert "'v*rc*'" in testpypi
     assert "'!v*rc*'" in production
     for workflow in (testpypi, production):
-        assert "packaging.version.Version" in workflow
-        assert "canonical" in workflow
         assert "workflow_dispatch" in workflow
 
-    assert "candidate.is_prerelease" in testpypi
-    assert "version.is_prerelease" in production
-    assert "Production publication refuses release-candidate versions" in production
+    # The version rules themselves moved into `tools/release_policy.py`, which
+    # both publishers call as their first job. Keeping the assertions pointed at
+    # the workflow text would mean requiring the two files to carry duplicate
+    # copies of the logic -- the arrangement that let them drift apart.
+    policy = _read("tools/release_policy.py")
+    assert "from packaging.version import" in policy
+    assert "is not canonical PEP 440" in policy
+    assert "production publication refuses prerelease source versions" in policy
+    assert "--channel production" in production
+    assert "--channel testpypi" in testpypi
 
 
 def test_release_identity_is_checked_from_the_built_wheel():
-    """Source imports cannot stand in for inspecting the artifact we upload."""
+    """Source imports cannot stand in for inspecting the artifact we upload.
+
+    The check now lives in the reusable artifact workflow rather than in each
+    publisher. That is the point of the refactor: when both publishers carried
+    their own copy, PyPI and TestPyPI could verify differently, and the dress
+    rehearsal stopped rehearsing the thing it existed to rehearse. Asserting it
+    here against the publishers would now contradict
+    `test_thin_publisher_callers_never_build_package_artifacts`, which requires
+    that they build nothing at all.
+    """
+    workflow = _read(".github/workflows/release-artifacts.yml")
+    assert 'importlib.metadata.version("gffbase")' in workflow
+    assert "gffbase._native" in workflow
+    assert "pip install --force-reinstall" in workflow
+
     for filename in (".github/workflows/release.yml", ".github/workflows/testpypi-release.yml"):
-        workflow = _read(filename)
-        assert "python -m build --wheel" in workflow
-        assert 'importlib.metadata.version("gffbase")' in workflow
-        assert "gffbase._native" in workflow
-        assert "pip install --force-reinstall" in workflow
+        publisher = _read(filename)
+        assert "./.github/workflows/release-artifacts.yml" in publisher, (
+            f"{filename} must obtain artifacts from the one workflow that verifies them"
+        )
 
 
 def test_release_qualification_names_every_required_gate():
