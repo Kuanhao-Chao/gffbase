@@ -103,6 +103,32 @@ PY
 [ -f "$WHEEL" ] || { echo "  FAIL: candidate wheel not found at $WHEEL"; exit 1; }
 echo "  candidate wheel present"
 
+# The provenance stamp requires a rustc version string, and a job that cannot
+# produce one runs its entire measurement and is then rejected with "primary
+# harness environment is invalid" -- the measurement succeeds, the evidence
+# does not. Probed exactly the way `common.environment()` probes it, and from
+# inside tmux, because that is where the workers run and a login PATH is not
+# necessarily what a tmux server inherited.
+tmux kill-session -t gffbase-rustc-probe 2>/dev/null || true
+tmux new-session -d -s gffbase-rustc-probe \
+    "cd '$REPO' && PYTHONPATH='$REPO' '$PRIMARY' -c \"
+import sys; sys.path.insert(0, 'benchmarks')
+from benchmarks import common
+open('$STAGE/rustc-probe.txt', 'w').write(str(common._cmd('rustc', '--version')))
+\""
+for _ in $(seq 1 30); do [ -f "$STAGE/rustc-probe.txt" ] && break; sleep 1; done
+RUSTC_PROBE="$(cat "$STAGE/rustc-probe.txt" 2>/dev/null || echo None)"
+rm -f "$STAGE/rustc-probe.txt"
+tmux kill-session -t gffbase-rustc-probe 2>/dev/null || true
+if [ "$RUSTC_PROBE" = "None" ] || [ -z "$RUSTC_PROBE" ]; then
+    echo "  FAIL: a tmux worker cannot resolve rustc, so every job would be"
+    echo "        rejected for an invalid harness environment after running."
+    echo "        Put the toolchain on PATH before launching, e.g."
+    echo "        export PATH=\"\$HOME/.cargo/bin:\$PATH\""
+    exit 1
+fi
+echo "  rustc reachable from a worker: $RUSTC_PROBE"
+
 say "campaign root"
 # Every component must be private mode 0700, and a directory created under a
 # setgid parent inherits 2700 -- which the check rejects. Clear it here rather
