@@ -1168,12 +1168,18 @@ def worker_environment(
     if not isinstance(candidate, Mapping) or not isinstance(candidate.get("wheel"), Mapping):
         raise CampaignError("campaign candidate wheel identity is missing")
     wheel = candidate["wheel"]
-    name = _require_string(wheel.get("name"), "campaign candidate wheel name")
+    # The PATH, not the name. `common._candidate_wheel_artifact` stats this
+    # value and refuses to stamp an environment if it is not a file; a bare
+    # filename resolves against the worker's cwd, which is the repo root, so
+    # every job died after finishing its measurement with "candidate wheel path
+    # is not a file". Preflight records both fields -- this is the one the
+    # consumer can use.
+    wheel_path = _require_string(wheel.get("path"), "campaign candidate wheel path")
     digest = _require_sha256(wheel.get("sha256"), "campaign candidate wheel sha256")
     env.update(
         {
             "GFFBASE_BENCH_OUT": str(Path(attempt_dir).resolve() / "scratch"),
-            "GFFBASE_BENCH_WHEEL": name,
+            "GFFBASE_BENCH_WHEEL": wheel_path,
             "GFFBASE_BENCH_WHEEL_SHA256": digest,
         }
     )
