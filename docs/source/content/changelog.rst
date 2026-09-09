@@ -301,6 +301,50 @@ The performance claims could not be reproduced from anything in the repository.
 This release rebuilds the harness so that they can be, and re-measures
 everything from scratch.
 
+- **Three of five corpora reported a content divergence that was not one.** The
+  signature that decides whether a speedup may be published compared gffbase's
+  transitive closure against gffutils' ``relations`` table, but what gffutils
+  stores at ``level = 2`` is not a closure: ``_update_relations`` inserts, for
+  each feature, the children of its children — one hop, no iteration to a fixed
+  point. On a four-deep chain it records five ancestor/descendant pairs and
+  omits the sixth. RefSeq differed by 3,218 pairs and GENCODE GFF3 by 108, on
+  hierarchies whose **direct edges agreed exactly** — and the closure is a
+  function of those edges. The comparator's closure is now derived from them
+  rather than read from the cache.
+
+- **A comma followed by a space cost CHESS its speedup.** GFF3 says an
+  unescaped comma separates values and a literal comma must be percent-encoded;
+  gffbase follows that, and gffutils deliberately does not, keeping ``, ``
+  inside the value so an unescaped ``description=kinase, subunit 1`` survives.
+  Ten CHESS genes record two names as ``gene_name=ADAM6, RPS8P1``, which showed
+  up as a 20-row divergence. The signature now applies one rule to both engines
+  — the comparator's coarser one, because re-splitting on every comma would
+  shatter 2,294 correctly escaped CHESS descriptions to line up twenty gene
+  names. The parse-policy difference itself is now a **declared API deviation**
+  in ``tests/parity/deviations.toml``, pinned by a differential test; no fixture
+  in the shared corpus contained a comma-space attribute, which is why nothing
+  caught it.
+
+- **The 0.1.0 arm of the version bridge could never have run.** Two independent
+  defects, one hiding the other. ``bridge.py`` released its handle behind
+  ``if hasattr(db, "close")`` — False for gffbase 0.1.0, whose missing
+  ``close()`` is one of the defects this release fixes — so DuckDB kept its
+  exclusive lock and signing the database raised. Behind that,
+  ``database_signature`` assumed the current schema unconditionally and could
+  not read schema v1 at all, which has no ``segments_all``, one row per feature,
+  and no ``seg_idx`` on ``attributes``. Every bridge job must carry a valid
+  signature, so those jobs were unsatisfiable by construction. Both are fixed
+  and the arm now completes in 34 s on MANE.
+
+- **A signature that never finished.** Normalizing gffutils for comparison
+  built its temporary tables without the indexes the following joins need, and
+  let SQLite spill its sorts to ``/var/tmp`` — a 32 GB root volume, not the
+  scratch the databases sit on. On GENCODE GTF (6.07M features, 12.34M
+  relations) the correlated ``NOT EXISTS`` over an unindexed table ran for
+  2 h 39 m without finishing, and took the whole job down with the controller's
+  timeout. Indexed, and spilling beside the work, it returns byte-identical
+  components in under 16 minutes.
+
 - **The results file no longer destroys itself.** ``06_mega.py`` built a payload
   containing only the corpora named by ``--only`` and wrote the whole file, so
   each targeted re-run silently deleted the others. ``benchmarks/out/06_mega.json``
@@ -824,10 +868,17 @@ Fixed
 - ``helpers.example_filename`` **could not find the canonical example.**
   ``FBgn0031208.gff`` -- the fixture every gffutils tutorial opens -- is vendored
   under ``tests/data/upstream/``, but that directory was not on the search path,
-  so the call failed in a source checkout with the file sitting on disk. The
-  ``FileNotFoundError`` now also states that the fixtures ship in the sdist and
-  the checkout but not the binary wheel, and names the install that works,
-  rather than leaving the reader hunting for a typo.
+  so the call failed in a source checkout with the file sitting on disk. It
+  then failed for a different reason everywhere else: ``tests/`` is not inside
+  the package, so no ``pip install`` could reach the corpus at all, while the
+  oracle ships its own examples and the migration guide advertised the two as
+  equivalent. The corpus (35 files, 114 KB, with the vendored gffutils
+  fixtures' MIT notice alongside them) now travels **inside the wheel**, and
+  the error names the directory it searched. Note that ``.gitignore``
+  blanket-ignores ``*.gff3``/``*.gtf``/``*.fa`` and maturin collects the package
+  tree through gitignore -- so the first build of this shipped 9 of the 35
+  files, silently, none of them the ones the documented examples open. A test
+  now fails if any packaged fixture is ignored.
 
 - ``"missing" in db`` **raised instead of returning** ``False``. ``gffutils.FeatureDB``
   defines neither ``__contains__`` nor ``__iter__``, so Python falls back to
