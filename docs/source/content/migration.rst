@@ -64,7 +64,15 @@ migration is one import change.
 1. Drop-in compatibility — the easy part
 ----------------------------------------
 
-Every public surface from legacy ``gffutils`` is preserved verbatim:
+**86 of 89 symbols (97%)** of the legacy ``gffutils`` public surface are
+preserved verbatim. The three that are not are deliberate, recorded in
+``tests/parity/deviations.toml``, and are surfaces upstream does not implement
+either. A differential suite compares gffbase against a pinned gffutils
+checkout on every corpus fixture, so this figure is derived rather than
+asserted -- ``tests/test_release_hygiene.py`` recomputes it from the manifest
+and fails if this sentence drifts.
+
+The mapping:
 
 .. list-table::
    :header-rows: 1

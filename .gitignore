@@ -132,3 +132,9 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# The unsent private report about a vulnerability in someone else's project.
+# Kept on disk, never tracked: a public repo would publish an unpatched
+# third-party bug, with a working proof-of-concept, before its maintainer has
+# been told.
+docs/private/

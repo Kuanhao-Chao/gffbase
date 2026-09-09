@@ -311,7 +311,7 @@ Checklist before publishing
 
 - ☐ Decide severity and CVSS
 - ☐ Report ``set_pragmas`` to the gffutils maintainer privately — 0.14 is
-  affected and unpatched (draft in ``docs/security/upstream-note-gffutils.md``)
+  affected and unpatched (draft in ``docs/private/upstream-note-gffutils.md``)
 
 - ☐ Decide whether 0.1.x gets a backported patch release or is yanked
 - ☐ File the GitHub Security Advisory (draft privately first)

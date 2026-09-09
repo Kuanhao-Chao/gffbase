@@ -32,9 +32,27 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _read(name: str) -> str:
+def _read(name: str, *, required: bool = True) -> str:
+    """Read a repository file.
+
+    `required=True` by default, and that default is the point. This used to
+    skip unconditionally when a file was missing, on the theory that the suite
+    might be running against an installed package rather than a checkout. The
+    MkDocs-to-Sphinx migration deleted every path four of these guards pointed
+    at, and they all went green by skipping -- which is exactly how
+    `docs/source/index.rst` came to claim version `0.2.0` while every other
+    page said `0.2.0rc1`.
+
+    A guard that cannot fail is not a guard. Pass `required=False` only where
+    absence is genuinely expected.
+    """
     path = REPO_ROOT / name
     if not path.is_file():
+        if required:
+            raise AssertionError(
+                f"{name} does not exist. If it moved, repoint this check at its "
+                f"successor; if it is genuinely optional here, pass required=False."
+            )
         pytest.skip(f"{name} not present (running against an installed package, not a checkout)")
     return path.read_text(encoding="utf-8")
 
@@ -139,13 +157,16 @@ _VERSION_LITERALS = [
     ("CITATION.cff", r"^version: (.+)$"),
     ("README.md", r"^  version = \{([^}]+)\},$"),
     ("CONTRIBUTING.md", r"gffbase\.__version__\)\"\s+# (\S+)"),
-    ("docs/citation.md", r"\(Version ([^)]+)\)"),
-    ("docs/index.md", r"describes the unreleased ([0-9A-Za-z.]+)\s+candidate"),
+    # Repointed at the Sphinx successors. The MkDocs paths these used to name
+    # were deleted in the migration, and `_read` skipped rather than failed --
+    # so these four checks silently stopped running.
+    ("docs/source/content/citation.rst", r"\(Version ([^)]+)\)"),
+    ("docs/source/index.rst", r"describes the unreleased ([0-9A-Za-z.]+)\s+candidate"),
     (
-        "docs/getting-started/installation.md",
-        r'warning "([0-9A-Za-z.]+) is still a release candidate"',
+        "docs/source/content/installation.rst",
+        r"\*\*([0-9A-Za-z.]+) is still a release candidate\*\*",
     ),
-    ("docs/release-checklist.md", r"native extension report exactly `([^`]+)`"),
+    ("docs/release_checklist.rst", r"native extension report exactly ``([^`]+)``"),
 ]
 
 
@@ -426,7 +447,13 @@ def test_no_benchmark_corpus_row_lives_outside_a_generated_block():
     end = re.compile(r"<!-- END GENERATED: [\w-]+ -->")
 
     offenders = []
-    for rel in ("README.md", "MIGRATION.md", "docs/index.md", "docs/performance.md"):
+    for rel in (
+        "README.md",
+        "MIGRATION.md",
+        "docs/source/index.rst",
+        "docs/source/content/performance.rst",
+        "docs/source/content/migration.rst",
+    ):
         path = REPO_ROOT / rel
         if not path.is_file():
             continue
@@ -611,10 +638,15 @@ def test_the_documented_parity_percentage_is_derivable():
 
     manifest_path = REPO_ROOT / "tests" / "parity" / "gffutils_manifest.json"
     deviations_path = REPO_ROOT / "tests" / "parity" / "deviations.toml"
-    page = REPO_ROOT / "docs" / "api" / "compat.md"
+    # The MkDocs `docs/api/compat.md` that used to carry this figure was merged
+    # into the autodoc API page during the Sphinx migration, and the figure was
+    # lost with it -- leaving `migration.rst` claiming every symbol was
+    # preserved. It lives on the migration page now, where a `gffutils` user
+    # looks for it.
+    page = REPO_ROOT / "docs" / "source" / "content" / "migration.rst"
     for path in (manifest_path, deviations_path, page):
         if not path.is_file():
-            pytest.skip(f"{path.name} not present")
+            raise AssertionError(f"{path} is missing; repoint this check")
 
     manifest = json.loads(manifest_path.read_text())
     total = sum(
@@ -629,7 +661,7 @@ def test_the_documented_parity_percentage_is_derivable():
     text = page.read_text(encoding="utf-8")
     expected = f"{provided} of {total} symbols ({pct}%)"
     assert expected in text, (
-        f"docs/api/compat.md should say {expected!r}; "
+        f"docs/source/content/migration.rst should say {expected!r}; "
         f"derived from the manifest ({total} symbols) minus "
         f"{excluded} excluded deviations"
     )
@@ -646,10 +678,15 @@ def test_the_documented_invariant_count_is_right():
 
     n = len(_CHECKS)
     wrong = []
-    for rel in ("README.md", "docs/api/index.md", "docs/usage_gallery.md", "docs/cli.md"):
-        path = REPO_ROOT / rel
+    # Every published page, discovered rather than listed. The old hand list
+    # named three MkDocs paths that the Sphinx migration deleted, so the check
+    # quietly degraded to README-only -- and `faq.rst` drifted to 14.
+    pages = [REPO_ROOT / "README.md", REPO_ROOT / "MIGRATION.md"]
+    pages += sorted((REPO_ROOT / "docs" / "source").rglob("*.rst"))
+    for path in pages:
         if not path.is_file():
             continue
+        rel = path.relative_to(REPO_ROOT).as_posix()
         text = path.read_text(encoding="utf-8")
         # Any "<number> invariant(s)" claim must state the real number.
         for found in re.finditer(r"(\d+)\s+invariants?\b", text):
@@ -663,9 +700,11 @@ def test_every_cli_command_is_documented():
     from gffbase.cli import build_parser
 
     registered = set([a for a in build_parser()._actions if a.dest == "command"][0].choices)
-    page = _read("docs/cli.md")
+    page = _read("docs/source/content/cli.rst")
     undocumented = sorted(c for c in registered if f"gffbase {c}" not in page)
-    assert not undocumented, f"CLI commands missing from docs/cli.md: {undocumented}"
+    assert not undocumented, (
+        f"CLI commands missing from docs/source/content/cli.rst: {undocumented}"
+    )
 
 
 def test_every_nav_entry_resolves_and_every_page_is_reachable():
