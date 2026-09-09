@@ -1941,3 +1941,32 @@ def test_the_private_umask_actually_yields_0600(tmp_path) -> None:
         assert stat_module.S_IMODE(target.stat().st_mode) == 0o600
     finally:
         os.umask(previous)
+
+
+# ---------------------------------------------------------------------------
+# `build_tmux_argv` is not the launcher
+# ---------------------------------------------------------------------------
+#
+# The facade carried its own copy of `build_tmux_argv`, shadowed at import time
+# by the re-export from `campaign.model` -- and neither is what launches a
+# worker. The real builder is `campaign.worker.build_tmux_launch_argv`, whose
+# argv is also recorded as launch evidence and re-derived on resume.
+#
+# The duplicate cost a wrong fix: a patch applied to the facade copy changed
+# nothing at all, silently, because the name had already been rebound. Removing
+# it is the point of this test.
+
+
+def test_the_facade_does_not_carry_its_own_tmux_builder() -> None:
+    """It must come from the model slice, not be redefined beside it."""
+    from benchmarks.campaign import model as campaign_model
+
+    assert campaign.build_tmux_argv is campaign_model.build_tmux_argv
+
+
+def test_the_real_launcher_lives_in_the_worker_slice() -> None:
+    """Where a reader should look, pinned so the next person does not repeat
+    the detour through two dead copies."""
+    from benchmarks.campaign import worker as campaign_worker
+
+    assert callable(campaign_worker.build_tmux_launch_argv)
