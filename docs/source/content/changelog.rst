@@ -36,7 +36,7 @@ Security
     carried a stray Latin-1 byte was stored with **no attributes at all** --
     ID included, making the feature unreachable -- while the ingest reported
     success.
-  - **``seqid`` and ``featuretype``** went through ``from_utf8_lossy``, silently
+  - ``seqid`` **and** ``featuretype`` went through ``from_utf8_lossy``, silently
     yielding a U+FFFD chromosome name that matches nothing in any later query.
   - **Directives** kept whatever bytes they had.
 
@@ -47,7 +47,7 @@ Security
 
 - **A NUL byte in the database path truncated it, and wrote the file anyway.**
   DuckDB is C++ and takes the path as a C string, so it stops at the first
-  NUL: ``FeatureDB("a\0b.duckdb")`` created a file called **``a``** -- a different
+  NUL: ``FeatureDB("a\0b.duckdb")`` created a file called ``a`` -- a different
   path than the caller named. The stray-file cleanup then called ``os.unlink``
   with the original path, which raises ``ValueError`` rather than ``OSError``, so
   it escaped the ``except``, left the truncated file on disk, and replaced the
@@ -55,7 +55,7 @@ Security
   untrusted input could write to a location it never named. Both ``FeatureDB``
   and ``create_db`` now reject an embedded NUL before touching the filesystem.
 
-- **``helpers.make_query``'s raw-SQL slots are now documented as such.**
+- ``helpers.make_query``\ **'s raw-SQL slots are now documented as such.**
   ``featuretype``, ``limit`` and ``strand`` are bound parameters and ``order_by`` is
   whitelisted, but ``other`` and ``extra`` are interpolated verbatim -- they exist
   to carry the caller's own SQL, which is how upstream builds its relation
@@ -65,7 +65,7 @@ Security
   bytes, absolute paths) and every parameterised query surface -- no injection
   found through any of them.
 
-- **SQL injection through ``order_by`` (affects 0.1.0, the only published release).** The parameter
+- **SQL injection through** ``order_by`` **(affects 0.1.0, the only published release).** The parameter
   was interpolated into the query, with anything outside a small set of known
   column names passed through verbatim as a deliberate escape hatch "for power
   users". DuckDB executes trailing statements, so
@@ -90,7 +90,7 @@ Security
   ``order_by`` is now a whitelist, shared by both clause builders so no future
   entry point can reacquire an escape hatch.
 
-- **SQL injection through ``set_pragmas`` (affects 0.1.0, the only published release).** The same
+- **SQL injection through** ``set_pragmas`` **(affects 0.1.0, the only published release).** The same
   defect one method away, and quieter. ``FeatureDB.set_pragmas()`` built
   ``PRAGMA {name} = {value}`` by interpolating **both** halves of a
   caller-supplied dict, with the whole loop body inside
@@ -121,13 +121,13 @@ Security
   See ``docs/advisory_sql_injection.rst`` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
-- The thread-count environment variable is now **``GFFBASE_THREADS``**.
+- The thread-count environment variable is now ``GFFBASE_THREADS``.
   ``GFFUTILS2_THREADS`` predates the rename to gffbase and was the last
   ``GFFUTILS2_*`` name left; it still works, and the new name wins where both
   are set. Silently ignoring an existing job script's thread limit on a shared
   machine is worse than an untidy variable name.
 
-- **``GFFWriter.close()`` closed a stream it did not open.** ``GFFWriter`` accepts
+- ``GFFWriter.close()`` **closed a stream it did not open.** ``GFFWriter`` accepts
   either a path or an open file object, and closed both — so
   ``GFFWriter(sys.stdout).close()`` shut stdout down for the whole process and
   anything written afterwards raised ``ValueError: I/O operation on closed file``. A writer owns only the handles it opened; a caller's stream is
@@ -154,7 +154,7 @@ Testing and CI
     validate on 3.11 or 3.12.
   - Members inherited from builtin bases (``Exception.add_note``, ``dict.keys``)
     were recorded, and their introspectability changes between releases.
-  - ``gffutils.contrib.plotting`` does ``from pybedtools.contrib.plotting import Track``, and **pybedtools sets ``Track = None`` when matplotlib is absent** --
+  - ``gffutils.contrib.plotting`` does ``from pybedtools.contrib.plotting import Track``, and **pybedtools sets** ``Track = None`` **when matplotlib is absent** --
     so the manifest recorded the presence of a name bound to ``None``, and the
     inventory tracked a third-party optional dependency.
 
@@ -164,12 +164,12 @@ Testing and CI
   prints **what** differs rather than only that something does -- "out of
   date" alone sends the reader to regenerate a file that may be correct.
 
-- **``test_api_parity.py`` failed at import on Python 3.10**, the declared
+- ``test_api_parity.py`` **failed at import on Python 3.10**, the declared
   floor, because it uses ``tomllib`` (3.11+). Windows is tested at the floor, so
   this took out the parity module and both Windows cells. ``tomli`` is now a
   declared test dependency under an environment marker.
 
-- **``pybedtools_integration`` was measured at 9.8% coverage** because its tests
+- ``pybedtools_integration`` **was measured at 9.8% coverage** because its tests
   skip without the ``bedtools`` binary and no runner had one. CI installs it, so
   the module is exercised rather than counted as untested. The coverage gate
   is now per-platform, because what is *reachable* is per-platform: Windows
@@ -184,6 +184,28 @@ Testing and CI
 Documentation
 ~~~~~~~~~~~~~
 
+- **The published site rendered literal backticks in 92 places.** Markdown
+  nests inline markup and reStructuredText does not, so the MkDocs conversion
+  carried a code span inside a bold span across verbatim -- which RST renders
+  with the backticks visible, because nothing nests inside a strong span.
+  ``sphinx-build -W`` reports nothing: it is valid RST that means something
+  else. Every span was split so both formattings survive
+  (``order_by`` **is validated**), and the site is now checked by scanning the
+  *rendered* HTML, which is the only thing that can see this class at all.
+
+  Related: autodoc publishes docstrings verbatim, and the docstrings use a
+  single backtick for code in the project's house style. RST's default role
+  for a single backtick is ``title-reference``, so every ``FeatureDB`` and
+  ``order_by`` on the API pages was rendering as italic prose. ``default_role``
+  is now ``code``, which makes several hundred spans across 38 modules mean
+  what they say without rewriting any of them.
+
+- ``tools/md2rst.py`` **is gone.** It was the one-shot MkDocs to RST converter.
+  The RST is now canonical and has been hand-edited since -- including the
+  repairs above -- so re-running it would silently clobber the corrected
+  sources with a fresh conversion of documents that no longer exist. No test
+  and no workflow invoked it.
+
 - **Documentation code is now executed by the test suite.**
   ``tests/test_docs_snippets.py`` extracts every fenced ``python`` block from
   ``docs/``, ``README.md`` and ``MIGRATION.md`` and runs it against the vendored
@@ -196,13 +218,13 @@ Documentation
   teaching a lock leak. Nothing caught it because nothing ran it. Running them
   immediately found four more defects, listed below.
 
-- **``create_db()`` did not accept ``validation=`` or ``on_error=``.** Both axes are
+- ``create_db()`` **did not accept** ``validation=`` **or** ``on_error=``. Both axes are
   documented, both are supported by ``resolve_mode()`` and carried by
   ``IngestOptions``, and the public entry point simply never forwarded them --
   so the documented ``validation="ncbi", on_error="warn"`` audit combination
   raised ``TypeError: unhandled kwarg``. They are now parameters, and documented.
 
-- **``docs/usage_gallery.md`` documented ``Feature.attributes_dict()``**, which
+- ``docs/usage_gallery.md`` **documented** ``Feature.attributes_dict()``, which
   does not exist on ``Feature`` (only on ``ParsedFeature``, and not in gffutils at
   all). Replaced with ``dict(feature.attributes)``.
 
@@ -213,7 +235,7 @@ Documentation
   are 14). ``tests/test_release_hygiene.py`` now derives the number from the
   registry, so prose cannot drift from it again.
 
-- **``MIGRATION.md`` linked ``docs/cli.md``**, which 404s on the rendered site,
+- ``MIGRATION.md`` **linked** ``docs/cli.md``, which 404s on the rendered site,
   and quoted an unsourced "5-550x query speedups". It also never mentioned
   connection lifecycle, despite being the first page a porting user reads and
   despite DuckDB's exclusive lock being the one operational difference from
@@ -255,7 +277,7 @@ Documentation
   nearly verbatim, including the benchmark table, so the two drifted
   independently.
 
-- **``mkdocs build --strict`` runs in CI.** ``CONTRIBUTING.md`` and the PR template
+- ``mkdocs build --strict`` **runs in CI.** ``CONTRIBUTING.md`` and the PR template
   both claimed it did. It did not: the only mkdocs invocation was ``gh-deploy``,
   on ``main``, after merge — so a broken link was found by the deploy rather than
   by the PR that introduced it.
@@ -338,7 +360,57 @@ everything from scratch.
 Changed (breaking)
 ~~~~~~~~~~~~~~~~~~
 
-- **``FeatureDB.bed12()`` now refuses a feature its blocks do not span**, with
+- ``order_by="score"`` **sorts numerically instead of lexicographically.** GFF
+  column 6 is stored as text -- the spec allows ``.`` there, and the oracle
+  stores it as text too -- so an ORDER BY on it ranked ``10 < 100 < 1e3 < 2.5 <
+  9``. "The highest-scoring features" came back wrong, and nothing raised. The
+  whitelist entry is now ``TRY_CAST(score AS DOUBLE)``, which yields NULL for
+  ``.`` and for any non-numeric value; DuckDB's NULLS LAST default then puts
+  unscored features at the end, which is what a caller asking to sort by score
+  means.
+
+  **gffutils has the same defect**, so this is a deliberate divergence rather
+  than a parity fix, and it is recorded as one in
+  ``tests/parity/deviations.toml``.
+
+- **Ordered queries now have a total order.** No sort column is unique --
+  features share a start, a featuretype, a score, and even ``file_order``
+  repeats, because GTF synthesis stamps a synthesized parent with the
+  ``MIN(file_order)`` of its children. DuckDB sorts in parallel and does not
+  preserve ties, so the same query over the same database could return tied
+  rows in a different order on consecutive runs. Every ordered query now
+  appends ``id ASC`` as a final tiebreak.
+
+  The tiebreak is ascending regardless of ``reverse``: it exists to be stable,
+  not meaningful, and flipping it alongside the caller's key would make
+  ``reverse=True`` something other than the exact reverse of the forward order
+  for tied rows. Results are now reproducible run to run; they are not
+  guaranteed to match the order a pre-0.2.0 run produced.
+
+- ``order_by`` **accepts multiple keys, and** ``reverse`` **applies to every
+  one.** A tuple, a list, or a comma-separated string all work. Only a single
+  name worked before: a tuple was interpolated as a Python repr, which DuckDB
+  parses as a constant struct, so the query silently sorted by nothing; a list
+  raised ``TypeError: unhashable type: 'list'`` from a set membership test. The
+  whitelist also gained ``id``, ``file_order`` and ``length``, none of which is
+  in the oracle's documented list but all of which are real columns callers
+  sort by.
+
+  gffutils appends the direction once, which in SQL reverses only the *last*
+  key. gffbase applies it to each key. Since multi-key sorting did not function
+  here at all, no working gffbase behaviour changes, and reproducing the
+  upstream shape in new code would be copying a defect.
+
+- ``validation="ncbi"`` **accepts an unquoted GTF attribute value.** The GTF
+  specification quotes values, but unquoted bare tokens are common in real
+  annotation releases, and rejecting them meant strict mode could not read
+  files every other tool accepts. A value now validates if it is properly
+  double-quoted *or* is a bare token containing no whitespace, ``"`` or ``;``.
+  Still rejected: an unbalanced quote, an unescaped quote inside a quoted
+  value, and an unquoted value containing whitespace. Callers who used
+  ``validation="ncbi"`` specifically to reject unquoted GTF no longer get that.
+
+- ``FeatureDB.bed12()`` **now refuses a feature its blocks do not span**, with
   gffutils' exact message (``"End of last exon (600) does not match end of feature (1000)"``). BED12's blockStarts are offsets from chromStart and the
   last block has to reach chromEnd, so emitting a line for a transcript whose
   exons stop short produces a record naming a range it does not cover -- and
@@ -350,7 +422,7 @@ Changed (breaking)
   The inputs that did were synthetic test fixtures declaring transcripts wider
   than their children, which have been corrected.
 
-- **``FeatureDB.region_batched()`` now raises on a region it cannot parse,
+- ``FeatureDB.region_batched()`` **now raises on a region it cannot parse,
   instead of silently dropping it.** The ``query_idx`` column is documented as
   the way to map results back to the input, and it was assigned over the rows
   that *survived* normalization — so a single unusable region renumbered every
@@ -373,11 +445,11 @@ Changed (breaking)
 - **PyO3 0.22 → 0.29.** Migrated off the removed ``*_bound`` constructors,
   ``into_py``, ``value_bound``, and ``get_type_bound``.
 
-- **``FeatureDB.schema`` is a method again**, not a property. gffutils documents
+- ``FeatureDB.schema`` **is a method again**, not a property. gffutils documents
   ``db.schema()`` and callers write it that way; as a property the documented
   call raised ``TypeError: 'str' object is not callable``.
 
-- **``merge_strategy="error"`` is now the real default**, so a file with
+- ``merge_strategy="error"`` **is now the real default**, so a file with
   duplicate IDs raises instead of loading with silently renamed rows.
   Ingestion previously renamed every duplicate to ``<id>__2`` unconditionally,
   which made the documented default unreachable. ``create_unique`` now produces
@@ -386,8 +458,8 @@ Changed (breaking)
   ``merge`` falls back to ``create_unique``, because that table exists so a later
   merge can find the sibling rows.
 
-- **``DuplicateIDError``, ``AttributeStringError`` and ``EmptyInputError`` now
-  subclass ``ValueError``.** gffutils exports ``DuplicateIDError`` but raises a
+- ``DuplicateIDError``, ``AttributeStringError`` **and** ``EmptyInputError``
+  **now subclass** ``ValueError``\ **.** gffutils exports ``DuplicateIDError`` but raises a
   bare ``ValueError("Duplicate ID ...")``, so real callers write
   ``except ValueError``. Subclassing satisfies both the documented type and
   those callers instead of forcing a choice. ``FeatureNotFoundError`` is
@@ -398,12 +470,12 @@ Changed (breaking)
 Changed
 ~~~~~~~
 
-- **``rust/Cargo.lock`` is now committed.** ``rust/Cargo.toml`` and ``MANIFEST.in``
+- ``rust/Cargo.lock`` **is now committed.** ``rust/Cargo.toml`` and ``MANIFEST.in``
   both already claimed it was shipped; ``.gitignore`` excluded it. Dependency
   resolution for the published wheel therefore varied with build time and
   platform, contradicting the declared MSRV.
 
-- **Coverage flags moved out of the default ``pytest`` invocation.** ``addopts``
+- **Coverage flags moved out of the default** ``pytest`` **invocation.** ``addopts``
   hard-required ``pytest-cov`` (absent from the ``dev`` extra) and made a bare
   ``pytest`` fail on coverage rather than on tests. Coverage is now applied
   explicitly in CI. ``pytest-cov`` was added to the ``dev`` extra.
@@ -441,7 +513,7 @@ Changed
 Added
 ~~~~~
 
-- **``FeatureDB.to_table()``** — the whole database, or a filtered slice of it,
+- ``FeatureDB.to_table()`` — the whole database, or a filtered slice of it,
   as one ``pyarrow.Table`` / ``pandas.DataFrame`` / ``polars.DataFrame``. The
   columnar counterpart to ``all_features()``: same filters (``featuretype``,
   ``limit``, ``strand``, ``order_by``, ``completely_within``), but no ``Feature`` object
@@ -456,7 +528,7 @@ Added
   row, which on a whole-genome corpus is millions of allocations and dominates
   everything else.
 
-- **``gffbase stats``** — a summary of what is actually in a database: feature
+- ``gffbase stats`` — a summary of what is actually in a database: feature
   counts broken down by type with percentages, sequence count and names,
   discontinuous-feature count, and how the database was built (format, mode,
   schema version, which spatial index). The first question anyone asks of an
@@ -470,11 +542,11 @@ Added
   README advertises -- ``import gffbase as gffutils`` -- raised ``AttributeError``
   on the first line of any script using one.
 
-- **``FeatureDB.method()``**, gffutils' alias for ``all_features()``. It is a plain
+- ``FeatureDB.method()``, gffutils' alias for ``all_features()``. It is a plain
   alias upstream too, and ported code calls it.
 
-- **``FeatureDB`` connection lifecycle: ``close()``, context-manager support, and
-  ``read_only=True``.** DuckDB holds an exclusive lock on the database file for
+- ``FeatureDB`` **connection lifecycle:** ``close()``\ **, context-manager
+  support, and** ``read_only=True``\ **.** DuckDB holds an exclusive lock on the database file for
   the life of a writable connection, and there was no way to release it — no
   ``close``, no ``__enter__``/``__exit__``, no ``__del__``. Two things were therefore
   impossible: replacing or deleting a database file while any handle existed
@@ -507,12 +579,12 @@ Added
   remedy, rather than DuckDB's bare ``ConnectionException``. Both new exceptions
   subclass ``ValueError``, so existing ``except ValueError`` handlers keep working.
 
-- **``FeatureDB`` accepts ``pathlib.Path``.** The constructor took ``str`` only and
+- ``FeatureDB`` **accepts** ``pathlib.Path``. The constructor took ``str`` only and
   rejected everything else with ``TypeError: dbfn must be a path`` — while
   refusing an actual ``Path``. ``create_db`` already accepted one, so the two
   entry points disagreed about their own documented type.
 
-- **A ``gffbase`` command-line interface**, registered as a console script and
+- **A** ``gffbase`` **command-line interface**, registered as a console script and
   runnable as ``python -m gffbase``. Ten commands: ``create``, ``fetch``,
   ``children``, ``parents``, ``region``, ``search``, ``rmdups``, ``sanitize``, plus
   gffbase-only ``validate`` and ``migrate``.
@@ -580,7 +652,7 @@ Added
   location, so the oracle's call raises ``TypeError`` on any current install.
   The round trip here is exact for ``+``, ``-`` and ``.``.
 
-- **``create_db`` accepts an iterable of features**, not just a path or a
+- ``create_db`` **accepts an iterable of features**, not just a path or a
   string. This is what ``_FeatureIterator`` exists for upstream and what
   ``helpers.sanitize_gff_db`` needs.
 
@@ -631,7 +703,7 @@ Added
   byte-faithful; ``normalized=True`` re-renders column 9 from the parsed mapping,
   which is what the oracle always does.
 
-- **``gffbase.migrate``** — ``migrate_v1_to_v2()`` upgrades in place, in one
+- ``gffbase.migrate`` — ``migrate_v1_to_v2()`` upgrades in place, in one
   transaction, idempotently, and is run automatically when a v1 database is
   opened (``FeatureDB(..., upgrade="auto"|"never"|"error")``). It is structural
   only and changes no query result, which is what makes doing it unasked
@@ -640,7 +712,7 @@ Added
   Tested against a real v1 database built by the pre-v2 code, committed as
   ``tests/data/v1/``.
 
-- **``gffbase.validate``** — 14 post-ingest invariants, run automatically at the
+- ``gffbase.validate`` — 14 post-ingest invariants, run automatically at the
   end of a strict-mode ingest and available as ``db.validate()``. Every check is
   a single set-based query. The one that matters most is INV-5: a fused
   feature whose envelope is narrower than its segments simply stops being
@@ -649,7 +721,7 @@ Added
 - ``mypy`` runs clean over ``python/gffbase`` and is a CI gate, backing the
   ``Typing :: Typed`` classifier that 0.1.1 made honest by shipping ``py.typed``.
 
-- **Full ``create_db`` option fidelity.** Twelve parameters were previously
+- **Full** ``create_db`` **option fidelity.** Twelve parameters were previously
   accepted and ignored; every one now changes behaviour or raises.
 
   - ``gffbase._options.IngestOptions`` validates the whole option set before any
@@ -700,7 +772,7 @@ Added
   - ``tests/data/upstream/`` vendors the upstream corpus with full MIT
     attribution and provenance.
 
-- **``mode="compat"`` / ``mode="strict"``.** Validation conflated two independent
+- ``mode="compat"`` / ``mode="strict"``. Validation conflated two independent
   questions -- which rules apply, and what a violation does. They are now
   separate axes (``validation``, ``on_error``) behind one switch, with ``compat`` as
   the default for ``create_db`` and ``strict`` for ``parse_gff``. ``strict=`` keeps
@@ -744,12 +816,12 @@ Fixed
   raised ``expected at least 9 tab-separated fields, found 1``. Both engines now
   trim before anything inspects the line.
 
-- **A coordinate past ``i64`` was accepted by the Python fallback** (Python ints
+- **A coordinate past** ``i64`` **was accepted by the Python fallback** (Python ints
   are unbounded) and deferred the failure to INSERT time, far from the line
   that caused it, and only on one engine. It is now rejected at the line, as
   the Rust engine already did.
 
-- **``helpers.example_filename`` could not find the canonical example.**
+- ``helpers.example_filename`` **could not find the canonical example.**
   ``FBgn0031208.gff`` -- the fixture every gffutils tutorial opens -- is vendored
   under ``tests/data/upstream/``, but that directory was not on the search path,
   so the call failed in a source checkout with the file sitting on disk. The
@@ -757,13 +829,13 @@ Fixed
   the checkout but not the binary wheel, and names the install that works,
   rather than leaving the reader hunting for a typo.
 
-- **``"missing" in db`` raised instead of returning ``False``.** ``gffutils.FeatureDB``
+- ``"missing" in db`` **raised instead of returning** ``False``. ``gffutils.FeatureDB``
   defines neither ``__contains__`` nor ``__iter__``, so Python falls back to
   iterating via ``__getitem__``, which raises on the first missing key -- the
   ``in`` operator failing on precisely the question it exists to answer.
   Declared as an intentional deviation.
 
-- **``region()`` crashed on every database containing a discontinuous feature.**
+- ``region()`` **crashed on every database containing a discontinuous feature.**
   DuckDB's R-tree scan optimizer builds a projection map for the index scan,
   and any subquery sharing that ``WHERE`` clause throws its column numbering
   out — so pairing ``ST_Intersects`` with the multipart recheck aborted the
@@ -779,7 +851,7 @@ Fixed
   does the same work — the recheck filters its output rather than being fused
   into it.
 
-- **``children_batched(level=None)`` silently returned a truncated result set.**
+- ``children_batched(level=None)`` **silently returned a truncated result set.**
   ``_batched_relation`` carried its own copy of the cache-vs-dynamic decision,
   and that copy was missing the overflow check: for ``level=None`` it asked only
   whether the closure was *empty*, never whether the hierarchy ran deeper than
@@ -794,7 +866,7 @@ Fixed
   single query, so one overflowing anchor sends the whole batch to the
   dynamic CTE. ``parents_batched`` had the same defect.
 
-- **``delete()`` left orphaned rows in the transitive closure.** It removed only
+- ``delete()`` **left orphaned rows in the transitive closure.** It removed only
   the closure rows that *named* the deleted id as ancestor or descendant. A
   depth-2 row names neither when it merely routed *through* the deleted
   node — delete the mRNA from ``gene → mRNA → exon`` and ``gene → exon`` survives —
@@ -802,7 +874,7 @@ Fixed
   that no longer existed. The closure is now rebuilt from ``edges``, which is
   what ``update()`` already did.
 
-- **``update()`` and ``add_relations()`` left the dispatcher reading stale corpus
+- ``update()`` **and** ``add_relations()`` **left the dispatcher reading stale corpus
   statistics.** ``_closure_max_depth`` and ``_n_multipart`` are read once when a
   handle opens and trusted for its lifetime, but both mutators rebuilt the
   closure without refreshing either the instance attributes or the ``meta``
@@ -810,7 +882,7 @@ Fixed
   before the write, and a handle opened later disagreed with the one that did
   it. All three mutators now refresh and persist both.
 
-- **``DataIterator`` never dispatched on its input.** The factory handed
+- ``DataIterator`` **never dispatched on its input.** The factory handed
   everything to the file-path iterator, so a URL was opened as a filename and
   an in-memory feature iterable raised — while ``_UrlIterator`` and
   ``_FeatureIterator`` sat unreachable beneath it, their docstrings describing a
@@ -821,7 +893,7 @@ Fixed
   support. ``_FeatureIterator.__iter__`` returned the underlying list's own
   iterator, bypassing ``__next__`` and silently dropping ``transform``.
 
-- **``cargo test`` could not link on macOS.** ``extension-module`` was enabled
+- ``cargo test`` **could not link on macOS.** ``extension-module`` was enabled
   unconditionally in ``rust/Cargo.toml`` *and* passed by maturin
   (``features = ["pyo3/extension-module"]``). Enabling it tells the linker not
   to link libpython, which is right for the wheel and fatal for a test binary,
@@ -829,14 +901,14 @@ Fixed
   arm64" — on the platform ``CONTRIBUTING.md`` tells contributors to run it.
   maturin still supplies the feature for the wheel.
 
-- **``.github/workflows/testpypi-release.yml`` could not be loaded by GitHub
+- ``.github/workflows/testpypi-release.yml`` **could not be loaded by GitHub
   Actions.** Its ``verify`` job declared ``name:`` and ``runs-on:`` twice. PyYAML's
   ``safe_load`` tolerates duplicate keys — last one wins — so a naive parse
   looked fine; the real parser rejects them, which means the release-candidate
   dress rehearsal had never been able to run. ``tests/test_release_hygiene.py``
   now parses every workflow with a duplicate-key-strict loader.
 
-- **The sdist shipped a ``MANIFEST.in`` naming five files it did not contain.**
+- **The sdist shipped a** ``MANIFEST.in`` **naming five files it did not contain.**
   maturin does not read ``MANIFEST.in`` — ``pyproject.toml`` says so — so
   ``CODE_OF_CONDUCT.md``, ``CONTRIBUTING.md``, ``SECURITY.md``, ``CITATION.cff`` and
   ``MIGRATION.md`` were referenced and absent. Found by unpacking a real sdist
@@ -864,7 +936,7 @@ Fixed
 - Both release workflows claimed ``abi3-py39`` covering "CPython 3.9-3.13"; the
   wheels are ``abi3-py310`` covering 3.10–3.14.
 
-- **``gffbase migrate --coalesce`` crashed on every invocation.** The command
+- ``gffbase migrate --coalesce`` **crashed on every invocation.** The command
   passed a path to ``coalesce_multipart``, which takes an open connection —
   ``AttributeError: 'str' object has no attribute 'execute'``. It also needed
   the connection to have the spatial extension loaded, or DuckDB refuses to
@@ -927,7 +999,7 @@ Fixed
   ``tests/test_dialect_determinism.py``, which compares across fresh
   interpreters because a single-process test cannot see this class of bug.
 
-- **Directives kept their ``##`` prefix.** ``db.directives`` is a documented
+- **Directives kept their** ``##`` **prefix.** ``db.directives`` is a documented
   attribute and the oracle stores directives with the prefix stripped
   (``gff-version 3``, not ``##gff-version 3``), so every consumer reading them
   saw the wrong strings.
@@ -935,11 +1007,11 @@ Fixed
 - **Every derived-feature method disagreed with the oracle**, and there was no
   differential test over any of them — which is how each of these survived.
 
-  - **``merge_all`` did not do the two things it documents.** It returned every
+  - ``merge_all`` **did not do the two things it documents.** It returned every
     input feature, merged or not, so the result was the size of the database
     rather than the number of merges; and it persisted nothing, despite the
     docstring promising that "the resulting records are added to the
-    database". It also **accepted ``exclude_components`` and ignored it**, so
+    database". It also **accepted** ``exclude_components`` **and ignored it**, so
     asking for the components to be removed silently did nothing. It now emits
     only genuine merges, inserts them, and either deletes the components or
     links them with a ``Parent`` pointing at the merged feature.
@@ -948,25 +1020,25 @@ Fixed
     ``children`` unconditionally, so every feature looked merged. A run of one
     now gets ``no_children``.
 
-  - **``merge()`` extended only ``end``.** With a caller-supplied ``merge_order``
+  - ``merge()`` **extended only** ``end``. With a caller-supplied ``merge_order``
     the run is not necessarily start-sorted, so a merged feature could be
     silently truncated at the front. It also re-sorted its input, discarding
     the very ordering ``merge_all`` had asked for; assigned no id, so the merged
     feature could not be deleted or linked; and never flagged ambiguity, so a
     merge across strands kept the first component's strand rather than ``.``.
 
-  - **``create_introns`` computed introns across transcript boundaries.**
+  - ``create_introns`` **computed introns across transcript boundaries.**
     ``grandparent_featuretype="gene"`` was treated as the direct anchor, pooling
     every isoform's exons into one sorted list. On ``FBgn0031208.gff`` that was
     1 "intron" where the oracle finds 3, and for any multi-isoform gene the
     gaps produced were not introns of anything.
 
-  - **``create_splice_sites`` emitted 1 bp sites.** A splice site is a
+  - ``create_splice_sites`` **emitted 1 bp sites.** A splice site is a
     dinucleotide, so these named half of one. They were also always typed
     ``splice_site`` rather than by position in the transcript, and carried no
     attributes at all.
 
-  - **``interfeatures``** stamped no derived ``source``, produced a nonsense
+  - ``interfeatures`` stamped no derived ``source``, produced a nonsense
     feature spanning two different sequences whenever consecutive inputs
     changed seqid, typed unnamed gaps with a constant instead of
     ``inter_<a>_<b>``, never set ``strand`` to ``.`` on a mismatch, ignored
@@ -974,23 +1046,23 @@ Fixed
     oracle takes one — so any gffutils caller passing a callback got a
     ``TypeError``.
 
-  - **``bed12``** put a trailing comma on ``blockSizes``/``blockStarts`` (making
+  - ``bed12`` put a trailing comma on ``blockSizes``/``blockStarts`` (making
     every line differ), accepted ``thin_featuretype`` and ignored it with no
     mutual-exclusion error, and on a feature with no CDS set both thickStart
     and thickEnd to ``chromStart`` — rendering it entirely *thin*, the opposite
     of what the oracle draws.
 
-  - **``children_bp``** swallowed unknown keyword arguments, including the
+  - ``children_bp`` swallowed unknown keyword arguments, including the
     removed ``ignore_strand``, returning a plausible number instead of saying no.
 
-  - **Three ``merge_criteria`` predicates were distance tests, not range
+  - **Three** ``merge_criteria`` **predicates were distance tests, not range
     tests.** ``overlap_end_threshold`` and friends computed
     ``abs(acc.end - cur.start) <= threshold``, which *rejects a feature lying
     entirely inside the accumulator* — the most unambiguous overlap there is.
     The three existing tests passed under both formulas and so had never
     pinned this; the case that separates them is now tested directly.
 
-  - **``add_relation`` discarded its callbacks' return values** and wrote
+  - ``add_relation`` **discarded its callbacks' return values** and wrote
     nothing back, so ``child_func=assign_child`` set an attribute on a throwaway
     object. Callbacks were also skipped entirely when ids were passed instead
     of ``Feature``\ s. A batched ``add_relations`` was added because the closure is
@@ -1045,22 +1117,22 @@ Fixed
 
   Three strict xfails retire.
 
-- **Every synthesized GTF gene and transcript was invisible to R-tree
-  ``region()`` queries.** ``seqid_map`` was populated during the R-tree build,
+- **Every synthesized GTF gene and transcript was invisible to R-tree**
+  ``region()`` **queries.** ``seqid_map`` was populated during the R-tree build,
   which runs *after* GTF synthesis — so the pass that stamps a synthesized
   row's ``seqid_y`` and ``bbox`` joined an empty table and those rows kept a NULL
   envelope. On ``ensembl_gtf.txt`` the R-tree path returned 32 features where the
   B-tree path returned 33, silently omitting the transcript itself. Found by
   the new INV-8 within minutes of the validator existing.
 
-- **``closure`` could contain duplicate rows.** GFF3 permits a DAG — a feature
+- ``closure`` **could contain duplicate rows.** GFF3 permits a DAG — a feature
   may name several ``Parent``\ s — so the same descendant is reachable by two paths
   of equal length, and the recursive CTE's ``UNION ALL`` emitted one row per
   path. On ``random-chr.gff``, ``children(gene, level=2)`` returned five features
   of which only three were distinct. gffutils never had this because its
   ``relations`` table is keyed on exactly that triple.
 
-- **A cyclic ``Parent`` graph made the hierarchy walks lap rather than
+- **A cyclic** ``Parent`` **graph made the hierarchy walks lap rather than
   terminate.** All three recursive walks followed the cycle until the depth
   budget ran out, so a two-feature cycle made ``children()`` return 64 rows — the
   same two features, thirty-two times each. Each walk now carries its path and
@@ -1076,7 +1148,7 @@ Fixed
   renames on success, so a failed ``force=True`` overwrite also leaves the
   original intact; being handed such a file from elsewhere is refused at open.
 
-- **The UCSC ``bin`` column in the SQLite export was computed one level off** —
+- **The UCSC** ``bin`` **column in the SQLite export was computed one level off** —
   ``_BINOFFSETS`` was missing its top entry and used 0 where the oracle uses 1,
   differing from ``gffutils.bins`` on ten of eleven representative ranges. Since
   ``gffutils.FeatureDB.region(completely_within=True)`` filters on ``bin``, an
@@ -1112,7 +1184,7 @@ Fixed
   reported, but the record is kept. Corpus-wide result: **0 rejections, and 23
   of 28 files now produce byte-identical feature counts.**
 
-- **An embedded FASTA section without a ``##FASTA`` directive was parsed as
+- **An embedded FASTA section without a** ``##FASTA`` **directive was parsed as
   features.** A bare ``>`` line ends the feature section in gffutils; gffbase
   only stopped at the directive, so ``FBgn0031208.gff`` gained three junk
   features from its sequence lines.
@@ -1146,7 +1218,7 @@ Fixed
   guard added earlier in this release was unreachable and the sort raised
   ``TypeError`` first.
 
-- **``merge_strategy="merge"`` did not actually merge, as far as any caller
+- ``merge_strategy="merge"`` **did not actually merge, as far as any caller
   could tell.** It folded the incoming attributes into the ``attributes`` table
   but never regenerated ``attributes_blob``, and ``Feature.attributes`` reads the
   blob -- so the table held both values and the feature reported one. Merged
@@ -1154,7 +1226,7 @@ Fixed
 
 - Removed ``ingest._derive_id``, dead since the id_spec work replaced it.
 
-- **``import gffbase`` crashed on Python 3.9.** ``ParsedFeature`` used
+- ``import gffbase`` **crashed on Python 3.9.** ``ParsedFeature`` used
   ``@dataclass(slots=True)``, which is Python 3.10+, while the package declared
   ``requires-python >=3.9``, shipped an ``abi3-py39`` wheel, and advertised a 3.9
   classifier. Every 3.9 install succeeded and then failed on first import with
@@ -1184,12 +1256,12 @@ Removed
   files deleted in ``44268ce``, plus a ``recursive-include python/gffbase *.pyi``
   matching no files.
 
-- **The ``memmap2`` Rust dependency**, which was declared and never used — no
+- **The** ``memmap2`` **Rust dependency**, which was declared and never used — no
   ``Mmap`` appears anywhere in the crate. An unused dependency is still
   compiled, still locked, and still part of the supply chain of every
   published wheel.
 
-- **The ``bench/`` directory.** It was the predecessor of ``benchmarks/``, and
+- **The** ``bench/`` **directory.** It was the predecessor of ``benchmarks/``, and
   ``benchmarks/common.py`` reached into it for cached legacy timings, which is
   how measurements from an older corpus ended up presented as current ones.
   Its small result files are preserved under
@@ -1207,7 +1279,7 @@ Intentional deviations
 ~~~~~~~~~~~~~~~~~~~~~~
 
 - **Attribute keys are stripped of surrounding whitespace, and the empty key a
-  trailing ``;`` produces is dropped.** The oracle keeps both literally, and on
+  trailing** ``;`` **produces is dropped.** The oracle keeps both literally, and on
   ``FBgn0031208.gff`` line 84 that costs it real data: the line separates
   attributes with ``;`` while the file's inferred separator is ``;``, so the key
   is stored as ``' Parent'``, relationship building looks up ``'Parent'``, and the

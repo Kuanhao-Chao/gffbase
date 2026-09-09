@@ -25,23 +25,33 @@ concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: false
 
-# The built HTML is pushed to the gh-pages branch, which GitHub Pages serves
-# at https://khchao.com/gffbase/ as a project page under the user site.
-permissions:
-  contents: write
+# Nothing at the workflow level. A workflow-level grant reaches every job,
+# including any added later; the write is needed by exactly one job and is
+# declared there.
+permissions: {}
 
 jobs:
   deploy:
     name: Build & publish the Sphinx site
     runs-on: ubuntu-latest
+    permissions:
+      # The built HTML is force-pushed to the gh-pages branch, which GitHub
+      # Pages serves at https://khchao.com/gffbase/ as a project page under
+      # the user site. That push is the only write this workflow performs.
+      contents: write # force-push the built site to gh-pages; nothing else writes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # gh-deploy compares against the gh-pages branch's history;
           # a shallow clone breaks that comparison.
           fetch-depth: 0
+          # The publish step below pushes with an explicit token URL into a
+          # freshly `git init`-ed tree, so it never reads the checkout's
+          # stored credentials. Leaving them in `.git/config` would only make
+          # the token readable to every later step in the job.
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           # Sphinx 9 requires >= 3.12. Pinned rather than floating so a runner
           # image update cannot change the toolchain under the site.
@@ -52,7 +62,13 @@ jobs:
       # a Rust extension, so cargo must be available at `pip install -e .` time.
       # Without it the install falls back to _pyfallback, and the native module
       # is the production path and the one we want documented.
-      - uses: dtolnay/rust-toolchain@stable
+      # The SHA is on the action's `stable` branch, whose action.yml defaults
+      # the `toolchain` input to `stable`; stated explicitly so the intent
+      # survives a re-pin. See the note in ci.yml -- the per-version branches
+      # carry different action.yml files and are not interchangeable.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
 
       - name: Install gffbase + docs extras
         run: |
@@ -75,6 +91,10 @@ jobs:
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          # Through the environment, not `${{ }}` inside `run:`. An expression
+          # is substituted into the script *before* the shell sees it, so the
+          # token would land in the generated script on disk.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           # `.nojekyll` is load-bearing: without it Pages runs the output
@@ -88,5 +108,5 @@ jobs:
           git add -A
           git commit -q -m "Deploy docs from ${GITHUB_SHA}"
           git push -q --force \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             gh-pages
