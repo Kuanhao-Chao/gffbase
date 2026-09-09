@@ -1,0 +1,3 @@
+chr1	src	exon	100	200	.	+	.	gene_id "ENSG1"; transcript_id "ENST1"; exon_number "1";
+chr1	src	exon	300	500	.	+	.	gene_id "ENSG1"; transcript_id "ENST1"; exon_number "2";
+chr2	src	exon	1000	1500	.	-	.	gene_id "ENSG2"; transcript_id "ENST2"; note "weird; with semi";

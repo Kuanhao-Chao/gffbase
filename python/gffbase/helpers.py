@@ -67,13 +67,17 @@ def example_filename(fn: str) -> str:
     directory bundled with the source distribution.
     """
     here = Path(__file__).resolve().parent
+    packaged = here / "data"
     candidates = [
-        here / "data" / fn,
-        here.parent.parent / "tests" / "data" / fn,
-        # The 32 fixtures copied verbatim from the gffutils corpus live here,
-        # and they are exactly the names upstream's own examples use --
+        packaged / fn,
+        # The fixtures copied verbatim from the gffutils corpus live here, and
+        # they are exactly the names upstream's own examples use --
         # `FBgn0031208.gff` among them. Leaving this off the search path made
-        # the canonical example fail even in a source checkout.
+        # the canonical example fail even with the file sitting on disk.
+        packaged / "upstream" / fn,
+        # A checkout also resolves names that are not shipped, so the test
+        # suite and the docs can reach the whole corpus.
+        here.parent.parent / "tests" / "data" / fn,
         here.parent.parent / "tests" / "data" / "upstream" / fn,
     ]
     for c in candidates:
@@ -81,14 +85,10 @@ def example_filename(fn: str) -> str:
             return str(c)
     raise FileNotFoundError(
         f"example file not found: {fn}\n"
-        "Example fixtures live in `tests/data/`, which is part of the source "
-        "tree and the sdist but is NOT installed -- pip installs the package "
-        "directory, and `tests/` is not inside it. So this helper works from "
-        "a git checkout or an unpacked sdist, and not from any `pip install "
-        "gffbase` environment, including one built from source.\n"
-        "Either clone the repository (or unpack the sdist) and run from its "
-        "root, or pass your own file: every gffbase entry point that takes an "
-        "example here takes a path."
+        f"Searched {packaged} and its `upstream/` subdirectory, which ship "
+        "inside the installed package. Check the spelling against "
+        "`gffbase.helpers.example_filename`'s corpus, or pass your own file: "
+        "every gffbase entry point that takes an example here takes a path."
     )
 
 
