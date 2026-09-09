@@ -149,7 +149,7 @@ Install
 
 .. warning::
 
-   PyPI currently provides 0.1.0. This site describes the unreleased 0.2.0
+   PyPI currently provides 0.1.0. This site describes the unreleased 0.2.0rc1
    candidate; verify the installed version, and use an exact reviewed commit
    for candidate testing.
 
@@ -220,8 +220,6 @@ See :doc:`content/installation` for the supported platforms, and
 
    content/testing
    content/roadmap
-   content/release_checklist
    content/changelog
    content/contributing
    content/security
-   content/advisory_sql_injection
