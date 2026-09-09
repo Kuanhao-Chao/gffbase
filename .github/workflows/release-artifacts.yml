@@ -192,16 +192,23 @@ jobs:
     env:
       EXPECTED_TARGET: ${{ matrix.target }}
       EXPECTED_VERSION: ${{ inputs.expected_version }}
-      WHEEL_DIR: ${{ runner.temp }}/release-wheel
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "${{ matrix.python-version }}" }
+      # `WHEEL_DIR` was a job-level `env:` reading `${{ runner.temp }}`, a
+      # context that does not exist at job level: GitHub substituted the empty
+      # string, so the download below landed in `$RUNNER_TEMP/release-wheel`
+      # while every consumer looked in `/release-wheel`. Defined once here and
+      # used by both, so the two cannot drift apart again.
+      - name: Resolve the wheel directory
+        shell: bash
+        run: echo "WHEEL_DIR=${RUNNER_TEMP}/release-wheel" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-package-${{ matrix.target }}
-          path: ${{ runner.temp }}/release-wheel
+          path: ${{ env.WHEEL_DIR }}
       - name: Reinspect and install the exact wheel
         shell: bash
         run: |
@@ -239,17 +246,20 @@ jobs:
     timeout-minutes: 60
     env:
       EXPECTED_VERSION: ${{ inputs.expected_version }}
-      SDIST_DIR: ${{ runner.temp }}/release-sdist
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
+      # See the wheel-smoke job above: `runner.temp` is unavailable in a
+      # job-level `env:` and silently becomes empty.
+      - name: Resolve the sdist directory
+        run: echo "SDIST_DIR=${RUNNER_TEMP}/release-sdist" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-package-sdist
-          path: ${{ runner.temp }}/release-sdist
+          path: ${{ env.SDIST_DIR }}
       - name: Reinspect, build, and install outside the checkout
         run: |
           python -m pip install --upgrade pip 'packaging==25.0'
@@ -289,8 +299,6 @@ jobs:
     env:
       EXPECTED_VERSION: ${{ inputs.expected_version }}
       SOURCE_SHA: ${{ inputs.source_sha }}
-      PACKAGE_DIR: ${{ runner.temp }}/release-packages
-      MANIFEST_DIR: ${{ runner.temp }}/release-verification
       RELEASE_REPOSITORY: ${{ github.repository }}
       RELEASE_WORKFLOW_REF: ${{ github.workflow_ref }}
       RELEASE_RUN_ID: ${{ github.run_id }}
@@ -300,10 +308,17 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
+      # As above: both of these were job-level `env:` entries reading
+      # `runner.temp`, which is empty there. `create-manifest` was pointed at
+      # `/release-packages` while the download wrote to `$RUNNER_TEMP`.
+      - name: Resolve the package and manifest directories
+        run: |
+          echo "PACKAGE_DIR=${RUNNER_TEMP}/release-packages" >> "$GITHUB_ENV"
+          echo "MANIFEST_DIR=${RUNNER_TEMP}/release-verification" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: release-package-*
-          path: ${{ runner.temp }}/release-packages
+          path: ${{ env.PACKAGE_DIR }}
           merge-multiple: true
       - name: Strictly inspect and bind every package byte
         run: |

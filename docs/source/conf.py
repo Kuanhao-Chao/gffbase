@@ -57,6 +57,18 @@ autodoc_default_options = {
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 
+# The docstrings are written in the project's house style, which -- like the
+# Markdown the site was converted from -- uses a single backtick for code.
+# RST's default role for a single backtick is `title-reference`, which renders
+# as italics, so every `order_by` and `FeatureDB` in an autodoc'd docstring came
+# out italicised prose rather than code. Sphinx does not warn: it is a valid
+# role doing exactly what it is defined to do.
+#
+# Setting the default role to `code` makes a single backtick mean what the
+# docstrings intend, for both the API pages and the hand-written ones. The
+# alternative was rewriting several hundred spans across 38 modules.
+default_role = "code"
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
 }

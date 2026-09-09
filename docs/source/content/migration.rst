@@ -174,12 +174,10 @@ database into a legacy ``.sqlite`` file when you need the old format.
 2. What you gain immediately, no code changes
 ---------------------------------------------
 
-Head-to-head against legacy ``gffutils`` across the five canonical human-genome
+Head-to-head against legacy ``gffutils`` across the four canonical human-genome
 annotation releases:
 
-.. raw:: html
-
-   <!-- BEGIN GENERATED: corpus-table -->
+.. BEGIN GENERATED: corpus-table
 
 .. list-table::
    :header-rows: 1
@@ -231,18 +229,16 @@ annotation releases:
      - **2,086**
      - 80 ms / 156 k desc
 
-.. raw:: html
+.. END GENERATED: corpus-table
 
-   <!-- END GENERATED: corpus-table -->
-
-.. raw:: html
-
-   <!-- BEGIN GENERATED: benchmark-provenance -->
+.. BEGIN GENERATED: benchmark-provenance
 
 | **Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O
 | **Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13
 | **Commit:** ``1d52bf6738e0`` · **Run:** 2026-08-15T22:56:50Z
-| *Generated from ``benchmarks/results/06_mega.json`` by ``tools/gen_benchmark_tables.py``. Do not edit by hand.*
+| *Generated from benchmarks/results/06_mega.json by tools/gen_benchmark_tables.py. Do not edit by hand.*
+
+.. END GENERATED: benchmark-provenance
 
 “Censored at” marks a legacy run killed at its safety valve without finishing;
 it supplies neither a completed wall nor a speedup. Method and fairness
@@ -386,13 +382,14 @@ file with ``gffutils.FeatureDB("legacy_compatible.sqlite")``.
   ``.duckdb`` by convention. The legacy SQLite layout is reachable via
   ``export_sqlite()`` (above) or the compat views.
 
-- **Disk size**: GFFBase databases are ~1.5× larger than legacy
-  SQLite -- the price of materializing the transitive closure and the R-tree,
-  which is what turns hierarchy and spatial queries into indexed lookups.
+- **Disk size**: GFFBase databases are 1.29× to 1.36× larger than legacy
+  SQLite across the benchmark corpora -- the price of materializing the
+  transitive closure and the R-tree, which is what turns hierarchy and spatial
+  queries into indexed lookups.
   Current measurements: `Performance <https://khchao.com/gffbase/content/performance.html>`__.
 
-- **Peak ingest RSS**: substantially higher -- a couple of GB against roughly
-  150 MB, on a whole-genome corpus. DuckDB allocates a vectorized ingest
+- **Peak ingest RSS**: substantially higher -- 1.6–5.6 GB against 174–495 MB
+  across the same corpora. DuckDB allocates a vectorized ingest
   buffer pool; cap it with ``GFFBASE_THREADS`` or
   ``PRAGMA memory_limit='512MB'`` if that matters more than wall time.
 
@@ -419,20 +416,20 @@ Behaviour changes that can change your results
 These are the ones worth reading before a production run. Each is small in
 isolation; each can change what your script computes.
 
-- **``merge_all`` now persists.** It always documented that "the resulting
+- ``merge_all`` **now persists.** It always documented that "the resulting
   records are added to the database", and did not. It also returned every
   input feature rather than only genuine merges, and accepted
   ``exclude_components`` while ignoring it. All three are fixed, so a script
   that called ``merge_all`` expecting a read-only generator now **writes to the
   database** and gets back a shorter list.
 
-- **``merge_criteria.overlap_*_threshold`` changed meaning.** They were distance
+- ``merge_criteria.overlap_*_threshold`` **changed meaning.** They were distance
   tests (``abs(acc.end - cur.start) <= threshold``) and are now range tests, so
   a feature lying entirely inside the accumulator merges where it did not
   before. If you pass one of these to ``merge`` or ``merge_all``, the set of
   features that merge has changed.
 
-- **``create_introns`` computes per transcript.** It treated
+- ``create_introns`` **computes per transcript.** It treated
   ``grandparent_featuretype="gene"`` as the direct anchor and pooled every
   isoform's exons into one list, so for a multi-isoform gene the "introns"
   spanned transcript boundaries. On ``FBgn0031208.gff`` that was 1 where the
@@ -442,7 +439,7 @@ isolation; each can change what your script computes.
   ``three_prime_cis_splice_site``), and carry the intron's merged attributes.
   They were 1 bp, always typed ``splice_site``, and attribute-less.
 
-- **``bed12`` output changed**: no trailing comma on ``blockSizes``/``blockStarts``,
+- ``bed12`` **output changed**: no trailing comma on ``blockSizes``/``blockStarts``,
   ``thin_featuretype`` is honoured rather than ignored, and a feature with no
   CDS is now marked entirely *thick* rather than entirely thin.
 
@@ -453,7 +450,7 @@ isolation; each can change what your script computes.
   where they previously did not. Note that space and non-ASCII are
   deliberately *not* encoded, per the specification.
 
-- **Raw SQL against ``features`` returns ENVELOPE coordinates** for a
+- **Raw SQL against** ``features`` **returns ENVELOPE coordinates** for a
   discontinuous feature — ``MIN(start)``, ``MAX(end)`` over its segments, not the
   coordinates of any one line. The ``segments_all`` view gives one row per
   physical input line, which is what a line-oriented consumer wants.
@@ -463,13 +460,52 @@ isolation; each can change what your script computes.
   coordinate space and are skipped by ``region()`` and the derived-feature
   methods.
 
-- **``type(f) is Feature`` is no longer universally true.** A fused feature is a
+- ``type(f) is Feature`` **is no longer universally true.** A fused feature is a
   ``MultipartFeature``, which subclasses ``Feature`` and overrides none of the
   compatibility surface. ``isinstance`` still holds.
 
-- **Derived features carry a mode-dependent ``source``.** ``gffutils_derived``
+- **Derived features carry a mode-dependent** ``source``. ``gffutils_derived``
   under ``mode="compat"``, ``gffbase_derived`` under ``mode="strict"``. If you
   filter on that string, ``db.derived_source`` gives you the right one.
+
+- ``order_by="score"`` **now sorts numerically.** Column 6 is stored as text,
+  because GFF3 allows ``.`` there and the oracle stores it as text too. Sorting
+  it as text ranked ``10 < 100 < 1e3 < 2.5 < 9``, so "the highest-scoring
+  features" came back wrong with nothing raised. gffbase applies
+  ``TRY_CAST(score AS DOUBLE)``; unscored features (``.``, or any non-numeric
+  value) become NULL and sort last. **gffutils has the same defect, so this is
+  a deliberate divergence** — a script that ranked by score against the oracle
+  and got a plausible-looking answer will now get a different, correct one.
+
+- **Query results have a total order.** None of the sort columns is unique —
+  features share a start, a featuretype, a score, and even ``file_order``
+  repeats, because GTF synthesis stamps a synthesized parent with the
+  ``MIN(file_order)`` of its children. DuckDB sorts in parallel and does not
+  preserve ties, so the same query over the same data could return tied rows in
+  a different order run to run. Every ordered query now appends ``id ASC`` as a
+  final tiebreak (ascending regardless of ``reverse``, so ``reverse=True``
+  stays the exact reverse of the forward order). Results are reproducible;
+  they are not necessarily in the order a previous run produced.
+
+- ``order_by`` **accepts several keys, and** ``reverse`` **applies to all of them.**
+  A tuple or list, or a comma-separated string, now works — previously only a
+  single name did: a tuple was interpolated as a Python repr, which DuckDB
+  parses as a constant struct and so sorted by nothing at all, and a list
+  raised ``TypeError: unhashable type: 'list'``. The whitelist also gained
+  ``id``, ``file_order`` and ``length``. Note that gffutils appends the
+  direction once, which in SQL reverses only the *last* key; gffbase applies it
+  to every key, which is what a caller asking for descending order means. Since
+  multi-key sorting did not work here at all before, there is no gffbase
+  behaviour being broken.
+
+- ``validation="ncbi"`` **accepts an unquoted GTF attribute value.** The GTF
+  specification quotes values, but unquoted bare tokens are widespread in real
+  files, and rejecting the line meant strict mode could not read annotation
+  releases that every other tool accepts. A value is now accepted if it is
+  properly double-quoted *or* is a bare token containing no whitespace, quote
+  or semicolon; anything else — an unbalanced quote, an embedded unescaped
+  quote, a value with spaces and no quotes — is still rejected. If you relied
+  on ``validation="ncbi"`` to reject unquoted GTF, it no longer does.
 
 .. _migration--command-line:
 
@@ -496,8 +532,8 @@ invocation.
   can still be read by legacy gffutils; they're not GFFBase
   databases.
 
-- ☐ **Audit your code for ``for x in ids: db.children(x, …)`` loops
-  and convert them to ``db.children_batched(ids, format='arrow')``.**
+- ☐ **Audit your code for** ``for x in ids: db.children(x, …)`` **loops
+  and convert them to** ``db.children_batched(ids, format='arrow')``\ **.**
   This is the only common change that requires user action.
 
 - ☐ If you have raw ``db.execute(...)`` SQL: use

@@ -266,6 +266,59 @@ def test_referenced_community_health_files_exist():
         assert (REPO_ROOT / name).is_file(), f"{name} is referenced but missing"
 
 
+def test_every_in_repo_path_named_in_prose_or_source_actually_exists():
+    """A repo-relative path cited as a pointer must resolve.
+
+    `docs/security/2026-sql-injection.md` was cited from `CHANGELOG.md`,
+    `SECURITY.md`, `security.rst`, `interface.py`, `ingest.py` and
+    `deviations.toml` -- six places -- for an entire release cycle after the
+    file moved. Nothing noticed, because a path in prose is just a string:
+    Sphinx does not resolve it, the linters do not read it, and the security
+    policy pointing at a missing advisory is exactly the pointer a reader
+    follows first.
+
+    Scoped to `docs/`, `tests/` and `benchmarks/` prefixes, which are the ones
+    used as pointers. A bare filename is not matched -- too many false
+    positives from example output and log excerpts.
+
+    The changelog is exempt, deliberately. It is a historical record: an entry
+    saying "`docs/cookbooks/index.md` claimed every snippet had been validated"
+    is a true statement about a file that existed under that name at the time,
+    and repointing it at the successor would make the record false. A pointer
+    written in the present tense there still has to resolve, but no rule can
+    tell the two apart, so the changelog is checked by review instead.
+    """
+    referenced = re.compile(r"\b((?:docs|tests|benchmarks)/[\w./-]*\.\w{1,5})\b")
+    sources = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "SECURITY.md",
+        REPO_ROOT / "CONTRIBUTING.md",
+        REPO_ROOT / "tests" / "parity" / "deviations.toml",
+        *sorted((REPO_ROOT / "docs" / "source").rglob("*.rst")),
+        *sorted((REPO_ROOT / "python" / "gffbase").rglob("*.py")),
+    ]
+    # `changelog.rst` is the changelog, published; same exemption.
+    sources = [s for s in sources if s.name != "changelog.rst"]
+
+    missing = []
+    for source in sources:
+        if not source.is_file():
+            continue
+        for path in set(referenced.findall(source.read_text(encoding="utf-8"))):
+            # A glob or a placeholder is not a claim that a file is there.
+            if any(ch in path for ch in "*?<>{}"):
+                continue
+            # `benchmarks/out/` holds generated results, produced by running a
+            # benchmark and not committed. Naming one is an instruction, not a
+            # claim that it is present in a fresh clone.
+            if path.startswith("benchmarks/out/"):
+                continue
+            if not (REPO_ROOT / path).exists():
+                missing.append(f"{source.relative_to(REPO_ROOT)} -> {path}")
+
+    assert not missing, "referenced paths that do not exist:\n" + "\n".join(sorted(missing))
+
+
 def test_cargo_lock_is_committed():
     """Without a lock file the published wheel's dependency graph varies by
     build host, which makes the declared MSRV unverifiable."""
@@ -394,6 +447,137 @@ def test_the_documented_table_count_is_right():
         f"schema.py defines {tables} tables; README says otherwise"
     )
     assert f"{views} compatibility" in readme, f"schema.py defines {views} views"
+
+
+def test_the_two_changelogs_carry_the_same_entries():
+    """`CHANGELOG.md` and `docs/source/content/changelog.rst` are the same
+    document in two markups, and nothing kept them together.
+
+    They are maintained by hand, not generated, so an entry added to one is
+    simply absent from the other -- which is what happened to four breaking
+    `order_by` / `validation` changes: written into the Markdown, missing from
+    the page users actually read.
+
+    Compared structurally rather than textually: same section names, same
+    number of top-level entries in each. That is strict enough to catch a
+    forgotten entry and loose enough to allow the markup to differ, which it
+    must.
+    """
+    import re
+
+    def markdown_sections(text: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        current = None
+        for line in text.split("\n"):
+            if line.startswith("### "):
+                current = line[4:].strip()
+                counts[current] = 0
+            elif line.startswith("## "):
+                current = None
+            elif current and line.startswith("- "):
+                counts[current] += 1
+        return counts
+
+    def rst_sections(text: str) -> dict[str, int]:
+        lines = text.split("\n")
+        counts: dict[str, int] = {}
+        current = None
+        for index, line in enumerate(lines):
+            underline = lines[index + 1].strip() if index + 1 < len(lines) else ""
+            if line.strip() and re.fullmatch(r"~{3,}", underline):
+                current = line.strip()
+                counts[current] = 0
+            elif line.strip() and re.fullmatch(r"-{3,}", underline):
+                current = None
+            elif current and line.startswith("- "):
+                counts[current] += 1
+        return counts
+
+    markdown = markdown_sections(_read("CHANGELOG.md"))
+    rst = rst_sections(_read("docs/source/content/changelog.rst"))
+
+    differences = [
+        f"{section}: CHANGELOG.md has {markdown.get(section)}, changelog.rst has {rst.get(section)}"
+        for section in sorted(set(markdown) | set(rst))
+        if markdown.get(section) != rst.get(section)
+    ]
+    assert not differences, "the two changelogs disagree:\n" + "\n".join(differences)
+
+
+def test_the_disk_and_rss_ranges_in_prose_match_the_measurements():
+    """Four pages quote a disk ratio and a legacy RSS figure in prose.
+
+    Prose is outside every generated block, so `gen_benchmark_tables.py
+    --check` cannot see it. All four had drifted: the pages said "~1.5×" where
+    the committed measurements give 1.29-1.36x, and "roughly 170 MB" for
+    legacy RSS, which is the *smallest* corpus (MANE, 174.50 MB) generalised
+    to all of them -- GENCODE is 495.06 MB, nearly three times that.
+
+    Recomputed here from `06_mega.json` so a refreshed campaign makes this
+    fail rather than making the prose quietly wrong again.
+    """
+    import json
+
+    results = REPO_ROOT / "benchmarks" / "results" / "06_mega.json"
+    if not results.is_file():
+        pytest.skip("benchmarks/results/06_mega.json is not present")
+    corpora = json.loads(results.read_text(encoding="utf-8"))["corpora"].values()
+
+    ratios = [c["gffbase"]["disk_bytes"] / c["legacy"]["disk_bytes"] for c in corpora]
+    legacy_rss = [c["legacy"]["peak_rss_mb"] for c in corpora]
+    gffbase_rss = [c["gffbase"]["peak_rss_mb"] / 1024 for c in corpora]
+
+    ratio_claim = f"{min(ratios):.2f}× to {max(ratios):.2f}×"
+    rss_claim = f"{min(legacy_rss):.0f}–{max(legacy_rss):.0f} MB"
+    gb_claim = f"{min(gffbase_rss):.1f}–{max(gffbase_rss):.1f} GB"
+
+    expected = {
+        "docs/source/content/faq.rst": [ratio_claim],
+        "docs/source/content/troubleshooting.rst": [ratio_claim, rss_claim, gb_claim],
+        "docs/source/content/migration.rst": [ratio_claim, rss_claim, gb_claim],
+    }
+    wrong = []
+    for rel, claims in expected.items():
+        text = _read(rel)
+        for claim in claims:
+            if claim not in text:
+                wrong.append(f"{rel}: expected to state {claim!r}")
+    assert not wrong, (
+        "prose disagrees with benchmarks/results/06_mega.json:\n"
+        + "\n".join(wrong)
+        + "\n\nRegenerate the campaign and update these sentences together."
+    )
+
+
+def test_the_headline_corpus_count_matches_the_corpora_actually_measured():
+    """"Across the five canonical human-genome annotations" -- there were four.
+
+    `06_mega.json` carries chess, gencode-gtf, mane and refseq; gencode-gff3 is
+    in the display order but was never measured. The generated table directly
+    below the sentence showed four rows while the sentence said five, and the
+    README went further and said "every canonical human-genome annotation".
+
+    The corpus *set* legitimately has five members -- `download_corpora.py`
+    fetches five, and `datasets.rst` and `methodology.rst` say so correctly.
+    What must match the measurements is the count in a head-to-head claim.
+    """
+    import json
+
+    results = REPO_ROOT / "benchmarks" / "results" / "06_mega.json"
+    if not results.is_file():
+        pytest.skip("benchmarks/results/06_mega.json is not present")
+    measured = len(json.loads(results.read_text(encoding="utf-8"))["corpora"])
+    word = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}[measured]
+
+    claims = {
+        "MIGRATION.md": f"across the {word} canonical human-genome",
+        "docs/source/content/migration.rst": f"across the {word} canonical human-genome",
+        "README.md": f"across {word} canonical human-genome annotations",
+    }
+    wrong = [rel for rel, claim in claims.items() if claim not in _read(rel)]
+    assert not wrong, (
+        f"{measured} corpora are measured, so these should say {word!r}: {wrong}"
+    )
 
 
 def test_published_benchmark_tables_match_the_committed_measurements():
@@ -619,10 +803,21 @@ def test_release_qualification_names_every_required_gate():
     missing = [command for command in required_commands if command not in qualification]
     assert not missing, f"release qualification is missing explicit gates: {missing}"
 
+    # Structural, not a literal string. This asserted `"needs: qualification"`
+    # as raw text, which stopped matching the moment the list gained `policy` --
+    # and would equally have matched a comment. What matters is that nothing
+    # can reach the artifact stage without qualification having run.
+    yaml = pytest.importorskip("yaml")
     for filename in (".github/workflows/release.yml", ".github/workflows/testpypi-release.yml"):
-        workflow = _read(filename)
-        assert "uses: ./.github/workflows/qualification.yml" in workflow
-        assert "needs: qualification" in workflow
+        spec = yaml.safe_load(_read(filename))
+        jobs = spec["jobs"]
+        assert jobs["qualification"]["uses"] == "./.github/workflows/qualification.yml"
+        artifacts_needs = jobs["artifacts"]["needs"]
+        if isinstance(artifacts_needs, str):
+            artifacts_needs = [artifacts_needs]
+        assert "qualification" in artifacts_needs, (
+            f"{filename}: artifacts must not start before qualification passes"
+        )
 
 
 def test_the_documented_parity_percentage_is_derivable():
@@ -1040,3 +1235,33 @@ def test_no_published_page_still_tells_a_reader_to_run_mkdocs():
                 offenders.append(f"{path.relative_to(REPO_ROOT)}:{number}: {line.strip()[:70]}")
 
     assert not offenders, "published pages still reference MkDocs:\n" + "\n".join(offenders)
+
+
+def test_readme_relative_links_and_images_resolve():
+    """GitHub and PyPI render the README from the repo root.
+
+    The absolute-URL check next to this one only ever looked at
+    `https://khchao.com/...`, so a relative path could rot unnoticed — and two
+    did. The logo `src` still pointed at `docs/assets/`, deleted in the Sphinx
+    migration, so the image at the very top of the README was broken on GitHub
+    AND on the PyPI project page; and `[the CLI reference](cli.md)` named a
+    root-level file that has never existed.
+    """
+    import re
+
+    readme = _read("README.md")
+    broken = []
+
+    for match in re.finditer(r"\[([^\]]{1,60})\]\((?!https?://|mailto:|#)([^)]+)\)", readme):
+        target = match.group(2).split("#")[0]
+        if target and not (REPO_ROOT / target).exists():
+            broken.append(f"link [{match.group(1)}]({match.group(2)})")
+
+    for match in re.finditer(r'src="([^"]+)"', readme):
+        target = match.group(1).split("#")[0]
+        if target.startswith(("http://", "https://")):
+            continue
+        if not (REPO_ROOT / target).exists():
+            broken.append(f"image src={match.group(1)}")
+
+    assert not broken, "README points at paths that do not exist: " + "; ".join(broken)

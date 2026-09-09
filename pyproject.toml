@@ -141,6 +141,9 @@ docs = [
     # what "clean" means with no change on our side. sphinx-design must be
     # >= 0.7.0: 0.6.x caps Sphinx below 9 and the resolve fails. Sphinx 9
     # itself requires Python >= 3.12, which is what the docs workflow pins.
+    # This extra needs Python >= 3.12 even though the package floor is 3.10:
+    # Sphinx 9 requires it. `pip install -e .[dev,test,docs]` will not
+    # resolve on 3.10 or 3.11 -- build the docs on 3.12 or newer.
     "Sphinx==9.1.0",
     "furo==2025.12.19",
     "sphinx-copybutton==0.5.2",
@@ -202,6 +205,14 @@ include = [
     # it -- an sdist could not run the compatibility suite at all.
     { path = "tests/parity/*.json", format = "sdist" },
     { path = "tests/parity/*.toml", format = "sdist" },
+    # Fourteen test modules import from `tools` and `benchmarks`, and
+    # `test_release_workflows.py` reads `.github/workflows/`. Without these
+    # the sdist suite fails at COLLECTION with ModuleNotFoundError -- a hard
+    # error, not a skip -- which made the comment above ("so users can
+    # rebuild from sdist and run the suite") untrue for a third of it.
+    { path = "tools/**/*.py", format = "sdist" },
+    { path = "benchmarks/**/*.py", format = "sdist" },
+    { path = ".github/workflows/*.yml", format = "sdist" },
 ]
 
 [tool.pytest.ini_options]

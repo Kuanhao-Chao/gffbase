@@ -202,9 +202,10 @@ the table ``region()`` queries.
 
 Instead:
 
-   **``features`` stays one row per logical feature. Its ``start``/``end``/``bbox``
-   become the envelope. ``segments`` is a SPARSE side table holding physical lines
-   only for features with ``n_segments > 1``.**
+   ``features`` **stays one row per logical feature. Its**
+   ``start``/``end``/``bbox`` **become the envelope.** ``segments`` **is a
+   SPARSE side table holding physical lines only for features with**
+   ``n_segments > 1``\ **.**
 
 Consequences, all of which fall out for free:
 
@@ -457,7 +458,7 @@ and both line numbers; ``"split"`` partitions by the constraint key, lowest
 5. Python model
 ---------------
 
-``MultipartFeature`` and ``FeatureSegment`` both **subclass ``Feature``**.
+``MultipartFeature`` and ``FeatureSegment`` both **subclass** ``Feature``.
 
 A sibling or wrapper class is wrong here, for a concrete reason:
 ``isinstance(x, Feature)`` is load-bearing at nine call sites inside gffbase
@@ -747,12 +748,12 @@ the end of a strict-mode ingest. All checks are single set-based queries.
 12. Open questions — all resolved
 ---------------------------------
 
-1. **``export_sqlite`` default flatten mode** — resolved as ``"gffutils"``
+1. ``export_sqlite`` **default flatten mode** — resolved as ``"gffutils"``
    (fan-out), and **hardcoded**: no ``flatten=`` parameter exists, because
    nothing wanted the alternative once the parity claim was the point.
    Verified by opening a gffbase export with real gffutils 0.14.
 
-2. **Default ``on_multipart_conflict``** — resolved as ``"error"``, as
+2. **Default** ``on_multipart_conflict`` — resolved as ``"error"``, as
    recommended. It only applies under ``mode="strict"``, which is opt-in, so
    refusing an ambiguous fusion is the conservative default; ``"split"``
    partitions the run instead.

@@ -74,6 +74,54 @@ def _markers(rel: str) -> tuple[str, str]:
     return (RST_BEGIN, RST_END) if rel.endswith(".rst") else (BEGIN, END)
 
 
+def markdown_prose_to_rst(md: str) -> str:
+    """Render a generated Markdown prose block as RST.
+
+    `markdown_table_to_list_table` returns its input untouched when there is no
+    pipe table, so the provenance block -- which is prose, not a table -- used
+    to pass through as Markdown and land in the RST source verbatim. Two
+    things then went wrong on the rendered page, neither of them a warning:
+
+      * Markdown's "two trailing spaces" line break means nothing in RST, so
+        the four lines collapsed into one run-on paragraph.
+      * A single-backtick span is *interpreted text* in RST, which the default
+        role renders as a title reference (italics), not as code. The commit
+        hash and the file paths came out italicised, with the backticks
+        sometimes visible.
+
+    A line block (`| `) reproduces the intended per-line break, and doubling
+    the backticks makes the spans literal. `**bold**` and `*italic*` mean the
+    same thing in both languages and are left alone.
+    """
+    lines = [line.rstrip() for line in md.strip().split("\n")]
+    out = []
+    for line in lines:
+        if not line:
+            out.append("")
+            continue
+        # RST inline markup does not nest. A whole-line emphasis containing a
+        # literal span renders the backticks as text -- the "Generated from
+        # ``...`` by ``...``" footnote came out with four visible pairs. Inside
+        # emphasis the backticks are dropped instead of doubled.
+        if re.fullmatch(r"\*[^*].*[^*]\*", line):
+            line = re.sub(r"`+([^`\n]+)`+", r"\1", line)
+        else:
+            # `` `x` `` -> ```` ``x`` ````, leaving an already-doubled span alone.
+            line = re.sub(r"(?<!`)`([^`\n]+)`(?!`)", r"``\1``", line)
+        out.append(f"| {line}")
+    return "\n".join(out)
+
+
+def markdown_to_rst(md: str) -> str:
+    """Route a generated block to the right RST rendering.
+
+    A pipe table becomes a list-table; anything else is prose.
+    """
+    if any(line.strip().startswith("|") for line in md.split("\n")):
+        return markdown_table_to_list_table(md)
+    return markdown_prose_to_rst(md)
+
+
 def markdown_table_to_list_table(md: str) -> str:
     """Render a generated Markdown pipe table as an RST list-table.
 
@@ -396,6 +444,12 @@ TARGETS = [
     "MIGRATION.md",
     "docs/source/index.rst",
     "docs/source/content/performance.rst",
+    # Added late. Its markers were HTML comments inside a `.. raw:: html`
+    # block, which `_markers()` never matches for a `.rst` file, so this page
+    # was invisible to both `--write` and `--check` and kept serving a frozen
+    # copy of a Mac run -- down to a `gffbase 0.2.0` that was never built --
+    # while every other page carried current numbers.
+    "docs/source/content/migration.rst",
 ]
 
 
@@ -434,7 +488,7 @@ def process(data: dict, *, write: bool) -> list[str]:
         touched = False
         for name, body in rendered.items():
             if rel.endswith(".rst"):
-                body = markdown_table_to_list_table(body)
+                body = markdown_to_rst(body)
             updated, found = inject(updated, name, body, rel=rel)
             touched = touched or found
         if not touched:

@@ -106,7 +106,7 @@ nobody can install would only mislead. Everything below is the delta from
 
   An audit of every remaining f-string SQL site found no third instance.
 
-  See `docs/security/2026-sql-injection.md` for both write-ups and mitigations
+  See `docs/advisory_sql_injection.rst` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
 - The thread-count environment variable is now **`GFFBASE_THREADS`**.
@@ -165,6 +165,29 @@ nobody can install would only mislead. Everything below is the delta from
   that covers it named -- rather than left reading 0%.
 
 ### Documentation
+
+- **The published site rendered literal backticks in 92 places.** Markdown
+  nests inline markup and reStructuredText does not, so the MkDocs conversion
+  carried `**\`order_by\` is validated**` across as `**``order_by`` is
+  validated**` — which RST renders with the backticks visible, because nothing
+  nests inside a strong span. `sphinx-build -W` reports nothing: it is valid
+  RST that means something else. Every span was split so both formattings
+  survive (``order_by`` **is validated**), and the site is now checked by
+  scanning the *rendered* HTML, which is the only thing that can see this
+  class at all.
+
+  Related: autodoc publishes docstrings verbatim, and the docstrings use a
+  single backtick for code in the project's house style. RST's default role
+  for a single backtick is `title-reference`, so every `FeatureDB` and
+  `order_by` on the API pages was rendering as italic prose. `default_role`
+  is now `code`, which makes several hundred spans across 38 modules mean what
+  they say without rewriting any of them.
+
+- **`tools/md2rst.py` is gone.** It was the one-shot MkDocs → RST converter.
+  The RST is now canonical and has been hand-edited since — including the
+  repairs above — so re-running it would silently clobber the corrected
+  sources with a fresh conversion of documents that no longer exist. No test
+  and no workflow invoked it.
 
 - **Documentation code is now executed by the test suite.**
   `tests/test_docs_snippets.py` extracts every fenced `python` block from
@@ -313,6 +336,55 @@ everything from scratch.
   cross-directory cache loader that presented old measurements as new ones.
 
 ### Changed (breaking)
+
+- **`order_by="score"` sorts numerically instead of lexicographically.** GFF
+  column 6 is stored as text -- the spec allows `.` there, and the oracle
+  stores it as text too -- so an ORDER BY on it ranked `10 < 100 < 1e3 < 2.5 <
+  9`. "The highest-scoring features" came back wrong, and nothing raised. The
+  whitelist entry is now `TRY_CAST(score AS DOUBLE)`, which yields NULL for `.`
+  and for any non-numeric value; DuckDB's NULLS LAST default then puts unscored
+  features at the end, which is what a caller asking to sort by score means.
+
+  **gffutils has the same defect**, so this is a deliberate divergence rather
+  than a parity fix, and it is recorded as one in
+  `tests/parity/deviations.toml`.
+
+- **Ordered queries now have a total order.** No sort column is unique --
+  features share a start, a featuretype, a score, and even `file_order`
+  repeats, because GTF synthesis stamps a synthesized parent with the
+  `MIN(file_order)` of its children. DuckDB sorts in parallel and does not
+  preserve ties, so the same query over the same database could return tied
+  rows in a different order on consecutive runs. Every ordered query now
+  appends `id ASC` as a final tiebreak.
+
+  The tiebreak is ascending regardless of `reverse`: it exists to be stable,
+  not meaningful, and flipping it alongside the caller's key would make
+  `reverse=True` something other than the exact reverse of the forward order
+  for tied rows. Results are now reproducible run to run; they are not
+  guaranteed to match the order a pre-0.2.0 run produced.
+
+- **`order_by` accepts multiple keys, and `reverse` applies to every one.** A
+  tuple, a list, or a comma-separated string all work. Only a single name
+  worked before: a tuple was interpolated as a Python repr, which DuckDB parses
+  as a constant struct, so the query silently sorted by nothing; a list raised
+  `TypeError: unhashable type: 'list'` from a set membership test. The
+  whitelist also gained `id`, `file_order` and `length`, none of which is in
+  the oracle's documented list but all of which are real columns callers sort
+  by.
+
+  gffutils appends the direction once, which in SQL reverses only the *last*
+  key. gffbase applies it to each key. Since multi-key sorting did not function
+  here at all, no working gffbase behaviour changes, and reproducing the
+  upstream shape in new code would be copying a defect.
+
+- **`validation="ncbi"` accepts an unquoted GTF attribute value.** The GTF
+  specification quotes values, but unquoted bare tokens are common in real
+  annotation releases, and rejecting them meant strict mode could not read
+  files every other tool accepts. A value now validates if it is properly
+  double-quoted *or* is a bare token containing no whitespace, `"` or `;`.
+  Still rejected: an unbalanced quote, an unescaped quote inside a quoted
+  value, and an unquoted value containing whitespace. Callers who used
+  `validation="ncbi"` specifically to reject unquoted GTF no longer get that.
 
 - **`FeatureDB.bed12()` now refuses a feature its blocks do not span**, with
   gffutils' exact message (`"End of last exon (600) does not match end of
@@ -660,8 +732,8 @@ everything from scratch.
   building the database, with kind, line number and message -- so a compat-mode
   caller gets exactly gffutils' data *plus* a diagnostic gffutils never
   offered.
-- `docs/design/schema-v2.md` records the design for schema v2, the multipart
-  feature model, and this mode axis.
+- `docs/source/content/schema_v2.rst` records the design for schema v2, the
+  multipart feature model, and this mode axis.
 
 - `python/gffbase/py.typed`. The `Typing :: Typed` classifier was declared but
   no PEP 561 marker shipped, so downstream type checkers saw nothing.

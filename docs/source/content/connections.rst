@@ -150,11 +150,11 @@ Every mutator raises ``ReadOnlyError``:
 
 Two deliberate exceptions:
 
-- **``set_pragmas()`` is allowed.** ``SET`` is session state, not a write to the
+- ``set_pragmas()`` **is allowed.** ``SET`` is session state, not a write to the
   file. Blocking it would be a false promise of safety and would break the
   ``pragmas=`` constructor argument that ported ``gffutils`` code passes routinely.
 
-- **``execute()`` is not guarded for writability.** It is the raw-SQL escape
+- ``execute()`` **is not guarded for writability.** It is the raw-SQL escape
   hatch; DuckDB's own refusal names the statement it rejected, which is more
   use than a generic message from us.
 

@@ -5,7 +5,7 @@ Machine Learning Workflows Cookbook
 
 The flagship cookbook. The patterns here are the reason
 ``children_batched(format='arrow')`` exists: bulk feature extraction for
-ML pipelines with **zero Python ``Feature`` object construction** and
+ML pipelines with **zero Python** ``Feature`` **object construction** and
 **zero per-row boundary crossings** between DuckDB and the consuming
 ML framework.
 
@@ -234,15 +234,15 @@ a 50 000-row ATAC-seq peak BED file?
 7. Tips for production ML pipelines
 -----------------------------------
 
-- **Pin ``format='arrow'``** unless you specifically need a pandas
+- **Pin** ``format='arrow'`` unless you specifically need a pandas
   DataFrame — Arrow → pandas conversion is the only Python-side cost in
   the path.
 
-- **Use ``db.children_batched(level=1, featuretype="exon")``** when you
+- **Use** ``db.children_batched(level=1, featuretype="exon")`` when you
   only want direct children — DuckDB's planner can prune the closure
   table to depth-1 entries via the index on ``(ancestor, depth)``.
 
-- **Reuse the ``FeatureDB`` instance** across batches. The per-DB-open
+- **Reuse the** ``FeatureDB`` **instance** across batches. The per-DB-open
   cost is dominated by ``LOAD spatial`` and meta-table reads (~50 ms);
   amortize it across many ``children_batched`` calls.
 

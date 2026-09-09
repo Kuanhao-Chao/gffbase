@@ -306,7 +306,7 @@ def make_query(
     that reads gffutils' generated SQL. gffbase's own queries do not go through
     it -- they are built in `gffbase.interface` against the DuckDB schema.
 
-    One deviation, and it is the point of having this here: **`order_by` is
+    One deviation, and it is the point of having this here: `order_by` **is
     validated even when it is a plain string.** Upstream checks its whitelist
     only for the iterable form and interpolates a bare string verbatim, which
     is the same class of hole that `FeatureDB.order_by` had. See
@@ -315,8 +315,8 @@ def make_query(
     .. danger:: ``other`` and ``extra`` are raw SQL
 
         `featuretype`, `limit` and `strand` become bound parameters, and
-        `order_by` is checked against a whitelist -- but **`other` and `extra`
-        are interpolated verbatim**, because they exist to carry a caller's own
+        `order_by` is checked against a whitelist -- but `other` and `extra`
+        **are interpolated verbatim**, because they exist to carry a caller's own
         SQL fragment (upstream builds its relation joins through `other`).
         Passing untrusted input to either is equivalent to passing it to
         `execute()`. No gffbase code path routes caller data into them; the

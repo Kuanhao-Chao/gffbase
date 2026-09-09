@@ -7,11 +7,11 @@ NCBI RefSeq ships organism-wide annotations as GFF3 with chromosome
 records that can exceed 1 GB uncompressed. RefSeq's idiosyncrasies are
 worth calling out:
 
-- **``Dbxref=GeneID:7157,HGNC:HGNC:11998``** — multi-value cross-references.
-- **``gbkey=Gene``**, ``gbkey=mRNA``, ``gbkey=CDS`` — RefSeq's redundant
+- ``Dbxref=GeneID:7157,HGNC:HGNC:11998`` — multi-value cross-references.
+- ``gbkey=Gene``, ``gbkey=mRNA``, ``gbkey=CDS`` — RefSeq's redundant
   parallel "GenBank key" tags.
 
-- **``Note=...``** — long, free-form text often containing semicolons that
+- ``Note=...`` — long, free-form text often containing semicolons that
   confuse naïve parsers.
 
 - Mixed ``chromosome`` features at the top level (one per chromosome).

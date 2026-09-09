@@ -17,10 +17,10 @@ measurements are taken — and what they do and do not claim — is on the
 
 .. BEGIN GENERATED: benchmark-provenance
 
-**Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O  
-**Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13  
-**Commit:** `1d52bf6738e0` · **Run:** 2026-08-15T22:56:50Z  
-*Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
+| **Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O
+| **Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13
+| **Commit:** ``1d52bf6738e0`` · **Run:** 2026-08-15T22:56:50Z
+| *Generated from benchmarks/results/06_mega.json by tools/gen_benchmark_tables.py. Do not edit by hand.*
 
 .. END GENERATED: benchmark-provenance
 
@@ -151,7 +151,7 @@ transcripts, hand the columns to a tensor, train.
    exons = db.children_batched(transcript_ids, featuretype="exon", format="arrow")
 
 One set-based SQL query returning a ``pyarrow.Table`` that shares memory with
-DuckDB's buffers. **No Python ``Feature`` object is constructed at any layer** —
+DuckDB's buffers. **No Python** ``Feature`` **object is constructed at any layer** —
 which is the whole difference, because constructing millions of them is what
 dominates the row-by-row path in both libraries.
 
@@ -161,7 +161,7 @@ The per-corpus batched column in the table above shows this at 5 000 anchors.
 
    **The row-by-row loop is the wrong tool here**
 
-   ``for i in ids: db.children(i)`` is **slower in GFFBase than in ``gffutils``**.
+   ``for i in ids: db.children(i)`` is **slower in GFFBase than in** ``gffutils``.
    DuckDB pays vectorization startup on every call; SQLite, an OLTP engine,
    does not. This is a real and inherent trade, not a defect — and it is why
    the batched API exists. The :doc:`Migration guide <migration>` covers it in

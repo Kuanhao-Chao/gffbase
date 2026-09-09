@@ -139,7 +139,7 @@ database into a legacy `.sqlite` file when you need the old format.
 
 ## 2. What you gain immediately, no code changes
 
-Head-to-head against legacy `gffutils` across the five canonical human-genome
+Head-to-head against legacy `gffutils` across the four canonical human-genome
 annotation releases:
 
 <!-- BEGIN GENERATED: corpus-table -->
