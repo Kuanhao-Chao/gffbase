@@ -282,6 +282,49 @@ def test_bridge_environment_is_historical_package_specific_and_closed(
     assert value["benchmark_env"] == campaign.benchmark_env(2)
 
 
+def test_bridge_releases_a_database_handle_that_has_no_close_method() -> None:
+    """gffbase 0.1.0 has no `close()`, no `__exit__` and no `__del__`.
+
+    `bridge.py` released its handle behind `if hasattr(db, "close")`, which is
+    False for the very version the version bridge exists to measure -- that
+    missing method is one of the defects 0.2.0 fixed. So the write connection
+    stayed open, DuckDB kept its exclusive lock, and the read-only connect in
+    `database_signature` died with "Can't open a connection to same database
+    file with a different configuration". Both `bridge-gffbase-0.1.0-*` jobs
+    failed that way, after completing their measurement.
+
+    0.1.0 does hold the connection as `db.conn`, so the release reaches past
+    the public API when the method is absent -- deliberately, because the
+    alternative is not measuring the previous release at all.
+    """
+
+    class Modern:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class Connection:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class Legacy:  # the 0.1.0 shape
+        def __init__(self) -> None:
+            self.conn = Connection()
+
+    modern, legacy = Modern(), Legacy()
+    bridge.release_database(modern)
+    bridge.release_database(legacy)
+
+    assert modern.closed is True
+    assert legacy.conn.closed is True
+    bridge.release_database(object())  # neither shape: must not raise
+
+
 def test_bridge_environment_fails_when_linux_affinity_cannot_be_observed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
