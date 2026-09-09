@@ -81,11 +81,14 @@ def example_filename(fn: str) -> str:
             return str(c)
     raise FileNotFoundError(
         f"example file not found: {fn}\n"
-        "Example fixtures ship with the source distribution and the git "
-        "checkout, under tests/data/. They are NOT in the binary wheel, so "
-        "this helper cannot find them in a `pip install gffbase` environment. "
-        "Install from source (`pip install --no-binary gffbase gffbase`) or "
-        "point at your own file."
+        "Example fixtures live in `tests/data/`, which is part of the source "
+        "tree and the sdist but is NOT installed -- pip installs the package "
+        "directory, and `tests/` is not inside it. So this helper works from "
+        "a git checkout or an unpacked sdist, and not from any `pip install "
+        "gffbase` environment, including one built from source.\n"
+        "Either clone the repository (or unpack the sdist) and run from its "
+        "root, or pass your own file: every gffbase entry point that takes an "
+        "example here takes a path."
     )
 
 

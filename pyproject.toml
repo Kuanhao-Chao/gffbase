@@ -77,6 +77,13 @@ test = [
     # that has one and PyYAML's default loader does not. That check is only a
     # gate if the parser is guaranteed present.
     "pyyaml>=6",
+    # `benchmarks/common.py` imports psutil lazily, inside the two functions
+    # that record the run environment -- and five test modules call them.
+    # It was declared only under `bench` and `dev`, so `pip install
+    # gffbase[test]` (what an sdist consumer runs, and what the sdist smoke
+    # job installs) could not run 48 of its own tests. The suite's extra has
+    # to cover what the suite imports.
+    "psutil>=5",
     # `tests/parity/test_api_parity.py` reads `deviations.toml`. The stdlib
     # `tomllib` is 3.11+, so the 3.10 floor -- which is what the Windows cells
     # and the minimum-deps job run -- needs the backport.
@@ -213,6 +220,12 @@ include = [
     { path = "tools/**/*.py", format = "sdist" },
     { path = "benchmarks/**/*.py", format = "sdist" },
     { path = ".github/workflows/*.yml", format = "sdist" },
+    # The committed measurements, ~1 MB. Six campaign-publication tests read
+    # `06_mega.json` as their fixture -- it is the artifact whose projection
+    # and index they verify -- and `gen_benchmark_tables.py --check`, which
+    # also ships here, cannot run without it. Code without its data is not a
+    # runnable suite.
+    { path = "benchmarks/results/**/*.json", format = "sdist" },
 ]
 
 [tool.pytest.ini_options]
