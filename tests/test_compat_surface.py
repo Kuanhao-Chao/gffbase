@@ -181,16 +181,9 @@ def test_here_points_at_the_package():
 
 
 def test_example_filename_resolves_a_shipped_fixture():
-    # `example_filename` resolves relative to the installed package, and
-    # `tests/data/` is not installed -- pip installs the package directory and
-    # `tests/` is not inside it. So this passes from a checkout or an unpacked
-    # sdist and cannot pass from a `pip install` environment. Skipping there
-    # rather than failing, because the helper is behaving correctly; what is
-    # absent is the fixture tree.
-    import gffbase as _g
-
-    if not (Path(_g.__file__).resolve().parent.parent.parent / "tests" / "data").is_dir():
-        pytest.skip("tests/data/ is not reachable from the installed package")
+    # The corpus now travels inside the package, so this holds in an installed
+    # environment as well as a checkout -- which is the whole point of shipping
+    # it. No skip: a miss here is a packaging regression, not an absent tree.
     assert Path(example_filename("hierarchy.gff3")).is_file()
     with pytest.raises(FileNotFoundError):
         example_filename("no_such_file.gff3")

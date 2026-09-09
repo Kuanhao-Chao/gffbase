@@ -94,6 +94,16 @@ target/
 # re-include (later rules win in gitignore).
 tests/data/**/__pycache__/
 
+# The same corpus, shipped inside the package so `example_filename` resolves
+# from a `pip install`. It needs its own negation: the one above is scoped to
+# `tests/`, so without this every fixture here stays ignored -- which is not
+# just a git problem, because maturin collects the python source tree through
+# gitignore and silently built a wheel carrying 9 of the 35 files, none of
+# them the ones the documented examples open.
+!python/gffbase/data/
+!python/gffbase/data/**
+python/gffbase/data/**/__pycache__/
+
 # --- Bench / scratch artifacts -----------------------------------------
 # `benchmarks/data/` holds multi-GB downloads and `benchmarks/out/` holds the
 # multi-GB databases a run builds; neither belongs in git.
