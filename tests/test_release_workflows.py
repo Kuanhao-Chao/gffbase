@@ -232,11 +232,17 @@ def test_manual_release_input_is_a_typed_opt_in_and_policy_precedes_qualificatio
     )
     assert jobs["qualification"]["needs"] == "policy"
     assert jobs["qualification"]["uses"] == "./.github/workflows/qualification.yml"
-    assert jobs["artifacts"]["needs"] == "qualification"
+    # `policy` as well as `qualification`: this job reads
+    # `needs.policy.outputs.version`, and `needs` resolves only for direct
+    # dependencies. This assertion previously pinned the broken form, so the
+    # test agreed with the bug instead of catching it -- see
+    # `test_no_job_reads_a_needs_output_it_does_not_depend_on`, which states the
+    # rule generally.
+    assert set(jobs["artifacts"]["needs"]) == {"policy", "qualification"}
     assert jobs["artifacts"]["uses"] == "./.github/workflows/release-artifacts.yml"
 
     publish_job = jobs["publish"] if filename == "release.yml" else jobs["publish-testpypi"]
-    assert publish_job["needs"] == "artifacts"
+    assert set(publish_job["needs"]) == {"policy", "artifacts"}
     assert publish_job["if"] == "needs.policy.outputs.publish == 'true'"
 
 
@@ -460,22 +466,238 @@ def test_artifact_aggregator_waits_for_native_smokes_and_emits_one_manifest():
     assert uploads[0]["with"]["path"].endswith("release-artifact-manifest.json")
 
 
-def test_every_remote_action_in_release_qualification_is_commit_pinned():
-    sha_ref = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+def _all_workflow_filenames() -> list[str]:
+    """Every workflow, discovered -- not a list that a new file can miss.
+
+    This used to name four files. `ci.yml`, `docs.yml` and `property.yml` were
+    therefore unpinned and unnoticed, while `qualification.yml` ran
+    `zizmor --pedantic` over *all* of them. Globbing means the next workflow
+    added is covered the moment it exists.
+    """
+    return sorted(p.name for p in (REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+
+
+_SHA_REF = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+_SECRET_EXPRESSION = re.compile(r"\$\{\{[^}]*secrets\.")
+
+
+def _unpinned_actions(name: str, workflow: dict) -> list[str]:
     offenders = []
-    for filename in (
-        "qualification.yml",
-        "release-artifacts.yml",
-        "release.yml",
-        "testpypi-release.yml",
-    ):
-        workflow = _workflow(filename)
-        for job_name, job in workflow["jobs"].items():
-            job_uses = job.get("uses")
-            if job_uses and not job_uses.startswith("./") and not sha_ref.fullmatch(job_uses):
-                offenders.append(f"{filename}:{job_name}:{job_uses}")
-            for index, step in enumerate(job.get("steps", [])):
-                uses = step.get("uses")
-                if uses and not uses.startswith("./") and not sha_ref.fullmatch(uses):
-                    offenders.append(f"{filename}:{job_name}:{index}:{uses}")
+    for job_name, job in workflow["jobs"].items():
+        job_uses = job.get("uses")
+        if job_uses and not job_uses.startswith("./") and not _SHA_REF.fullmatch(job_uses):
+            offenders.append(f"{name}:{job_name}:{job_uses}")
+        for index, step in enumerate(job.get("steps", [])):
+            uses = step.get("uses")
+            if uses and not uses.startswith("./") and not _SHA_REF.fullmatch(uses):
+                offenders.append(f"{name}:{job_name}:{index}:{uses}")
+    return offenders
+
+
+def _checkouts_keeping_credentials(name: str, workflow: dict) -> list[str]:
+    offenders = []
+    for job_name, job in workflow["jobs"].items():
+        for index, step in enumerate(job.get("steps", [])):
+            if not step.get("uses", "").startswith("actions/checkout@"):
+                continue
+            # BaseLoader keeps scalars as strings, so `false` arrives as "false".
+            if step.get("with", {}).get("persist-credentials") != "false":
+                offenders.append(f"{name}:{job_name}:step {index}")
+    return offenders
+
+
+def _secrets_spliced_into_scripts(name: str, workflow: dict) -> list[str]:
+    offenders = []
+    for job_name, job in workflow["jobs"].items():
+        for index, step in enumerate(job.get("steps", [])):
+            if _SECRET_EXPRESSION.search(step.get("run", "")):
+                offenders.append(f"{name}:{job_name}:step {index}")
+    return offenders
+
+
+def test_every_remote_action_in_every_workflow_is_commit_pinned():
+    offenders: list[str] = []
+    for filename in _all_workflow_filenames():
+        offenders += _unpinned_actions(filename, _workflow(filename))
     assert not offenders, f"mutable action references remain: {offenders}"
+
+
+def test_every_checkout_in_every_workflow_drops_the_credential():
+    """`actions/checkout` writes the job token into `.git/config` by default.
+
+    Every later step in the job can then read it, including anything a
+    dependency's build script decides to run. None of these jobs push through
+    the checkout -- `docs.yml` publishes by `git init`-ing a fresh tree and
+    pushing with an explicit token URL -- so none of them need it kept.
+
+    This is zizmor's `artipacked` rule, which `qualification.yml` runs at
+    `--pedantic` over every workflow.
+    """
+    offenders: list[str] = []
+    for filename in _all_workflow_filenames():
+        offenders += _checkouts_keeping_credentials(filename, _workflow(filename))
+    assert not offenders, "checkout keeps the token in .git/config at: " + ", ".join(offenders)
+
+
+def test_no_workflow_interpolates_a_secret_into_a_run_script():
+    """`${{ secrets.* }}` inside `run:` is substituted before the shell starts.
+
+    The expression is spliced into the generated script on disk, so the secret
+    is written out in cleartext rather than only living in the step's
+    environment. `docs.yml` did this with `GITHUB_TOKEN` in its push URL.
+    """
+    offenders: list[str] = []
+    for filename in _all_workflow_filenames():
+        offenders += _secrets_spliced_into_scripts(filename, _workflow(filename))
+    assert not offenders, (
+        "pass the secret through `env:` and reference it as a shell variable, at: "
+        + ", ".join(offenders)
+    )
+
+
+# Contexts GitHub refuses to resolve in a job-level `env:` block. The list is
+# the complement of what is documented as available there (`github`, `inputs`,
+# `vars`, `needs`, `strategy`, `matrix`, `secrets`).
+_CONTEXTS_UNAVAILABLE_AT_JOB_LEVEL = ("runner", "steps", "job", "env", "hashFiles")
+
+
+def _job_env_using_a_step_only_context(name: str, workflow: dict) -> list[str]:
+    offenders = []
+    for job_name, job in workflow["jobs"].items():
+        for key, value in (job.get("env") or {}).items():
+            for context in _CONTEXTS_UNAVAILABLE_AT_JOB_LEVEL:
+                if re.search(r"\$\{\{[^}]*\b" + context + r"\.", str(value)):
+                    offenders.append(f"{name}:{job_name}:env.{key} reads {context}.*")
+    return offenders
+
+
+def test_no_job_level_env_reads_a_context_that_does_not_exist_there():
+    """The same silent-empty-substitution family as the `needs` scoping bug.
+
+    `runner.temp` is a *step* context. Used in a job-level `env:` GitHub does
+    not error -- it substitutes the empty string. Five entries did this:
+
+        ARTIFACT_DIR: ${{ runner.temp }}/gffbase-qualified-dist   -> /gffbase-qualified-dist
+        WHEEL_DIR:    ${{ runner.temp }}/release-wheel            -> /release-wheel
+
+    so `python -m build --outdir "$ARTIFACT_DIR"` tried to write to the
+    filesystem root, and the smoke jobs inspected a directory the matching
+    `download-artifact` step -- which *is* step-level, and did resolve -- had
+    never written to. Both the qualification `package` job and every artifact
+    smoke job were therefore incapable of passing.
+
+    Resolved in a step that writes `$RUNNER_TEMP` into `$GITHUB_ENV`, which
+    also removes the duplicated literal path that let the two drift.
+    """
+    offenders: list[str] = []
+    for filename in _all_workflow_filenames():
+        offenders += _job_env_using_a_step_only_context(filename, _workflow(filename))
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_three_workflow_security_detectors_actually_detect():
+    """Red-green for the three guards above, without breaking a real workflow.
+
+    A guard that scans real files and finds nothing is indistinguishable from
+    a guard that cannot find anything -- which is exactly how six checks in
+    `test_release_hygiene.py` sat dead for a release cycle. These synthetic
+    jobs are the violations, so each detector is proven to fire.
+    """
+    unpinned = {
+        "jobs": {
+            "j": {"steps": [{"uses": "actions/checkout@v4"}, {"uses": "./local/action"}]},
+            "k": {"uses": "org/reusable/.github/workflows/w.yml@main"},
+        }
+    }
+    # The `./local/action` step is intentionally absent: a path-local action
+    # is not a remote reference and has nothing to pin.
+    assert sorted(_unpinned_actions("x.yml", unpinned)) == [
+        "x.yml:j:0:actions/checkout@v4",
+        "x.yml:k:org/reusable/.github/workflows/w.yml@main",
+    ]
+
+    bare = {"jobs": {"j": {"steps": [{"uses": "actions/checkout@" + "a" * 40}]}}}
+    kept = {
+        "jobs": {
+            "j": {"steps": [{"uses": "actions/checkout@" + "a" * 40, "with": {"fetch-depth": "0"}}]}
+        }
+    }
+    dropped = {
+        "jobs": {
+            "j": {
+                "steps": [
+                    {
+                        "uses": "actions/checkout@" + "a" * 40,
+                        "with": {"persist-credentials": "false"},
+                    }
+                ]
+            }
+        }
+    }
+    assert _checkouts_keeping_credentials("x.yml", bare) == ["x.yml:j:step 0"]
+    assert _checkouts_keeping_credentials("x.yml", kept) == ["x.yml:j:step 0"]
+    assert _checkouts_keeping_credentials("x.yml", dropped) == []
+
+    spliced = {"jobs": {"j": {"steps": [{"run": "curl -H ${{ secrets.TOKEN }} https://x"}]}}}
+    via_env = {
+        "jobs": {"j": {"steps": [{"run": "curl -H $TOKEN https://x", "env": {"TOKEN": "s"}}]}}
+    }
+    assert _secrets_spliced_into_scripts("x.yml", spliced) == ["x.yml:j:step 0"]
+    assert _secrets_spliced_into_scripts("x.yml", via_env) == []
+
+    # `runner.*` in a job-level env is the bug; `inputs.*` and `matrix.*` in
+    # the same place are legitimate and must not be reported.
+    step_context = {"jobs": {"j": {"env": {"DIR": "${{ runner.temp }}/x"}}}}
+    job_context = {"jobs": {"j": {"env": {"V": "${{ inputs.expected_version }}"}}}}
+    assert _job_env_using_a_step_only_context("x.yml", step_context) == [
+        "x.yml:j:env.DIR reads runner.*"
+    ]
+    assert _job_env_using_a_step_only_context("x.yml", job_context) == []
+
+
+def _needs_of(job: dict) -> set[str]:
+    needs = job.get("needs")
+    if needs is None:
+        return set()
+    return {needs} if isinstance(needs, str) else set(needs)
+
+
+@pytest.mark.parametrize("filename", _all_workflow_filenames())
+def test_no_job_reads_a_needs_output_it_does_not_depend_on(filename: str) -> None:
+    """`needs.<job>` resolves ONLY for direct dependencies.
+
+    GitHub does not error on `needs.policy.outputs.version` in a job that does
+    not declare `needs: policy` -- it silently substitutes the empty string.
+    Both publishers did exactly that:
+
+        artifacts:  needs: qualification   with: expected_version: needs.policy...
+        publish:    needs: artifacts       if:   needs.policy.outputs.publish == 'true'
+
+    So `expected_version` arrived empty and every `release_artifacts.py inspect`
+    failed, and the publish `if` evaluated `'' == 'true'` -- meaning **publish
+    was skipped on every run, including a valid tag push**. The publish path had
+    never been exercised, so nothing noticed.
+
+    Asserted as a property over every job rather than as a fixed graph: the
+    shape can change, but a job may never read an output from a job it has not
+    said it depends on.
+    """
+    workflow = _workflow(filename)
+    reference = re.compile(r"needs\.([A-Za-z0-9_-]+)\.")
+    offenders = []
+
+    for name, job in workflow["jobs"].items():
+        declared = _needs_of(job)
+        # Everything a job can interpolate into: its condition, the inputs it
+        # passes to a reusable workflow, its env, and its steps.
+        scanned = [str(job.get("if", "")), str(job.get("with", "")), str(job.get("env", ""))]
+        scanned += [str(step) for step in job.get("steps", [])]
+        for blob in scanned:
+            for referenced in reference.findall(blob):
+                if referenced not in declared:
+                    offenders.append(
+                        f"{filename}: job {name!r} reads needs.{referenced} "
+                        f"but declares needs={sorted(declared) or None}"
+                    )
+
+    assert not offenders, "\n".join(sorted(set(offenders)))

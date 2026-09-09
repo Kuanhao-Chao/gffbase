@@ -140,7 +140,7 @@ Confirm it worked:
 
 .. tip::
 
-   **Running ``cargo test`` on macOS**
+   **Running** ``cargo test`` **on macOS**
 
    The Rust unit tests link against libpython, which is not on the default
    search path in a conda environment:

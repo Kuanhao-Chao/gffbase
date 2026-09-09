@@ -97,8 +97,24 @@ reason = """Validates `order_by` against the whitelist for a plain string as
 well as for an iterable. The oracle checks only the iterable form and
 interpolates a bare string verbatim -- the same defect class as the `order_by`
 and `set_pragmas` injections fixed in this release (see
-docs/security/2026-sql-injection.md). Pinned by
+docs/advisory_sql_injection.rst). Pinned by
 `test_make_query_validates_a_string_order_by`."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.FeatureDB.all_features"
+status = "intentional"
+reason = """`order_by="score"` sorts numerically; the oracle sorts it as text.
+GFF column 6 is stored as text because the spec allows `.` there, so an ORDER
+BY on it ranks `10 < 100 < 1e3 < 2.5 < 9` -- "the highest-scoring features"
+comes back wrong with nothing raised. gffbase applies
+`TRY_CAST(score AS DOUBLE)`, so `.` and any non-numeric value become NULL and
+sort last. Also: every ordered query appends `id ASC`, because no sort column
+is unique and DuckDB does not preserve ties across a parallel sort, and
+`reverse` applies to every key rather than only the last. Pinned by
+`test_score_sorts_numerically_not_lexicographically`,
+`test_an_unscored_feature_sorts_last` and
+`test_every_order_clause_ends_in_a_unique_column`."""
 
 [[deviation]]
 kind = "symbol"

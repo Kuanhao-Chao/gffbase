@@ -19,7 +19,7 @@
 `gffbase._bins` has the arithmetic and is what the SQLite export uses; this
 module is the compatibility face of it, under the names `gffutils.bins`
 exports. The two must not diverge, so everything here delegates rather than
-reimplements — `tests/test_bins_surface.py` pins that.
+reimplements — `tests/test_compat_surface.py` pins that.
 
 The one thing this adds over `_bins` is `one=False`: the *set* of bins a range
 overlaps, rather than the single smallest bin containing it. That is what a

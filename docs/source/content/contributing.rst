@@ -379,7 +379,7 @@ For multi-paragraph rationale, use the body of the commit — explain
 - ☐ **Coverage not regressed.** Run
   ``pytest --cov=gffbase --cov-report=term`` and confirm.
 
-- ☐ **``ruff check`` and ``ruff format --check`` clean.** No new lint warnings
+- ☐ ``ruff check`` **and** ``ruff format --check`` **clean.** No new lint warnings
   and no formatting drift.
 
 - ☐ **Rust clean** if you touched ``rust/``:
@@ -391,7 +391,7 @@ For multi-paragraph rationale, use the body of the commit — explain
   docstring, the migration guide, the cookbook, or the API
   reference.
 
-- ☐ **``make -C docs html SPHINXOPTS="-W --keep-going"`` clean** if you
+- ☐ ``make -C docs html SPHINXOPTS="-W --keep-going"`` **clean** if you
   touched ``docs/``.
 - ☐ **No unrelated changes.** A 200-line diff in a feature PR
   should not include a ``ruff`` reformat of an unrelated file.

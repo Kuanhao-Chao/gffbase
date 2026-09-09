@@ -52,13 +52,21 @@ jobs:
         with: { python-version: "3.12" }
       - name: Evaluate release policy
         id: decide
+        # See the note in release.yml: an expression inside `run:` is spliced
+        # into the script before the shell sees it, so a crafted ref name
+        # becomes code. These reach the script as environment variables.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          PUBLISH_REQUESTED: ${{ inputs.publish || 'false' }}
         run: |
           python tools/release_policy.py \
             --channel testpypi \
-            --event-name "${{ github.event_name }}" \
-            --ref-type "${{ github.ref_type }}" \
-            --ref-name "${{ github.ref_name }}" \
-            --publish-requested "${{ inputs.publish || 'false' }}" \
+            --event-name "$EVENT_NAME" \
+            --ref-type "$REF_TYPE" \
+            --ref-name "$REF_NAME" \
+            --publish-requested "$PUBLISH_REQUESTED" \
             --github-output "$GITHUB_OUTPUT"
 
   # ------------------------------------------------------------------------
@@ -75,7 +83,11 @@ jobs:
   # ------------------------------------------------------------------------
   artifacts:
     name: Build and verify release artifacts
-    needs: qualification
+    # BOTH: `needs.<job>` resolves only for direct dependencies, and this
+    # job reads `needs.policy.outputs.version` below. Declaring only
+    # `qualification` made that an empty string, which every
+    # `release_artifacts.py inspect` then rejected.
+    needs: [policy, qualification]
     uses: ./.github/workflows/release-artifacts.yml
     with:
       expected_version: ${{ needs.policy.outputs.version }}
@@ -94,7 +106,9 @@ jobs:
   # ------------------------------------------------------------------------
   publish-testpypi:
     name: Publish to TestPyPI
-    needs: artifacts
+    # Same reason: without `policy` here the condition compared '' to
+    # 'true' and this job was SKIPPED on every run, tag pushes included.
+    needs: [policy, artifacts]
     if: needs.policy.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -106,6 +120,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          # `release-artifacts.yml` uploads the packages as
+          # `release-package-*` and the manifest as `release-verification`.
+          # Without this pattern the manifest JSON lands in dist/ and is
+          # handed to twine as if it were a distribution.
+          pattern: release-package-*
           path: dist
           merge-multiple: true
       - name: List artifacts

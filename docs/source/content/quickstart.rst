@@ -43,7 +43,7 @@ never need to decompress a ``.gtf.gz`` first.
 
 .. important::
 
-   **Use ``with``, or call ``close()``**
+   **Use** ``with``\ **, or call** ``close()``
 
    DuckDB takes an **exclusive lock** on the database file for the life of a
    writable handle. Until you release it, no other process can open that file
@@ -144,8 +144,8 @@ need every exon of fifty thousand transcripts, ask for them **all at once**:
    print(exons.schema.names)
    # ['anchor', 'descendant_id', 'seqid', ..., 'start', 'end', ...]
 
-One SQL query, one Arrow table, **no Python ``Feature`` objects constructed at
-any layer**. The ``anchor`` column carries the input ID for each row, so you can
+One SQL query, one Arrow table, **no Python** ``Feature`` **objects constructed
+at any layer**. The ``anchor`` column carries the input ID for each row, so you can
 regroup without re-querying:
 
 .. code-block:: python
@@ -162,7 +162,7 @@ regroup without re-querying:
 
    **Do not loop the row-by-row API over many IDs**
 
-   ``for i in ids: db.children(i)`` is **slower in GFFBase than in ``gffutils``**
+   ``for i in ids: db.children(i)`` is **slower in GFFBase than in** ``gffutils``
    — DuckDB pays vectorization startup on every call. That is not a bug; it is
    the trade an analytical engine makes. Use the ``_batched`` calls whenever you
    have more than a handful of anchors. The

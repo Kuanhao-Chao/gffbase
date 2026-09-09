@@ -69,9 +69,9 @@ To audit rather than abort, keep the strict rules but downgrade the action:
 Ingest used a lot of memory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected. GFFBase trades memory for speed — peak RSS runs to a couple of GB on
-a whole-genome corpus, against roughly 170 MB for ``gffutils``. The Arrow batch
-builder is the reason, and it is also why ingest is faster.
+Expected. GFFBase trades memory for speed — peak ingest RSS runs to 1.6–5.6 GB
+across the benchmark corpora, against 174–495 MB for ``gffutils``. The Arrow
+batch builder is the reason, and it is also why ingest is faster.
 
 To cap DuckDB's own threads (and with them its memory):
 
@@ -214,9 +214,10 @@ back an empty database that reports itself as complete.
 The database is larger than the SQLite one
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected — roughly 1.5×. GFFBase stores a materialized transitive closure and a
-long-form attributes table so that hierarchy and attribute queries are indexed
-lookups instead of scans. That is the trade.
+Expected — 1.29× to 1.36× across the benchmark corpora. GFFBase stores a
+materialized transitive closure and a long-form attributes table so that
+hierarchy and attribute queries are indexed lookups instead of scans. That is
+the trade.
 
 ----
 

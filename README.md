@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/assets/logo.svg#gh-light-mode-only" alt="gffbase" width="62%">
-  <img src="docs/assets/logo-white.svg#gh-dark-mode-only" alt="gffbase" width="62%">
+  <img src="docs/source/_static/logo.svg#gh-light-mode-only" alt="gffbase" width="62%">
+  <img src="docs/source/_static/logo-white.svg#gh-dark-mode-only" alt="gffbase" width="62%">
 </p>
 
 
@@ -256,7 +256,7 @@ zero-copy contract for spatial and parent workloads.
   segment phase, `covered_length`, and `explode_segments=` on the batched
   APIs. Several lines sharing one `ID` are one logical feature.
 - **A command line** — `gffbase create|fetch|children|parents|region|search|
-  rmdups|sanitize|validate|migrate`. See [the CLI reference](cli.md).
+  rmdups|sanitize|validate|migrate`. See [the CLI reference](https://khchao.com/gffbase/content/cli.html).
 - **Post-ingest validation** — `gffbase.validate` checks fast and full
   structural invariant sets, and
   `gffbase.migrate` upgrades a v1 database in place.
@@ -272,7 +272,7 @@ Full site, built with Sphinx and the furo theme:
 | Page                                                                                       | What's there                                                              |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | [Usage Gallery](https://khchao.com/gffbase/content/usage_gallery.html)                     | Copy-pasteable snippets for every public API method                       |
-| [Performance comparison](https://khchao.com/gffbase/content/performance.html)              | Head-to-head numbers across every canonical human-genome annotation + per-corpus root-cause analysis |
+| [Performance comparison](https://khchao.com/gffbase/content/performance.html)              | Head-to-head numbers across four canonical human-genome annotations + per-corpus root-cause analysis |
 | [Migration guide for `gffutils` users](https://khchao.com/gffbase/content/migration.html)  | Drop-in compat checklist + the one OLAP/OLTP gotcha you must understand   |
 | [Cookbooks](https://khchao.com/gffbase/content/cookbooks.html)                             | GENCODE/Ensembl, RefSeq, MANE, ML workflows                               |
 | [API reference](https://khchao.com/gffbase/content/api.html)                               | Every public method, full signatures + docstrings                         |

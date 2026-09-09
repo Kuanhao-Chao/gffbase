@@ -1605,7 +1605,7 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection):
     threads = os.environ.get("GFFBASE_THREADS") or os.environ.get("GFFUTILS2_THREADS")
     if threads:
         # `int()` first: the value is interpolated, so it must not be able to
-        # carry syntax. See docs/security/2026-sql-injection.md.
+        # carry syntax. See docs/advisory_sql_injection.rst.
         con.execute(f"PRAGMA threads = {int(threads)}")
     # Suppress the interactive progress bar — it floods stderr in batch and
     # subprocess scenarios and offers no value for benchmarking or scripting.

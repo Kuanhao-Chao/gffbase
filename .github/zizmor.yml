@@ -1,0 +1,85 @@
+# zizmor configuration.
+#
+# `qualification.yml` runs `zizmor --pedantic .github/workflows` with no
+# severity threshold, so *any* finding fails the release gate. That is the
+# intent: everything zizmor reports is either fixed or suppressed here with a
+# stated reason. An unexplained entry in this file is a bug.
+#
+# Everything zizmor found that was a real defect has been fixed rather than
+# listed below -- eight `excessive-permissions`, eight `template-injection`,
+# seven `artipacked`, and one `undocumented-permissions`.
+
+rules:
+  # ------------------------------------------------------------------------
+  # `uses: ./.github/workflows/x.yml` -> `uses: $/...`
+  #
+  # zizmor is right about the property: the workspace-relative form resolves
+  # against runtime filesystem state, so a prior step that clones something
+  # into the workspace can substitute the workflow. The self-repository form
+  # cannot be redirected that way.
+  #
+  # But actionlint 1.7.12 -- pinned in this same qualification job, two steps
+  # earlier -- rejects it outright for a reusable workflow call:
+  #
+  #   reusable workflow call "$/.github/workflows/qualification.yml" at "uses"
+  #   is not following the format "owner/repo/path/to/workflow.yml@ref" nor
+  #   "./path/to/workflow.yml"  [workflow-call]
+  #
+  # Verified locally against the pinned binary, not assumed. Taking zizmor's
+  # advice would swap a low-severity hint for a hard failure in the step above
+  # it. Revisit when actionlint learns the syntax; the attack it describes
+  # also requires a step that writes into `.github/workflows/` before the
+  # reusable call resolves, which none of these workflows has.
+  # ------------------------------------------------------------------------
+  self-repository:
+    ignore:
+      - release.yml
+      - testpypi-release.yml
+
+  # ------------------------------------------------------------------------
+  # Caching in a workflow that also uploads artifacts.
+  #
+  # The audit's premise is that a poisoned cache can contaminate a published
+  # artifact. The two flagged steps are in `ci.yml`'s `test` job, whose only
+  # upload is `coverage-*` -- a coverage report, consumed by nobody but a
+  # human reading the run.
+  #
+  # Nothing published to an index is built here. Release artifacts are built
+  # by `release-artifacts.yml`, which deliberately uses no cache at all, and
+  # every byte of it is bound by `release_artifacts.py create-manifest` and
+  # re-verified before upload. Confidence on this finding is Low for that
+  # reason.
+  # ------------------------------------------------------------------------
+  cache-poisoning:
+    ignore:
+      - ci.yml
+
+  # ------------------------------------------------------------------------
+  # "use `rustup` and/or `cargo` in a script step" for every
+  # `dtolnay/rust-toolchain` use.
+  #
+  # The runner does ship a rustup, which is exactly the problem: it ships
+  # *whatever* rustup the image was built with, and that floats when the image
+  # updates. `rust-toolchain@1.83` is how the MSRV in `Cargo.toml` is actually
+  # enforced in CI rather than merely declared, and `ci.yml` has a job that
+  # exists only to prove the declared floors are installable.
+  #
+  # Replacing it with a script step would mean reimplementing version
+  # selection, component installation, and caching by hand in nineteen places.
+  # ------------------------------------------------------------------------
+  #
+  # `release.yml` is listed for a different reason: "use `gh release` in a
+  # script step" for `softprops/action-gh-release`. The action is already
+  # commit-pinned, and hand-rolling `gh release create` would mean writing new,
+  # never-executed shell -- deciding whether the release already exists,
+  # constructing the tag, handling a partial upload -- into the one job that
+  # holds `contents: write` and `id-token: write`. That trades a pinned
+  # dependency for untested logic in the most sensitive job in the repository.
+  superfluous-actions:
+    ignore:
+      - ci.yml
+      - docs.yml
+      - property.yml
+      - qualification.yml
+      - release-artifacts.yml
+      - release.yml
