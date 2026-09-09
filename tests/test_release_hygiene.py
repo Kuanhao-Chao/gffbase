@@ -45,16 +45,45 @@ def _read(name: str, *, required: bool = True) -> str:
 
     A guard that cannot fail is not a guard. Pass `required=False` only where
     absence is genuinely expected.
+
+    One case is genuinely not rot: the sdist ships `tests/`, `tools/`,
+    `benchmarks/` and `.github/` so the suite can run from it, but not `docs/`
+    -- a Sphinx tree is not part of what an installed package needs. So the
+    rule is per-tree rather than per-file. If the file's top-level directory
+    is missing entirely, this is not a checkout and the check skips; if that
+    directory is present and only the file is gone, the file moved and the
+    check fails. `docs/source/index.rst` disappearing inside a populated
+    `docs/` is rot; the whole of `docs/` being absent is an sdist.
     """
     path = REPO_ROOT / name
     if not path.is_file():
-        if required:
+        tree = REPO_ROOT / Path(name).parts[0]
+        if required and tree.exists():
             raise AssertionError(
-                f"{name} does not exist. If it moved, repoint this check at its "
-                f"successor; if it is genuinely optional here, pass required=False."
+                f"{name} does not exist, but {Path(name).parts[0]}/ does. If it moved, "
+                f"repoint this check at its successor; if it is genuinely optional "
+                f"here, pass required=False."
             )
-        pytest.skip(f"{name} not present (running against an installed package, not a checkout)")
+        pytest.skip(f"{name} not present (running against a packaged tree, not a checkout)")
     return path.read_text(encoding="utf-8")
+
+
+def _require_checkout_tree(*names: str) -> None:
+    """Skip a repository-hygiene check when its subject tree is not here.
+
+    The sdist deliberately ships `tests/`, `tools/`, `benchmarks/` and
+    `.github/workflows/` -- enough to run this suite -- but not `docs/`. A
+    Sphinx source tree is not part of what an installed package needs, and it
+    is the larger half of the repository.
+
+    So a check that reads the documentation is a checkout-only check. This
+    states that in one place, rather than each test discovering it as a
+    failure. Note the asymmetry with `_read`: a *missing tree* skips, a file
+    missing from a *present* tree still fails.
+    """
+    for name in names:
+        if not (REPO_ROOT / name).exists():
+            pytest.skip(f"{name}/ is not shipped in the sdist; this is a checkout-only check")
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +317,7 @@ def test_every_in_repo_path_named_in_prose_or_source_actually_exists():
     written in the present tense there still has to resolve, but no rule can
     tell the two apart, so the changelog is checked by review instead.
     """
+    _require_checkout_tree("docs", ".github")
     referenced = re.compile(r"\b((?:docs|tests|benchmarks)/[\w./-]*\.\w{1,5})\b")
     sources = [
         REPO_ROOT / "README.md",
@@ -449,6 +479,32 @@ def test_the_documented_table_count_is_right():
     assert f"{views} compatibility" in readme, f"schema.py defines {views} views"
 
 
+def test_the_documented_cli_command_count_is_right():
+    """The migration page said ten commands; the parser registers eleven.
+
+    Counted from the parser rather than from a list in prose, so adding a
+    subcommand and forgetting the sentence fails here instead of shipping.
+    """
+    import argparse
+
+    from gffbase.cli import build_parser
+
+    parser = build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)  # noqa: SLF001
+    )
+    count = len(subparsers.choices)
+    word = {9: "nine", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen"}[count]
+
+    for rel in ("MIGRATION.md", "docs/source/content/migration.rst"):
+        assert f"work there; {word} work here" in _read(rel), (
+            f"{rel} states a CLI command count other than {word} ({count} registered): "
+            f"{sorted(subparsers.choices)}"
+        )
+
+
 def test_the_two_changelogs_carry_the_same_entries():
     """`CHANGELOG.md` and `docs/source/content/changelog.rst` are the same
     document in two markups, and nothing kept them together.
@@ -550,7 +606,7 @@ def test_the_disk_and_rss_ranges_in_prose_match_the_measurements():
 
 
 def test_the_headline_corpus_count_matches_the_corpora_actually_measured():
-    """"Across the five canonical human-genome annotations" -- there were four.
+    """ "Across the five canonical human-genome annotations" -- there were four.
 
     `06_mega.json` carries chess, gencode-gtf, mane and refseq; gencode-gff3 is
     in the display order but was never measured. The generated table directly
@@ -575,9 +631,7 @@ def test_the_headline_corpus_count_matches_the_corpora_actually_measured():
         "README.md": f"across {word} canonical human-genome annotations",
     }
     wrong = [rel for rel, claim in claims.items() if claim not in _read(rel)]
-    assert not wrong, (
-        f"{measured} corpora are measured, so these should say {word!r}: {wrong}"
-    )
+    assert not wrong, f"{measured} corpora are measured, so these should say {word!r}: {wrong}"
 
 
 def test_published_benchmark_tables_match_the_committed_measurements():
@@ -829,6 +883,7 @@ def test_the_documented_parity_percentage_is_derivable():
     behaves identically. A hand-maintained percentage in prose is exactly the
     claim a reader will check and a maintainer will forget.
     """
+    _require_checkout_tree("docs", ".github")
     import json
 
     manifest_path = REPO_ROOT / "tests" / "parity" / "gffutils_manifest.json"
@@ -962,6 +1017,7 @@ def test_readme_deep_links_resolve_to_pages_that_exist():
     most-read documents in the project pointing at 404s -- which is exactly
     what the MkDocs-to-Sphinx move would have done to all thirteen of them.
     """
+    _require_checkout_tree("docs", ".github")
     import re
 
     readme = _read("README.md")
@@ -1124,6 +1180,7 @@ def test_the_g_descender_clears_the_exon_block(svg_name):
     Asserted on the geometry rather than on a rendering, so it needs no SVG
     toolchain and fails with a number rather than "the logo looks wrong".
     """
+    _require_checkout_tree("docs", ".github")
     import re
 
     svg = (REPO_ROOT / "docs" / "source" / "_static" / svg_name).read_text()
@@ -1180,6 +1237,7 @@ def test_the_wordmark_sits_on_one_baseline(svg_name):
     that is a real typographic convention, not slop -- and flat-bottomed ones
     are not. Both fit inside the band asserted here; 25 units does not.
     """
+    _require_checkout_tree("docs", ".github")
     import re
 
     svg = (REPO_ROOT / "docs" / "source" / "_static" / svg_name).read_text()
@@ -1247,6 +1305,7 @@ def test_readme_relative_links_and_images_resolve():
     AND on the PyPI project page; and `[the CLI reference](cli.md)` named a
     root-level file that has never existed.
     """
+    _require_checkout_tree("docs", ".github")
     import re
 
     readme = _read("README.md")
