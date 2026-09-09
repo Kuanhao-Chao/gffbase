@@ -32,7 +32,6 @@ import json
 import os
 import platform
 import re
-import shlex
 import shutil
 import signal
 import socket
@@ -1204,19 +1203,6 @@ def build_worker_argv(
     if resume:
         args.append("--resume")
     return args
-
-
-def build_tmux_argv(
-    session: str, cpu_list: str, worker_argv: Sequence[str], *, cwd: Path = ROOT
-) -> list[str]:
-    validate_identifier(session, "tmux session")
-    if len(session) > 80:
-        raise CampaignError("tmux session name exceeds 80 characters")
-    parse_cpu_list(cpu_list)
-    tmux = shutil.which("tmux") or "tmux"
-    taskset = shutil.which("taskset") or "taskset"
-    shell_command = shlex.join([taskset, "--cpu-list", cpu_list, *worker_argv])
-    return [tmux, "new-session", "-d", "-s", session, "-c", str(Path(cwd).resolve()), shell_command]
 
 
 def worker_environment(
