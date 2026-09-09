@@ -69,7 +69,8 @@ If you only read three sections, make them:
 
    # Cheap: no re-ingest. Only the meta + index DDL is read at open.
    db = FeatureDB("annotation.duckdb")
-   print(db.schema())            # 'gff3' / 'gtf' / etc.
+   print(db.fmt)                 # 'gff3' / 'gtf' — the dialect it was built from
+   print(db.schema()[:60])       # the SQL DDL, not the format
    print(list(db.seqids())[:5])  # first 5 chromosomes
 
 .. _usage_gallery--14-ingest-from-a-string-instead-of-a-file:

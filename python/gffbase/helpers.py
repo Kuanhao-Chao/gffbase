@@ -310,9 +310,10 @@ def make_query(
     validated even when it is a plain string.** Upstream checks its whitelist
     only for the iterable form and interpolates a bare string verbatim, which
     is the same class of hole that `FeatureDB.order_by` had. See
-    `docs/security/2026-sql-injection.md`.
+    `docs/advisory_sql_injection.rst`.
 
-    !!! danger "`other` and `extra` are raw SQL"
+    .. danger:: ``other`` and ``extra`` are raw SQL
+
         `featuretype`, `limit` and `strand` become bound parameters, and
         `order_by` is checked against a whitelist -- but **`other` and `extra`
         are interpolated verbatim**, because they exist to carry a caller's own

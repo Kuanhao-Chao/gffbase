@@ -113,32 +113,32 @@ this; it is the single most common place the two modes visibly disagree.
 
 Take three lines that all say ``ID=cds-NP_001``:
 
-=== "``mode="compat"``"
+``mode="compat"``
+^^^^^^^^^^^^^^^^^
 
-::
+Each line becomes **its own feature**, renamed the way
+``gffutils.merge_strategy="create_unique"`` renames them — ``cds-NP_001``,
+``cds-NP_001_1``, ``cds-NP_001_2``. A ported script sees exactly what it
+expects to see.
 
-   Each line becomes **its own feature**, renamed the way
-   `gffutils.merge_strategy="create_unique"` renames them — `cds-NP_001`,
-   `cds-NP_001_1`, `cds-NP_001_2`. A ported script sees exactly what it
-   expects to see.
+``mode="strict"``
+^^^^^^^^^^^^^^^^^
 
-=== "``mode="strict"``"
+The three lines become **one discontinuous feature** with three segments,
+stored in the ``segments`` table. This is what the GFF3 specification actually
+describes: ``covered_length`` sums the segments, ``region()`` decides overlap
+per segment rather than by the bounding envelope, and ``to_lines()`` reproduces
+all three input lines.
 
-::
+.. docs-test: skip reason="illustrative: needs a strict-mode RefSeq database"
 
-   The three lines become **one discontinuous feature** with three segments,
-   stored in the `segments` table. This is what the GFF3 specification
-   actually describes. `covered_length` sums the segments, `region()` decides
-   overlap per segment rather than by the bounding envelope, and `to_lines()`
-   reproduces all three input lines.
+.. code-block:: python
 
-   ```python
    feature = db["cds-NP_001"]
    len(feature.segments)      # 3
    feature.covered_length     # sum of the three, not end - start
-   ```
 
-   See [Schema v2](../design/schema-``v2.md``) for the storage model.
+See :doc:`schema_v2` for the storage model.
 
 .. warning::
 

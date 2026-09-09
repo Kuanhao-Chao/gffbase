@@ -202,8 +202,8 @@ CI requires both to pass.
 ### 4.6 Documentation
 
 ```bash
-make -C docs html              # http://localhost:8000 — live-reloads on edits
-make -C docs html SPHINXOPTS="-W --keep-going"     # what CI runs — fails on any broken anchor
+make -C docs html            # build -> docs/build/html/index.html
+make -C docs html SPHINXOPTS="-W --keep-going"   # what CI runs: warnings are errors
 ```
 
 `--strict` is mandatory before opening a docs PR.

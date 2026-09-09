@@ -20,7 +20,7 @@ Compatibility with ``gffutils-cli``
 Argument names and output shapes follow ``gffutils-cli``, so a script written
 against it keeps working. What differs is how much of it runs.
 
-Of the thirteen commands ``gffutils-cli`` defines, **five work**:
+Of the twelve commands ``gffutils-cli`` defines, **five work**:
 
 .. list-table::
    :header-rows: 1

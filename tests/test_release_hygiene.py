@@ -1017,3 +1017,26 @@ def test_the_wordmark_sits_on_one_baseline(svg_name):
     assert not offenders, f"{svg_name}: letters are off the baseline (y={BASELINE}): " + "; ".join(
         offenders
     )
+
+
+def test_no_published_page_still_tells_a_reader_to_run_mkdocs():
+    """The site is Sphinx. Four pages went on instructing MkDocs anyway.
+
+    `407d0ca` is literally titled "retire MkDocs; the Sphinx site is the one
+    that ships", and `CONTRIBUTING.md` was updated with it -- but the mirrored
+    `contributing.rst` and `testing.rst` were not, so the *published* pages told
+    a new contributor to install a toolchain the repo no longer has and run a
+    command CI does not run.
+
+    The changelog is exempt by construction: it describes what was true at each
+    past release, and rewriting that would be falsifying history.
+    """
+    offenders = []
+    for path in sorted((REPO_ROOT / "docs" / "source").rglob("*.rst")):
+        if path.name == "changelog.rst":
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "mkdocs" in line.lower():
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{number}: {line.strip()[:70]}")
+
+    assert not offenders, "published pages still reference MkDocs:\n" + "\n".join(offenders)

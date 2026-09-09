@@ -7,8 +7,7 @@ GFFBase is a drop-in successor to legacy
 `gffutils <https://github.com/daler/gffutils>`__. For most users, the
 migration is one import change.
 
-   .. rubric:: ⚠️ READ THIS FIRST — the OLAP/OLTP gotcha
-      :name: read-this-first-the-olapoltp-gotcha
+.. danger:: READ THIS FIRST — the OLAP/OLTP gotcha
 
    **There is exactly one common code pattern that gets slower, not
    faster, when you migrate to gffbase.** It's the per-id Python loop:
@@ -28,8 +27,7 @@ migration is one import change.
    never amortizes. SQLite (legacy gffutils) is **OLTP** — its B-tree
    seek on a cache-warm file is microseconds per call.
 
-   .. rubric:: ✅ The fix — one canonical PyArrow snippet
-      :name: the-fix-one-canonical-pyarrow-snippet
+   **The fix — one canonical PyArrow snippet**
 
    .. code-block:: python
 

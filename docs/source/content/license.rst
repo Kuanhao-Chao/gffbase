@@ -45,7 +45,7 @@ What each component is under
    * - DuckDB, PyArrow (runtime dependencies)
      - MIT and Apache-2.0 respectively, installed by pip, not redistributed here
    * - Annotation corpora
-     - **Not redistributed.** Each is downloaded from its publisher under that publisher's terms — see [Datasets](``datasets.md``)
+     - **Not redistributed.** Each is downloaded from its publisher under that publisher's terms — see :doc:`datasets`
 
 .. _license--in-short:
 

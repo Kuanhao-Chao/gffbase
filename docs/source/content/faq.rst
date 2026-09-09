@@ -141,7 +141,7 @@ step that *does* change results is opt-in and separate.
 How do I know my database is sound?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``db.validate()`` runs 14 structural invariants, each a single set-based query —
+``db.validate()`` runs 17 structural invariants, each a single set-based query —
 cheap enough for CI. ``gffbase stats`` summarises what is actually in it.
 → :doc:`validate <api>` · :doc:`Command line <cli>`
 
