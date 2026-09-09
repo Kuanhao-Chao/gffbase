@@ -171,9 +171,12 @@ def test_the_documented_flags_exist(flag):
 
 def test_every_command_in_the_methodology_page_parses():
     """Extract the harness invocations from the docs and check argparse accepts them."""
-    page = (REPO_ROOT / "docs" / "source" / "content" / "methodology.rst").read_text(
-        encoding="utf-8"
-    )
+    # `docs/` is not shipped in the sdist -- a Sphinx tree is not part of an
+    # installed package -- so this is a checkout-only check.
+    methodology = REPO_ROOT / "docs" / "source" / "content" / "methodology.rst"
+    if not methodology.is_file():
+        pytest.skip("docs/ is not shipped in the sdist; this is a checkout-only check")
+    page = methodology.read_text(encoding="utf-8")
     # Leading whitespace is significant now: in RST the command lives inside an
     # indented `.. code-block:: bash`, so an anchored `^python` matches nothing.
     # The `assert commands` below is what turned that into a visible failure

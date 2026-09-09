@@ -647,7 +647,16 @@ def test_published_benchmark_tables_match_the_committed_measurements():
     `benchmarks/results/06_mega.json`, and this runs its `--check` mode. If a
     table is edited by hand, or the measurements are refreshed without
     regenerating, this fails.
+
+    Checkout-only: two of the generator's five targets are under `docs/`,
+    which the sdist does not ship, and `--check` treats a missing target as a
+    failure rather than skipping it -- deliberately, because a target that
+    silently disappears is how two of them went unchecked through a docs
+    migration. That strictness is right in a checkout and wrong to run
+    against a tree that was never meant to contain them.
     """
+    _require_checkout_tree("docs")
+
     import subprocess
 
     script = REPO_ROOT / "tools" / "gen_benchmark_tables.py"

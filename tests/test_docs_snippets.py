@@ -80,6 +80,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(__file__).parent / "data"
 pytestmark = pytest.mark.filterwarnings("error::UserWarning")
 
+# This module executes the documentation, so it needs the documentation. The
+# sdist ships `tests/`, `tools/`, `benchmarks/` and `.github/` but not
+# `docs/` -- a Sphinx tree is not part of an installed package. Without it the
+# extractor finds only README.md and MIGRATION.md, and the three guards that
+# exist to catch "the extractor stopped matching anything" fire on the
+# absence of the corpus rather than on a real regression. A module-level skip
+# says that once, instead of three misleading failures.
+if not (REPO_ROOT / "docs" / "source").is_dir():
+    pytest.skip(
+        "docs/ is not shipped in the sdist; executable-documentation checks are checkout-only",
+        allow_module_level=True,
+    )
+
 # A missing import is exempt only when the snippet directly imports one of
 # these deliberately external packages. Internal typos and missing transitive
 # dependencies must fail: both previously disappeared behind the blanket

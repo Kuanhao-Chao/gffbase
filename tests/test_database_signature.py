@@ -7,11 +7,19 @@ import json
 import sqlite3
 
 import duckdb
-import gffutils
 import pytest
 from gffbase import create_db
 
 from benchmarks.common import database_signature, signatures_match, validate_database_signature
+
+# The oracle lives in the `bench` extra, not `test` -- it is a pinned git
+# checkout of gffutils, not a runtime dependency. A bare `import gffutils` here
+# therefore failed at *collection* when the suite ran against an sdist
+# installed with `[test]`, which aborts the entire run: 2,200 unrelated tests
+# never execute because one module cannot import an optional comparator.
+# `importorskip` turns that into a skip of this module alone.
+gffutils = pytest.importorskip("gffutils")
+
 
 SOURCE = """\
 chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=g1;Name=gene

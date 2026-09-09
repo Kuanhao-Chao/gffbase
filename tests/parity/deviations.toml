@@ -162,10 +162,17 @@ in the git checkout and the SOURCE DISTRIBUTION but not in the binary wheel.
 The oracle packages its 38 example files inside the installed package, so
 upstream's copy works from a wheel and this one raises.
 
-Deliberate: the fixtures are a 216 KB test corpus, and shipping them in every
-wheel to support a docs convenience is the wrong trade. The `FileNotFoundError`
-says so explicitly and names the install that does work, rather than leaving
-the reader with a bare missing-file error. Pinned by
+Deliberate: the fixtures are a 40-file, 142 KiB test corpus, and shipping them
+inside every wheel to support a docs convenience is the wrong trade.
+
+Note what the error can and cannot promise. It used to advise `pip install
+--no-binary gffbase gffbase`; that does not work, because `--no-binary` still
+builds a wheel and installs only the package directory, so `tests/` is absent
+either way. Confirmed by installing the sdist into a clean venv, where the
+helper still raised. There is no `pip install` that makes this resolve -- only
+a checkout or an unpacked sdist, run from its root -- and the message now says
+that instead of naming a fix that fails the same way. Pinned by
+`test_example_filename_explains_where_the_fixtures_actually_are` and
 `test_example_filename_finds_the_upstream_corpus`."""
 
 [[deviation]]
