@@ -1364,6 +1364,38 @@ def _terminate_process(proc: subprocess.Popen[bytes]) -> None:
         proc.wait()
 
 
+#: What a job may spend after the CANDIDATE ingest returns: `--validation-sample
+#: all`, the gffbase `database_signature`, and the spatial and batched query
+#: phases. None is capped inside `06_mega.py`. Measured together at ~2,220 s on
+#: GENCODE GTF, the largest corpus.
+_CANDIDATE_PHASE_SECONDS = 2 * 3600
+
+#: What it may spend after the COMPARATOR ingest returns -- normalizing
+#: gffutils and signing it, ~950 s on GENCODE GTF. Budgeted separately because
+#: a scaling job passes `--skip-legacy` and runs neither.
+_COMPARATOR_PHASE_SECONDS = 2 * 3600
+
+
+def controller_timeout(job: JobSpec) -> int:
+    """Wall-clock budget for one job's child process.
+
+    A *controller* cap, and it must never be the thing that fires: each arm
+    carries its own cap and censors honestly when it hits it, which is a
+    recorded measurement. This exists only so a wedged child cannot hold a lane
+    forever, and a cap that fires first destroys a job that was working --
+    which is exactly what happened to `canonical-gencode-gtf`, killed at
+    12,600 s while its comparator signature was still running.
+    """
+    timeout = int(job.parameters.get("cap_seconds", job.parameters.get("gffbase_timeout", 0)))
+    if job.kind == "bridge":
+        return timeout
+    timeout += _CANDIDATE_PHASE_SECONDS
+    if job.kind != "scaling":
+        # `--skip-legacy` means a scaling job has neither of these.
+        timeout += int(job.parameters["legacy_timeout"]) + _COMPARATOR_PHASE_SECONDS
+    return timeout
+
+
 def run_job(
     campaign: Mapping[str, Any],
     job: JobSpec,
@@ -1457,10 +1489,7 @@ def run_job(
             else build_mega_argv(job, attempt_dir, campaign)
         )
         env = job_environment(campaign, job, attempt_dir)
-        timeout = int(job.parameters.get("cap_seconds", job.parameters.get("gffbase_timeout", 0)))
-        if job.kind != "bridge":
-            timeout += 0 if job.kind == "scaling" else int(job.parameters["legacy_timeout"])
-            timeout += 3600
+        timeout = controller_timeout(job)
 
         def record_child(identity: _campaign_worker.ProcessIdentity) -> None:
             nonlocal running
