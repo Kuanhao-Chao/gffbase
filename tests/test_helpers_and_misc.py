@@ -104,6 +104,14 @@ def test_merge_dialects_attribute_order_first_appearance():
 
 
 def test_example_filename_resolves_test_fixtures():
+    # See test_compat_surface: `tests/data/` is in the source tree and the
+    # sdist, but pip installs only the package directory, so this cannot
+    # resolve from an installed environment. The helper is correct; the
+    # fixture tree is absent.
+    import gffbase as _g
+
+    if not (Path(_g.__file__).resolve().parent.parent.parent / "tests" / "data").is_dir():
+        pytest.skip("tests/data/ is not reachable from the installed package")
     p = example_filename("simple.gff3")
     assert Path(p).is_file()
 
@@ -217,21 +225,41 @@ def test_example_filename_finds_the_upstream_corpus():
     """
     from pathlib import Path
 
+    import gffbase as _g
     from gffbase import helpers
+
+    # Checkout-only: `tests/data/upstream/` is not installed. See the note on
+    # `test_example_filename_resolves_test_fixtures`.
+    if not (Path(_g.__file__).resolve().parent.parent.parent / "tests" / "data").is_dir():
+        pytest.skip("tests/data/ is not reachable from the installed package")
 
     for name in ("FBgn0031208.gff", "FBgn0031208.gtf"):
         assert Path(helpers.example_filename(name)).is_file()
 
 
-def test_example_filename_explains_the_wheel_limitation():
+def test_example_filename_explains_where_the_fixtures_actually_are():
     """A bare "file not found" sends the reader looking for a typo.
 
-    The fixtures ship in the sdist and the checkout, not the binary wheel, so
-    the error names the install that does work. Declared in
-    `tests/parity/deviations.toml`.
+    The message used to say the fixtures are absent from the *binary wheel*
+    and advise `pip install --no-binary gffbase gffbase`. That advice cannot
+    work: `--no-binary` still builds a wheel and installs only the package
+    directory, and `tests/` is not inside it -- so the suggested fix fails
+    exactly like the thing it was meant to fix. Verified by installing the
+    sdist into a clean venv, where the helper still raised.
+
+    What it says now is the true constraint -- a checkout or an unpacked
+    sdist, run from its root -- and an alternative that always works.
+    Declared in `tests/parity/deviations.toml`.
     """
     import pytest
     from gffbase import helpers
 
-    with pytest.raises(FileNotFoundError, match="binary wheel"):
+    with pytest.raises(FileNotFoundError) as excinfo:
         helpers.example_filename("no_such_example.gff")
+
+    message = str(excinfo.value)
+    assert "tests/data/" in message
+    assert "not installed" in message.lower()
+    assert "checkout" in message
+    # The advice that cannot work must not come back.
+    assert "--no-binary" not in message
