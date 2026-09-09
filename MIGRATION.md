@@ -338,7 +338,7 @@ isolation; each can change what your script computes.
 ### Command line
 
 `gffutils-cli` becomes `gffbase`, with the same argument names. Seven of its
-commands work there; ten work here. See [the CLI reference](https://khchao.com/gffbase/content/cli.html) for
+commands work there; eleven work here. See [the CLI reference](https://khchao.com/gffbase/content/cli.html) for
 the mapping, including the four upstream commands that raise on every
 invocation.
 

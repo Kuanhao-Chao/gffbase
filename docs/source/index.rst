@@ -34,15 +34,15 @@ What you can do with GFFBase
    :gutter: 3
 
    .. grid-item-card:: 🧬 Query intervals at genome scale
-      :link: content/usage_gallery
-      :link-type: doc
+      :link: usage_gallery--3-spatial-queries
+      :link-type: ref
 
       Ask for a region and get the features that overlap it, from an R-tree
       index built during ingest.
 
    .. grid-item-card:: 🌳 Walk the annotation hierarchy
-      :link: content/usage_gallery
-      :link-type: doc
+      :link: usage_gallery--2-standard-relational-queries
+      :link-type: ref
 
       ``children``, ``parents`` and the batched forms, backed by a transitive
       closure so depth costs nothing at query time.
@@ -55,8 +55,8 @@ What you can do with GFFBase
       changing one import.
 
    .. grid-item-card:: ⚡ Extract in bulk, without a Python loop
-      :link: content/usage_gallery
-      :link-type: doc
+      :link: usage_gallery--5-vectorized-ml-api-the-ones-that-make-gffbase-fast
+      :link-type: ref
 
       ``children_batched(format="arrow")`` returns one Arrow table for
       thousands of anchors.

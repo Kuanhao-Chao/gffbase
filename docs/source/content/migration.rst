@@ -513,7 +513,7 @@ Command line
 ~~~~~~~~~~~~
 
 ``gffutils-cli`` becomes ``gffbase``, with the same argument names. Seven of its
-commands work there; ten work here. See `the CLI reference <https://khchao.com/gffbase/content/cli.html>`__ for
+commands work there; eleven work here. See `the CLI reference <https://khchao.com/gffbase/content/cli.html>`__ for
 the mapping, including the four upstream commands that raise on every
 invocation.
 
