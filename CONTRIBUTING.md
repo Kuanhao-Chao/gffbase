@@ -63,7 +63,13 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 ### 3.2 Install Python dev dependencies
 
 ```bash
-pip install -e .[dev,test,docs]
+pip install -e .[dev,test]
+
+# The docs extra is separate on purpose: Sphinx 9 requires Python >= 3.12,
+# while the package floor is 3.10. On 3.10 or 3.11 the line above is
+# everything you need, and `pip install -e .[dev,test,docs]` would fail to
+# resolve rather than skip the docs.
+pip install -e .[docs]          # Python >= 3.12 only
 ```
 
 This installs:
