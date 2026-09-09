@@ -181,6 +181,32 @@ key order is non-semantic and engines may expose inferred attributes
 differently. Value order is retained within each key, so reordering values
 changes the signature while reordering keys does not.
 
+Two further normalizations exist because the comparison must not mistake a
+difference in *representation* for a difference in *content*. Both were found
+by whole-genome runs, and each had cost a corpus its published speedup.
+
+**The closure is derived, not read.** gffutils stores relationships in a
+``relations`` table, but what it records at ``level = 2`` is not a transitive
+closure: it inserts, for each feature, the children of its children — one hop,
+at a fixed level, with no iteration to a fixed point. On a four-deep chain it
+records five ancestor–descendant pairs and omits the sixth. gffbase stores the
+real closure, so comparing the two reported RefSeq as differing by 3,218 pairs
+and GENCODE GFF3 by 108 — on hierarchies whose *direct* edges agreed exactly.
+The closure is a function of those edges, so the signature now computes it from
+them for the comparator rather than trusting the stored cache.
+
+**A comma followed by a space is not a separator.** GFF3 says an unescaped
+comma separates values and that a literal comma must be percent-encoded.
+gffbase follows that; gffutils deliberately does not, keeping ``, `` inside the
+value so an unescaped ``description=kinase, subunit 1`` survives as one value.
+Ten CHESS genes record two names as ``gene_name=ADAM6, RPS8P1``, which reported
+that corpus as a 20-row divergence. The signature therefore applies one rule to
+both engines, and it is the comparator's coarser one: re-splitting on every
+comma would shatter 2,294 correctly escaped CHESS descriptions in order to line
+up twenty gene names. The parse-policy difference itself is a declared API
+deviation, recorded in ``tests/parity/deviations.toml`` and pinned by a
+differential test — it belongs there, not hidden inside a benchmark digest.
+
 ----
 
 .. _methodology--publishing-a-run:

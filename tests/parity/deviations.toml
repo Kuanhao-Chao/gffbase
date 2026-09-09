@@ -154,26 +154,26 @@ for."""
 
 [[deviation]]
 kind = "symbol"
-name = "gffbase.helpers.example_filename"
+name = "gffbase.feature.Feature.attributes"
 status = "intentional"
-reason = """Resolves example fixtures from `tests/data/` (including the
-`upstream/` subdirectory of files copied from the gffutils corpus), which ship
-in the git checkout and the SOURCE DISTRIBUTION but not in the binary wheel.
-The oracle packages its 38 example files inside the installed package, so
-upstream's copy works from a wheel and this one raises.
+reason = """Where a multi-value attribute ends. GFF3 says an unescaped comma
+separates values and a literal comma must be percent-encoded, so gffbase splits
+on every unescaped comma. The oracle does not: `gffutils/parser.py` keeps a
+comma FOLLOWED BY A SPACE inside the value, so that an unescaped
+`description=kinase, subunit 1` survives as one value rather than two nonsense
+ones.
 
-Deliberate: the fixtures are a 40-file, 142 KiB test corpus, and shipping them
-inside every wheel to support a docs convenience is the wrong trade.
+So `gene_name=ADAM6, RPS8P1` reads as `["ADAM6", " RPS8P1"]` here and as
+`["ADAM6, RPS8P1"]` upstream. Neither reading is careless and the corpus
+decides which one hurts: ten CHESS genes really do record two names that way,
+while RefSeq writes prose descriptions with unescaped commas. gffbase follows
+the specification, which is also the reading that can be corrected by escaping.
 
-Note what the error can and cannot promise. It used to advise `pip install
---no-binary gffbase gffbase`; that does not work, because `--no-binary` still
-builds a wheel and installs only the package directory, so `tests/` is absent
-either way. Confirmed by installing the sdist into a clean venv, where the
-helper still raised. There is no `pip install` that makes this resolve -- only
-a checkout or an unpacked sdist, run from its root -- and the message now says
-that instead of naming a fix that fails the same way. Pinned by
-`test_example_filename_explains_where_the_fixtures_actually_are` and
-`test_example_filename_finds_the_upstream_corpus`."""
+No fixture in the shared corpus contains a comma-space attribute -- every
+occurrence in `FBgn0031208.gff` is inside a comment -- so nothing detected this
+until a whole-genome benchmark reported CHESS as a 20-row content divergence
+between the engines. Pinned by
+`test_a_comma_followed_by_a_space_splits_for_us_and_not_for_the_oracle`."""
 
 [[deviation]]
 kind = "symbol"

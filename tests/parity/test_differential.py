@@ -807,3 +807,42 @@ def test_the_corpus_is_committed_not_merely_present():
         "these fixtures are gitignored, so they cannot reach a clone or CI:\n  "
         + "\n  ".join(ignored)
     )
+
+
+def test_a_comma_followed_by_a_space_splits_for_us_and_not_for_the_oracle(tmp_path):
+    """Declared deviation: where a multi-value attribute ends.
+
+    GFF3 says an unescaped comma separates values and a literal comma must be
+    percent-encoded. gffbase follows that and splits on every unescaped comma.
+    The oracle does not: `gffutils/parser.py` keeps a comma *followed by a
+    space* inside the value, deliberately, so that an unescaped
+    ``description=kinase, subunit 1`` survives as one value instead of two
+    nonsense ones.
+
+    Neither reading is careless, and the corpus decides which hurts. Ten CHESS
+    genes record two names as ``gene_name=ADAM6, RPS8P1`` -- two values, and we
+    read them as two. RefSeq writes prose descriptions with unescaped commas --
+    one value, and the oracle reads them as one.
+
+    No fixture in the shared corpus exercises this, which is why it went
+    undeclared until a whole-genome benchmark reported CHESS as a 20-row
+    content divergence between the engines. It is pinned here rather than
+    added to `SHARED_GFF3`, because `test_gff3_attributes_match` asserts
+    agreement and this is a disagreement.
+    """
+    source = tmp_path / "comma_space.gff3"
+    source.write_text(
+        "##gff-version 3\n"
+        "chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=g1;gene_name=ADAM6, RPS8P1;alias=a,b\n"
+    )
+    oracle, ours = D.build_both(str(source))
+
+    theirs = D.feature_attributes(oracle["g1"])
+    mine = D.feature_attributes(ours["g1"])
+
+    # A bare comma is a separator for both.
+    assert theirs["alias"] == mine["alias"] == ["a", "b"]
+
+    # A comma followed by a space is not, for the oracle.
+    assert theirs["gene_name"] == ["ADAM6, RPS8P1"]
+    assert mine["gene_name"] == ["ADAM6", " RPS8P1"]
