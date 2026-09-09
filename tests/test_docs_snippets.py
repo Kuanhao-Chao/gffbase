@@ -457,7 +457,7 @@ def test_internal_unlisted_and_transitive_import_failures_are_not_skipped(
 #: the way `docs/guides/modes.md` and `docs/getting-started/quickstart.md` now
 #: do. That is a documentation improvement waiting to happen, and this number
 #: is the scoreboard for it.
-MAX_SKIPPED = 67
+MAX_SKIPPED = 62
 
 
 def test_the_skip_list_does_not_grow():

@@ -65,14 +65,14 @@ What you can do with GFFBase
       :link: content/performance
       :link-type: doc
 
-      Head-to-head benchmarks on every canonical human annotation, with the
-      provenance of each run recorded.
+      Head-to-head benchmarks on the canonical human annotations, with the
+      machine, versions and commit of each run recorded.
 
    .. grid-item-card:: 🧰 Work from the command line
       :link: content/cli
       :link-type: doc
 
-      Build, inspect, validate, migrate and export a database without writing
+      Build, inspect, validate and migrate a database without writing
       Python.
 
 ----
