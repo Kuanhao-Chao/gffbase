@@ -1,0 +1,5 @@
+chr1	src	exon	100	200	.	+	.	gene_id "G1"; transcript_id "T1"; exon_number "1";
+chr1	src	exon	300	500	.	+	.	gene_id "G1"; transcript_id "T1"; exon_number "2";
+chr1	src	exon	700	900	.	+	.	gene_id "G1"; transcript_id "T2"; exon_number "1";
+chr2	src	exon	1000	1500	.	-	.	gene_id "G2"; transcript_id "T3"; exon_number "1";
+chr2	src	exon	2000	2500	.	-	.	gene_id "G2"; transcript_id "T3"; exon_number "2";

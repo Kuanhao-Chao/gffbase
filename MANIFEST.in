@@ -11,6 +11,10 @@ recursive-include rust/src *.rs
 # Python source tree (also covered by [tool.maturin] python-source).
 recursive-include python/gffbase *.py
 include python/gffbase/py.typed
+# The example corpus `example_filename` resolves. An extension list would
+# under-cover it: the vendored gffutils fixtures include .txt, .fa, .gz and one
+# file with no extension at all.
+recursive-include python/gffbase/data *
 
 # Tests + fixtures bundled so `pytest` works against an installed sdist.
 recursive-include tests *.py
