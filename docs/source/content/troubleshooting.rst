@@ -291,7 +291,7 @@ Yes. Export a real SQLite database that ``gffutils`` itself can open:
 .. code-block:: python
 
    from gffbase import export_sqlite
-   export_sqlite(db, "legacy.db")
+   export_sqlite(db.conn, "legacy.db")   # a connection, not the FeatureDB
 
 .. _troubleshooting--which-python-versions-are-supported:
 

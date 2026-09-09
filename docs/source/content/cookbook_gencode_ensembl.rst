@@ -126,13 +126,13 @@ Performance notes (real GENCODE v49 numbers)
      - Wall
      - Source
    * - Full ingest (6.07 M lines)
-     - see [Performance](../performance.md)
+     - see :doc:`performance`
      - measured per release
    * - ``children(g, level=1)`` (single gene)
      - <1 ms
      - materialized closure cache
    * - Bulk ``children_batched()``
-     - see [Performance](../performance.md)
+     - see :doc:`performance`
      - measured per release
    * - Random ``region(seqid:start-end)``
      - ~0.7 ms

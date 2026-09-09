@@ -37,7 +37,7 @@ Test tiers
      - ``cargo test --manifest-path rust/Cargo.toml --locked --release``
      - Native parser and Rust-level edge cases
    * - Docs
-     - ``mkdocs build --strict``
+     - ``make -C docs html SPHINXOPTS="-W --keep-going"``
      - API imports, links, generated content, and navigation
 
 Use an explicit marker expression when combining tiers, for example

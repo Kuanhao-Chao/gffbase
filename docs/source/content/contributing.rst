@@ -14,7 +14,7 @@ maturin and consumed by the Python public API (under
 touch both.
 
 By participating in this project, you agree to abide by our
-`Code of Conduct <https://github.``com/Kuanhao-Chao/gffbase/blob/main/CODE_OF_CONDUCT.md``>`__.
+`Code of Conduct <https://github.com/Kuanhao-Chao/gffbase/blob/main/CODE_OF_CONDUCT.md>`__.
 
 ----
 
@@ -30,9 +30,9 @@ By participating in this project, you agree to abide by our
    * - What
      - Where
    * - Bug reports
-     - `open an issue <https://github.com/Kuanhao-Chao/gffbase/issues/new?template=``bug_report.md``>`__
+     - `open an issue <https://github.com/Kuanhao-Chao/gffbase/issues/new?template=bug_report.md>`__
    * - Feature requests
-     - `open an issue <https://github.com/Kuanhao-Chao/gffbase/issues/new?template=``feature_request.md``>`__
+     - `open an issue <https://github.com/Kuanhao-Chao/gffbase/issues/new?template=feature_request.md>`__
    * - Discussions / questions
      - `GitHub Discussions <https://github.com/Kuanhao-Chao/gffbase/discussions>`__
    * - Performance & architecture notes
@@ -40,7 +40,7 @@ By participating in this project, you agree to abide by our
    * - Migration from ``gffutils``
      - `Migration guide <https://khchao.com/gffbase/content/migration.html>`__
    * - API reference
-     - [``docs/api/``](docs/api/) (rendered: ``mkdocs serve``)
+     - :doc:`api` (rendered by ``make -C docs html``)
 
 ----
 
@@ -99,7 +99,7 @@ This installs:
 - The runtime: ``duckdb``, ``pyarrow``.
 - Test tools: ``pytest``, ``pytest-cov``, ``pyyaml`` (the release-hygiene suite parses the workflows).
 - Lint tools: ``ruff``, ``mypy``.
-- Doc tools: ``mkdocs``, ``mkdocs-material``, ``mkdocstrings[python]``.
+- Doc tools: ``Sphinx``, ``furo``, ``sphinx-design``, ``sphinx-copybutton``. The docs extra needs Python 3.12 or newer, because Sphinx 9 does.
 - Build tools: ``maturin``.
 
 .. _contributing--33-build-the-rust-extension-in-place:
@@ -272,10 +272,11 @@ CI requires both to pass.
 
 .. code-block:: bash
 
-   mkdocs serve              # http://localhost:8000 — live-reloads on edits
-   mkdocs build --strict     # what CI runs — fails on any broken anchor
+   make -C docs html            # build -> docs/build/html/index.html
+   make -C docs html SPHINXOPTS="-W --keep-going"   # what CI runs
 
-``--strict`` is mandatory before opening a docs PR.
+``-W`` is mandatory before opening a docs PR: it turns a broken
+cross-reference or a page missing from the toctree into an error.
 
 .. _contributing--47-benchmarks-optional:
 
@@ -390,7 +391,8 @@ For multi-paragraph rationale, use the body of the commit — explain
   docstring, the migration guide, the cookbook, or the API
   reference.
 
-- ☐ **``mkdocs build --strict`` clean** if you touched ``docs/``.
+- ☐ **``make -C docs html SPHINXOPTS="-W --keep-going"`` clean** if you
+  touched ``docs/``.
 - ☐ **No unrelated changes.** A 200-line diff in a feature PR
   should not include a ``ruff`` reformat of an unrelated file.
 

@@ -830,11 +830,10 @@ class FeatureDB:
             The number of matching features. A discontinuous feature counts
             once, however many input lines it was built from.
 
-        Example:
-            ```python
+        Example::
+
             db.count_features_of_type()          # 6
             db.count_features_of_type("exon")    # 3
-            ```
         """
         self._require_open("count_features_of_type")
         if featuretype is None:
@@ -849,10 +848,9 @@ class FeatureDB:
         Yields:
             Each distinct GFF column-3 value, once.
 
-        Example:
-            ```python
+        Example::
+
             sorted(db.featuretypes())   # ['CDS', 'exon', 'gene', 'mRNA']
-            ```
         """
         self._require_open("featuretypes")
         for (ft,) in self.conn.execute(
@@ -960,11 +958,10 @@ class FeatureDB:
         Yields:
             Matching `Feature` objects.
 
-        Example:
-            ```python
+        Example::
+
             genes = list(db.features_of_type("gene"))
             both = list(db.features_of_type(["exon", "CDS"]))
-            ```
         """
         yield from self.all_features(
             limit=limit,
@@ -1331,11 +1328,10 @@ class FeatureDB:
                 `format` is not one of the three.
             ImportError: `format="df"`/`"polars"` without that package.
 
-        Example:
-            ```python
+        Example::
+
             exons = db.to_table("exon", format="arrow")
             df = db.to_table(["exon", "CDS"], format="df", limit="chr1:1-10000")
-            ```
 
         Note:
             Attributes are not included: they are a long-form table, so
@@ -2223,11 +2219,10 @@ class FeatureDB:
         Raises:
             ReadOnlyError: The database was opened with `read_only=True`.
 
-        Example:
-            ```python
+        Example::
+
             db.delete("transcript_1")
             db.delete([f.id for f in db.features_of_type("CDS")])
-            ```
         """
         self._require_writable("delete")
         ids = self._coerce_ids(features)
@@ -2317,11 +2312,10 @@ class FeatureDB:
             ReadOnlyError: The database was opened with `read_only=True`.
             TypeError: An item is neither a `Feature` nor a `ParsedFeature`.
 
-        Example:
-            ```python
+        Example::
+
             introns = list(db.create_introns())
             db.update(introns)
-            ```
         """
         self._require_writable("update")
         # Minimal update: accept an iterable of Feature objects and
@@ -2899,10 +2893,9 @@ class FeatureDB:
             ValueError: The removed `ignore_strand` argument was passed.
             TypeError: Any other unexpected keyword argument.
 
-        Example:
-            ```python
+        Example::
+
             db.children_bp("transcript_1", child_featuretype="exon", merge=True)
-            ```
         """
         if kwargs:
             # Accepting and ignoring these was worse than refusing them:
@@ -2955,10 +2948,9 @@ class FeatureDB:
             A feature with no thick children is emitted as entirely thick.
             `blockSizes` and `blockStarts` carry no trailing comma.
 
-        Example:
-            ```python
+        Example::
+
             print(db.bed12("transcript_1"))
-            ```
         """
         if thick_featuretype and thin_featuretype:
             raise ValueError("Can only specify one of `thick_featuretype` or `thin_featuretype`")

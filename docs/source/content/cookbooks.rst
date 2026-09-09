@@ -17,13 +17,13 @@ the corpus they need. Fetch those with ``python benchmarks/download_corpora.py``
 
    * - Cookbook
      - Topic
-   * - [GENCODE / Ensembl](``gencode_ensembl.md``)
+   * - :doc:`GENCODE / Ensembl <cookbook_gencode_ensembl>`
      - Deeply nested gene → transcript → exon hierarchies
-   * - [NCBI RefSeq](``refseq.md``)
+   * - :doc:`NCBI RefSeq <cookbook_refseq>`
      - Massive chromosome records, ``Dbxref``, ``Note``, ``gbkey`` tags
-   * - [MANE](``mane.md``)
+   * - :doc:`MANE <cookbook_mane>`
      - Filtering for ``tag=MANE_Select`` and ``tag=MANE_Plus_Clinical``
-   * - [**Machine Learning Workflows**](``machine_learning_workflows.md``)
+   * - :doc:`Machine Learning Workflows <cookbook_ml_workflows>`
      - Bulk feature extraction → PyArrow → Hugging Face / PyTorch with zero per-row Python overhead
 
 .. _cookbooks--conventions:
