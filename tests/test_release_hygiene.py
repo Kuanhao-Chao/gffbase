@@ -196,6 +196,10 @@ _VERSION_LITERALS = [
         r"\*\*([0-9A-Za-z.]+) is still a release candidate\*\*",
     ),
     ("docs/release_checklist.rst", r"native extension report exactly ``([^`]+)``"),
+    # The Sphinx site states the version twice and was in no gate at all --
+    # exactly the drift the rest of this list exists to catch.
+    ("docs/source/conf.py", r'^release = "([^"]+)"$'),
+    ("docs/source/conf.py", r'^version = "([^"]+)"$'),
 ]
 
 
@@ -752,7 +756,10 @@ def test_the_documentation_url_is_canonical_everywhere():
         if not path.is_file() or path.suffix not in {".md", ".yml", ".yaml", ".toml", ".cff"}:
             continue
         rel = path.relative_to(REPO_ROOT)
-        if rel.parts[0] in {".git", "site", "htmlcov", "plans", "benchmarks"}:
+        # `.claude` holds tool state, including nested git worktrees --
+        # `.git/info/exclude` already declares them not-repo-content, and a
+        # perfectly ordinary local worktree must not fail a release gate.
+        if rel.parts[0] in {".git", ".claude", "site", "htmlcov", "plans", "benchmarks"}:
             continue
         if dead_link.search(path.read_text(encoding="utf-8", errors="replace")):
             offenders.append(str(rel))
