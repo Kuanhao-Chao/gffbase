@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
+import shutil
 import sqlite3
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -41,6 +44,17 @@ chr1\tsrc\tCDS\t5\t15\t.\t+\t0\tgene_id "g"; transcript_id "t";
 """
 
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+
+DEPTH3_SOURCE = """\
+chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=A
+chr1\tsrc\tmRNA\t1\t100\t.\t+\t.\tID=B;Parent=A
+chr1\tsrc\texon\t1\t50\t.\t+\t.\tID=C;Parent=B
+chr1\tsrc\tCDS\t10\t40\t.\t+\t0\tID=D;Parent=C
+"""
+
+COMMA_SPACE_SOURCE = """\
+chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=g1;gene_name=ADAM6, RPS8P1;alias=a,b
+"""
 
 
 def _independent_signature(seed: str = "fixture") -> dict:
@@ -131,6 +145,115 @@ def test_signature_supports_the_gffutils_physical_representation(tmp_path):
     assert signature["direct_relationship_count"] == 3
     assert validate_database_signature(signature)
     assert signatures_match(database_signature(candidate, engine="gffbase"), signature) is True
+
+
+def _pair(tmp_path, name, source):
+    """Ingest one source into both engines with the campaign's parameters."""
+
+    src = tmp_path / f"{name}.gff3"
+    src.write_text(source)
+    duck = tmp_path / f"{name}.duckdb"
+    sqlite = tmp_path / f"{name}.sqlite"
+    create_db(
+        str(src), str(duck), force=True, force_gff=True, merge_strategy="create_unique"
+    ).close()
+    gffutils.create_db(
+        str(src),
+        str(sqlite),
+        force=True,
+        merge_strategy="create_unique",
+        keep_order=False,
+        sort_attribute_values=False,
+        verbose=False,
+    )
+    return (
+        database_signature(duck, engine="gffbase"),
+        database_signature(sqlite, engine="gffutils"),
+    )
+
+
+def test_signature_reads_the_schema_v1_databases_the_version_bridge_measures(tmp_path):
+    """The 0.1.0 arm of the version bridge could never have been signed.
+
+    `database_signature` assumed the current gffbase schema unconditionally, so
+    against a v1 database -- which has no `segments`/`segments_all`, one row per
+    feature, and no `seg_idx` on `attributes` -- it raised
+    `CatalogException: Table with name segments_all does not exist`.
+    `_validate_bridge_payload` requires a valid v3 signature from every bridge
+    job, so `bridge-gffbase-0.1.0-*` was unsatisfiable by construction. The
+    DuckDB lock defect masked this: the jobs died one step earlier.
+
+    Signed against the real v1 bytes, not a v2 database stripped back to look
+    like one -- see `tests/data/v1/PROVENANCE.md`.
+    """
+    path = tmp_path / "v1.duckdb"
+    v1_dir = Path(__file__).parent / "data" / "v1"
+    with gzip.open(v1_dir / "schema_v1.duckdb.gz", "rb") as src, open(path, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+
+    con = duckdb.connect(str(path), read_only=True)
+    try:
+        meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
+        expected_features = con.execute("SELECT COUNT(*) FROM features").fetchone()[0]
+        expected_edges = con.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT parent, child FROM edges)"
+        ).fetchone()[0]
+    finally:
+        con.close()
+    assert meta["schema_version"] == "1"
+
+    signature = database_signature(path, engine="gffbase")
+
+    assert validate_database_signature(signature)
+    assert signature["feature_count"] == expected_features
+    # v1 predates multipart features: every feature is exactly one segment.
+    assert signature["segment_count"] == expected_features
+    assert signature["direct_relationship_count"] == expected_edges
+    assert signature["attribute_count"] > 0
+
+
+def test_signature_compares_closure_beyond_the_depth_gffutils_stores(tmp_path):
+    """gffutils' stored closure stops at level 2, so it is not a closure.
+
+    `create.py::_update_relations` inserts, for each feature, the children of
+    its children -- one hop, at a fixed `level=2`, with no iteration to a fixed
+    point. On `A -> B -> C -> D` it therefore records five pairs and omits
+    `A -> D` entirely. gffbase stores the real transitive closure, so it has
+    six.
+
+    This is not a difference in what the two engines ingested: the direct
+    edges agree exactly, and the closure is a function of them. Comparing
+    gffbase's closure against gffutils' truncated cache reported a divergence
+    on three of five benchmark corpora -- RefSeq by 3,218 pairs, GENCODE GFF3
+    by 108 -- and the campaign refused to publish a speedup for any of them.
+    The comparison, not the data, was wrong.
+    """
+    candidate, comparator = _pair(tmp_path, "depth3", DEPTH3_SOURCE)
+
+    assert candidate["direct_relationship_count"] == comparator["direct_relationship_count"] == 3
+    assert candidate["closure_count"] == 6, "A->D at depth 3 must be in the closure"
+    assert signatures_match(candidate, comparator) is True
+
+
+def test_signature_is_insensitive_to_the_comma_space_value_heuristic(tmp_path):
+    """One attribute string, two defensible tokenizations, same content.
+
+    GFF3 says an unescaped comma separates values and a literal comma must be
+    percent-encoded, so gffbase splits `gene_name=ADAM6, RPS8P1` into two
+    values. gffutils deliberately does not (`parser.py`: a comma *followed by a
+    space* is read as prose, to survive unescaped descriptions like
+    `"kinase, subunit 1"`). Both reconstruct the identical column-nine text.
+
+    Ten CHESS gene records carry two gene names this way, which made the
+    corpus report a 20-row attribute divergence and cost it its published
+    speedup. The signature exists to prove the two engines ingested the same
+    content, so it compares the reconstructed text under one split rule rather
+    than each engine's own.
+    """
+    candidate, comparator = _pair(tmp_path, "commaspace", COMMA_SPACE_SOURCE)
+
+    assert candidate["attribute_count"] == comparator["attribute_count"]
+    assert signatures_match(candidate, comparator) is True
 
 
 @pytest.mark.parametrize(
