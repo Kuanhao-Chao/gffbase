@@ -48,6 +48,29 @@ BRIDGE_SCHEMA = "benchmark-bridge-v2"
 BRIDGE_ENVIRONMENT_SCHEMA = "benchmark-bridge-environment-v1"
 
 
+def release_database(db: object) -> None:
+    """Drop a database handle's lock, including for versions that cannot.
+
+    gffbase 0.1.0 shipped no way to release a handle -- no `close()`, no
+    `__exit__`, no `__del__` -- which is one of the defects 0.2.0 fixed. The
+    version bridge has to measure 0.1.0 anyway, so when the method is absent it
+    reaches past the public API to the connection the handle holds.
+
+    Without this, DuckDB kept its exclusive lock on the file just written and
+    the read-only connect in `database_signature` failed, which is how both
+    `bridge-gffbase-0.1.0-*` jobs came to fail after measuring successfully.
+    An object with neither shape is left alone: SQLite takes no such lock, so
+    the gffutils arms were never affected and must not start raising here.
+    """
+    close = getattr(db, "close", None)
+    if callable(close):
+        close()
+        return
+    conn = getattr(db, "conn", None)
+    if conn is not None and callable(getattr(conn, "close", None)):
+        conn.close()
+
+
 def bridge_environment(*, package: str, package_version: str, threads: int) -> dict:
     """Return closed provenance that works in either historical environment.
 
@@ -132,8 +155,7 @@ def run_bridge(
                 "checked": list(report.checked),
                 "errors": [str(item) for item in report.errors],
             }
-        if hasattr(db, "close"):
-            db.close()
+        release_database(db)
     else:
         import gffutils
 
@@ -151,6 +173,7 @@ def run_bridge(
         n_features = db.count_features_of_type()
         validation = None
         package_version = importlib.metadata.version("gffutils")
+        release_database(db)
 
     signature = database_signature(database, engine=engine)
     payload = {
