@@ -226,6 +226,35 @@ the trade.
 Environment
 -----------
 
+.. _troubleshooting--cargo-does-not-understand-this-lock-file:
+
+``this version of Cargo does not understand this lock file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Building from source with a Rust older than 1.78. gffbase requires **Rust
+≥ 1.83**, but this failure happens before Cargo reads the ``rust-version``
+field, so the message names neither gffbase nor the version you need:
+
+.. code-block:: text
+
+   error: failed to parse lock file at: .../rust/Cargo.lock
+   Caused by: lock file version `4` was found, but this version of Cargo
+   does not understand this lock file
+   💥 maturin failed
+
+Check what ``pip`` will actually use, which is not always what ``cargo
+--version`` reports in your working directory — a rustup directory override
+applies only inside the directory it names, and building an unpacked sdist
+happens outside it:
+
+.. code-block:: bash
+
+   cargo --version                 # in the directory you are building in
+   rustup toolchain install 1.83   # if it is older than 1.83
+   RUSTUP_TOOLCHAIN=1.83 pip install gffbase
+
+Installing a wheel needs no Rust at all; this only affects source builds.
+
 .. _troubleshooting--native_available-returns-false:
 
 ``native_available()`` returns ``False``
