@@ -194,12 +194,20 @@ CAMPAIGN_JSON="$CAMPAIGN_DIR/campaign.json"
 # phase REFUSES to start until every exploratory job has a valid result -- it
 # picks its thread count from them. So the order is launch, wait, canonical;
 # running canonical first fails with "requires valid exploratory result".
+# `launch` and `canonical` are one-shot and refuse to start while any worker is
+# live ("worker is already live for ..."), and in practice only the first tmux
+# window survives the initial launch -- the other four exit immediately for a
+# reason I have not established, taking their pane output with them. So the
+# driver re-issues the phase command whenever nothing is running and work
+# remains. That is a workaround, not a diagnosis: it makes the campaign
+# complete without pretending to explain the dead windows.
 wait_for_jobs() {
     local label="$1"
-    "$PRIMARY" - "$CAMPAIGN_JSON" "$label" <<'PY'
+    local relaunch="$2"
+    "$PRIMARY" - "$CAMPAIGN_JSON" "$label" "$relaunch" <<'PY'
 import json, subprocess, sys, time
 
-campaign, label = sys.argv[1], sys.argv[2]
+campaign, label, relaunch = sys.argv[1], sys.argv[2], sys.argv[3]
 deadline = time.monotonic() + 24 * 3600
 last = None
 while time.monotonic() < deadline:
@@ -224,18 +232,31 @@ while time.monotonic() < deadline:
     if outstanding == 0:
         print(f"  [{label}] all jobs succeeded", flush=True)
         sys.exit(0)
+    if counts["running"] == 0 and counts["pending"]:
+        # Nothing is live and work remains: drive the next worker.
+        again = subprocess.run(
+            [sys.executable, "benchmarks/cluster_campaign.py", relaunch,
+             "--campaign", campaign, "--resume", "--execute"],
+            capture_output=True, text=True,
+        )
+        if again.returncode:
+            sys.exit(f"  [{label}] could not resume: "
+                     f"{again.stderr.strip() or again.stdout.strip()}")
+        print(f"  [{label}] resumed", flush=True)
     time.sleep(60)
 sys.exit(f"  [{label}] timed out after 24h")
 PY
 }
 
 say "2/4 launch  (25 exploratory thread-scaling jobs, five tmux workers on disjoint lanes)"
-"$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_JSON" --resume --execute
-wait_for_jobs exploratory
+"$PRIMARY" benchmarks/cluster_campaign.py launch --campaign "$CAMPAIGN_JSON" --resume --execute || \
+    echo "  (launch declined; the poller will resume when the live worker finishes)"
+wait_for_jobs exploratory launch
 
 say "3/4 canonical  (the 11 jobs that produce the published numbers; legacy runs uncapped)"
-"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_JSON" --resume --execute
-wait_for_jobs canonical
+"$PRIMARY" benchmarks/cluster_campaign.py canonical --campaign "$CAMPAIGN_JSON" --resume --execute || \
+    echo "  (canonical declined; the poller will resume when the live worker finishes)"
+wait_for_jobs canonical canonical
 
 say "4/4 status"
 "$PRIMARY" benchmarks/cluster_campaign.py status --campaign "$CAMPAIGN_JSON"
