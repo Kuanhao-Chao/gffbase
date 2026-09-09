@@ -1022,6 +1022,22 @@ class _RowsCursor:
         return rows
 
 
+#: The GFF3 multi-value separator, and the single tokenization the signature
+#: applies to both engines.  Neither engine records the separator it used, so
+#: it is spelled once here rather than read back from a dialect.
+_MULTIVAL_SEPARATOR = ","
+
+#: A comma followed by a space, which gffutils treats as prose rather than a
+#: separator (``gffutils/parser.py``).  The signature adopts that reading for
+#: both engines; see `_canonical_attribute_rows` for why the coarser rule wins.
+_PROSE_MULTIVAL_SEPARATOR = ", "
+
+#: Ceiling on derived hierarchy depth.  Real annotations are three or four
+#: levels; anything beyond this is a cycle, and a cycle would otherwise extend
+#: the frontier forever.  Deep enough that no legitimate corpus reaches it.
+_MAX_CLOSURE_DEPTH = 64
+
+
 def _canonical_attribute_rows(values: dict) -> Iterator[tuple[str, int, str | None]]:
     """Yield a deterministic semantic representation of column nine.
 
@@ -1029,6 +1045,27 @@ def _canonical_attribute_rows(values: dict) -> Iterator[tuple[str, int, str | No
     differently for inferred parents.  Keys are therefore sorted, while the
     order of values for each key is retained.  A key with no values is emitted
     with index ``-1`` and ``None`` so flags such as ``pseudo`` remain covered.
+
+    Each key's values are rejoined and re-split under ONE rule, because the two
+    engines do not agree on where a value ends.  GFF3 says an unescaped comma
+    separates values and a literal comma must be percent-encoded, so gffbase
+    splits on every unescaped comma; gffutils reads a comma *followed by a
+    space* as prose and keeps it inside the value, deliberately, so that an
+    unescaped ``description=kinase, subunit 1`` survives.  Ten CHESS gene
+    records carry two names that way (``gene_name=ADAM6, RPS8P1``), which
+    reported the corpus as a 20-row content divergence and cost it its
+    published speedup.  That is a parse policy -- declared in the parity
+    register -- not a difference in what was ingested.
+
+    The rule applied is gffutils', not gffbase's, because it is the coarser of
+    the two and a comparison cannot be finer than its least precise side.
+    gffbase keeps ``description=killer cell receptor%2C three Ig domains`` as
+    one value, correctly, since the comma is escaped; gffutils decodes the
+    escape first and can no longer tell that value from two.  Re-splitting on
+    every comma would therefore shatter 2,294 correctly escaped CHESS
+    descriptions to make 20 gene names line up.  Folding to the coarser rule
+    leaves both untouched and costs only the ability to distinguish an escaped
+    comma from a separator -- which gffutils had already lost.
     """
 
     for key in sorted(values):
@@ -1037,8 +1074,14 @@ def _canonical_attribute_rows(values: dict) -> Iterator[tuple[str, int, str | No
         if not items:
             yield str(key), -1, None
             continue
-        for value_idx, value in enumerate(items):
-            yield str(key), value_idx, str(value)
+        rejoined = _MULTIVAL_SEPARATOR.join(str(value) for value in items)
+        parts = (
+            [rejoined]
+            if _PROSE_MULTIVAL_SEPARATOR in rejoined
+            else rejoined.split(_MULTIVAL_SEPARATOR)
+        )
+        for value_idx, value in enumerate(parts):
+            yield str(key), value_idx, value
 
 
 def _gffbase_attribute_rows(cursor) -> Iterator[tuple[str, int, str, int, str | None]]:
@@ -1099,7 +1142,21 @@ def _gffutils_signature_components(
 
     with tempfile.TemporaryDirectory(prefix=".gffbase-signature-", dir=scratch_dir) as directory:
         norm = sqlite3.connect(str(Path(directory) / "normal.sqlite"))
+        # Returns no row at all when unset, which is the default.
+        previous_temp_row = norm.execute("PRAGMA temp_store_directory").fetchone()
+        previous_temp_directory = previous_temp_row[0] if previous_temp_row else ""
         try:
+            # Sorting 96M attribute rows spills to disk, and SQLite picks the
+            # spill directory itself: the first of `sqlite3_temp_directory`,
+            # `SQLITE_TMPDIR`, `TMPDIR`, `/var/tmp`, `/tmp` that it can write.
+            # The campaign's bounded child environment carries no TMPDIR, so
+            # every sort landed on `/var/tmp` -- a 32 GB root volume, not the
+            # fast scratch the databases themselves sit on. That is a capacity
+            # cliff as well as a slow one. `temp_store_directory` is the only
+            # one of those knobs this build honours (SQLITE_TMPDIR is read but
+            # ignored here, verified against 3.53.2), and it sets a process
+            # global, hence the restore in `finally`.
+            norm.execute(f"PRAGMA temp_store_directory = '{directory}'")
             norm.executescript(
                 """
                 PRAGMA journal_mode = OFF;
@@ -1150,6 +1207,20 @@ def _gffutils_signature_components(
             cursor = con.execute("SELECT parent, child, level FROM relations")
             while rows := cursor.fetchmany(10_000):
                 norm.executemany("INSERT INTO relations VALUES (?, ?, ?)", rows)
+            # Everything below joins these tables to each other across 6-12M
+            # rows. Built without indexes they degrade to nested-loop scans:
+            # the `no-infer` GTF arm on GENCODE (6.07M features, 12.34M
+            # relations) never finished a signature in 2h39m. Indexing after
+            # the bulk insert rather than before leaves the insert path
+            # untouched.
+            norm.executescript(
+                """
+                CREATE INDEX stage_dbid ON stage(dbid);
+                CREATE INDEX attrs_dbid ON attrs(dbid);
+                CREATE INDEX relations_child ON relations(child);
+                CREATE INDEX relations_parent ON relations(parent);
+                """
+            )
             if is_gtf:
                 # gffutils has no persisted synthetic flag.  Explicit GTF
                 # parent rows do have attribute-backed relation artifacts,
@@ -1170,6 +1241,16 @@ def _gffutils_signature_components(
                            AND a.key = 'transcript_id' AND a.value = r.parent)
                     """
                 )
+                # `semantic_relation_filter` probes this table as a correlated
+                # NOT EXISTS once per relation row, and the UPDATE below probes
+                # it by child. Unindexed, both are a full scan per row.
+                norm.executescript(
+                    """
+                    CREATE INDEX authored_child ON authored_parent_artifacts(child);
+                    CREATE INDEX authored_triple
+                        ON authored_parent_artifacts(parent, child, depth);
+                    """
+                )
                 norm.execute(
                     """
                     UPDATE stage AS s SET source = 'derived'
@@ -1184,7 +1265,6 @@ def _gffutils_signature_components(
             norm.commit()
             norm.executescript(
                 """
-                CREATE INDEX stage_dbid ON stage(dbid);
                 CREATE TABLE segments AS
                 SELECT rowid, dbid, logical,
                        ROW_NUMBER() OVER (PARTITION BY logical ORDER BY rowid) - 1 AS seg_idx,
@@ -1192,7 +1272,9 @@ def _gffutils_signature_components(
                 FROM stage;
                 CREATE INDEX segments_dbid ON segments(dbid);
                 CREATE TABLE feature_ids AS SELECT DISTINCT logical FROM segments;
+                CREATE UNIQUE INDEX feature_ids_logical ON feature_ids(logical);
                 CREATE TABLE mappings AS SELECT dbid, logical FROM stage;
+                CREATE INDEX mappings_dbid ON mappings(dbid);
                 """
             )
             segment_sha, segment_count = _hash_cursor(
@@ -1226,25 +1308,72 @@ def _gffutils_signature_components(
                 if is_gtf
                 else "1 = 1"
             )
-            direct_sha, direct_count = _hash_cursor(
-                norm.execute(
-                    "SELECT DISTINCT COALESCE(mp.logical, r.parent), "
-                    "COALESCE(mc.logical, r.child) "
-                    + normalized_relations
-                    + "WHERE r.depth = 1 AND "
-                    + semantic_relation_filter
-                    + " ORDER BY 1, 2"
-                )
+            # The direct edges are the hierarchy; the closure is a function of
+            # them. gffutils stores both, but what it stores under `level = 2`
+            # is not a closure: `create.py::_update_relations` inserts, for
+            # each feature, the children of its children -- a single hop, at a
+            # fixed level, with no iteration to a fixed point. On a four-deep
+            # chain it records five pairs and omits the sixth. Comparing
+            # gffbase's real closure against that cache reported a content
+            # divergence on RefSeq (3,218 pairs) and GENCODE GFF3 (108) whose
+            # direct edges agreed exactly, and cost both corpora a published
+            # speedup. So derive the closure here, from the edges the two
+            # engines do agree on, and compare like with like.
+            norm.execute(
+                "CREATE TABLE direct_edges AS "
+                "SELECT DISTINCT COALESCE(mp.logical, r.parent) AS parent, "
+                "COALESCE(mc.logical, r.child) AS child "
+                + normalized_relations
+                + "WHERE r.depth = 1 AND "
+                + semantic_relation_filter
             )
-            closure_sha, closure_count = _hash_cursor(
+            norm.execute("CREATE INDEX direct_edges_parent ON direct_edges(parent)")
+            direct_sha, direct_count = _hash_cursor(
+                norm.execute("SELECT parent, child FROM direct_edges ORDER BY 1, 2")
+            )
+
+            norm.executescript(
+                """
+                CREATE TABLE closure_pairs (ancestor TEXT, descendant TEXT, depth INTEGER);
+                INSERT INTO closure_pairs SELECT parent, child, 1 FROM direct_edges;
+                CREATE UNIQUE INDEX closure_pairs_pair ON closure_pairs(ancestor, descendant);
+                CREATE TABLE frontier AS SELECT parent AS ancestor, child AS descendant
+                    FROM direct_edges;
+                """
+            )
+            # Breadth-first, so the depth a pair is first reached at IS its
+            # minimum depth and no GROUP BY is needed. A separate frontier
+            # table keeps the closure out of the statement that extends it --
+            # SQLite leaves it undefined to read a table an INSERT is writing.
+            depth = 1
+            while True:
+                depth += 1
+                if depth > _MAX_CLOSURE_DEPTH:
+                    raise ValueError(
+                        f"hierarchy exceeds {_MAX_CLOSURE_DEPTH} levels; "
+                        "the relation graph is probably cyclic"
+                    )
                 norm.execute(
-                    "SELECT COALESCE(mp.logical, r.parent), COALESCE(mc.logical, r.child), "
-                    "MIN(r.depth) "
-                    + normalized_relations
-                    + "WHERE "
-                    + semantic_relation_filter
-                    + " GROUP BY 1, 2 ORDER BY 1, 2"
+                    "CREATE TABLE next_frontier AS "
+                    "SELECT DISTINCT f.ancestor AS ancestor, e.child AS descendant "
+                    "FROM frontier f JOIN direct_edges e ON e.parent = f.descendant "
+                    "WHERE NOT EXISTS (SELECT 1 FROM closure_pairs c "
+                    "WHERE c.ancestor = f.ancestor AND c.descendant = e.child)"
                 )
+                extended = norm.execute("SELECT COUNT(*) FROM next_frontier").fetchone()[0]
+                if not extended:
+                    norm.execute("DROP TABLE next_frontier")
+                    break
+                norm.execute(
+                    "INSERT OR IGNORE INTO closure_pairs (ancestor, descendant, depth) "
+                    "SELECT ancestor, descendant, ? FROM next_frontier",
+                    (depth,),
+                )
+                norm.executescript(
+                    "DROP TABLE frontier;ALTER TABLE next_frontier RENAME TO frontier;"
+                )
+            closure_sha, closure_count = _hash_cursor(
+                norm.execute("SELECT ancestor, descendant, depth FROM closure_pairs ORDER BY 1, 2")
             )
             feature_count = int(norm.execute("SELECT COUNT(*) FROM feature_ids").fetchone()[0])
             histogram = [
@@ -1267,6 +1396,12 @@ def _gffutils_signature_components(
                 histogram,
             )
         finally:
+            # Restore the process global before the directory it names is
+            # removed, or the next sort in this process spills into nothing.
+            try:
+                norm.execute(f"PRAGMA temp_store_directory = '{previous_temp_directory or ''}'")
+            except sqlite3.Error:  # pragma: no cover - the connection is going away
+                pass
             norm.close()
 
 
@@ -1401,8 +1536,8 @@ def database_signature(path: Path, *, engine: str) -> dict:
         import duckdb
 
         con = duckdb.connect(str(path), read_only=True)
-        fmt_row = con.execute("SELECT value FROM meta WHERE key = 'fmt'").fetchone()
-        is_gtf = bool(fmt_row and fmt_row[0] == "gtf")
+        meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
+        is_gtf = meta.get("fmt") == "gtf"
         source_sql = (
             "CASE WHEN is_synthetic = TRUE "
             "AND source IN ('gffbase_derived', 'gffutils_derived') "
@@ -1410,21 +1545,41 @@ def database_signature(path: Path, *, engine: str) -> dict:
             if is_gtf
             else "source"
         )
-        segment_sql = f"""
-            SELECT feature_id, seg_idx, seqid,
-                   {source_sql},
-                   featuretype, start, "end", score, strand, frame
-            FROM segments_all ORDER BY feature_id, seg_idx
-        """
-        attribute_sql = """
-            SELECT sa.feature_id, sa.seg_idx, CAST(sa.attributes_blob AS BLOB),
-                   a.key, a.value
-            FROM segments_all sa
-            LEFT JOIN segments sm ON sm.feature_id = sa.feature_id AND sm.seg_idx = sa.seg_idx
-            LEFT JOIN attributes a ON a.feature_id = sa.feature_id AND a.seg_idx =
-                CASE WHEN sm.seg_idx > 0 AND sm.attrs_same_as_seg0 THEN 0 ELSE sa.seg_idx END
-            ORDER BY sa.feature_id, sa.seg_idx, a.key, a.idx, a.value
-        """
+        # Schema v1 predates multipart features: it has no `segments` or
+        # `segments_all`, one row per feature, and no `seg_idx` on
+        # `attributes`. The version bridge measures gffbase 0.1.0, which writes
+        # exactly that, so signing it is not optional -- every bridge job must
+        # carry a valid v3 signature or the campaign rejects it. Reading v1
+        # here rather than migrating keeps the measured artifact untouched.
+        if meta.get("schema_version") == "1":
+            segment_sql = f"""
+                SELECT id AS feature_id, 0 AS seg_idx, seqid,
+                       {source_sql},
+                       featuretype, start, "end", score, strand, frame
+                FROM features ORDER BY id
+            """
+            attribute_sql = """
+                SELECT f.id, 0, CAST(f.attributes_blob AS BLOB), a.key, a.value
+                FROM features f
+                LEFT JOIN attributes a ON a.feature_id = f.id
+                ORDER BY f.id, a.key, a.idx, a.value
+            """
+        else:
+            segment_sql = f"""
+                SELECT feature_id, seg_idx, seqid,
+                       {source_sql},
+                       featuretype, start, "end", score, strand, frame
+                FROM segments_all ORDER BY feature_id, seg_idx
+            """
+            attribute_sql = """
+                SELECT sa.feature_id, sa.seg_idx, CAST(sa.attributes_blob AS BLOB),
+                       a.key, a.value
+                FROM segments_all sa
+                LEFT JOIN segments sm ON sm.feature_id = sa.feature_id AND sm.seg_idx = sa.seg_idx
+                LEFT JOIN attributes a ON a.feature_id = sa.feature_id AND a.seg_idx =
+                    CASE WHEN sm.seg_idx > 0 AND sm.attrs_same_as_seg0 THEN 0 ELSE sa.seg_idx END
+                ORDER BY sa.feature_id, sa.seg_idx, a.key, a.idx, a.value
+            """
         endpoint_joins = (
             "JOIN features p ON p.id = e.parent JOIN features c ON c.id = e.child" if is_gtf else ""
         )
