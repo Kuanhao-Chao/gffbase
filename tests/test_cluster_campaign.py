@@ -1991,6 +1991,50 @@ def test_the_real_launcher_lives_in_the_worker_slice() -> None:
 # Named `job_environment` so the model's export cannot shadow it again.
 
 
+def test_the_controller_budget_covers_the_work_the_inner_caps_do_not(tmp_path) -> None:
+    """`canonical-gencode-gtf` died at exactly its 12,600 s controller budget.
+
+    The formula budgeted the two capped ingests and one flat hour. Everything
+    after them is uncapped inside `06_mega.py` -- both `database_signature`
+    calls, exhaustive validation, and the spatial and batched query phases --
+    so the controller cap was the only thing bounding hours of work it never
+    accounted for. On GENCODE GTF the two signatures alone measure ~2,220 s and
+    ~950 s, against an allowance of 3,600 s meant to cover startup.
+
+    This is a *controller* cap: it exists so a wedged child cannot hold a lane
+    forever, and it must never be the thing that fires. The inner arms carry
+    their own caps and censor honestly when they hit them.
+    """
+    value = _make_campaign(tmp_path)
+    by_kind = {}
+    for job in campaign.campaign_jobs(value):
+        by_kind.setdefault(job.kind, job)
+    assert {"primary", "control", "scaling", "bridge"} <= set(by_kind)
+
+    # A bridge runs neither comparator arm and stays on its declared cap.
+    assert campaign.controller_timeout(by_kind["bridge"]) == 5400
+
+    # A scaling job passes `--skip-legacy`, so it must budget neither the
+    # comparator's cap nor the cost of normalizing and signing its database.
+    scaling = by_kind["scaling"]
+    scaling_budget = campaign.controller_timeout(scaling)
+    assert scaling_budget > int(scaling.parameters["gffbase_timeout"])
+    assert scaling_budget < campaign.controller_timeout(by_kind["primary"])
+    assert int(scaling.parameters["legacy_timeout"]) not in (
+        scaling_budget - int(scaling.parameters["gffbase_timeout"]),
+    )
+
+    for kind in ("primary", "control"):
+        job = by_kind[kind]
+        both_arms = int(job.parameters["gffbase_timeout"]) + int(job.parameters["legacy_timeout"])
+        budget = campaign.controller_timeout(job)
+        assert budget > 12600, f"{kind} still carries the budget that killed the job"
+        assert budget - both_arms >= 3 * 3600, (
+            f"{kind} leaves only {budget - both_arms}s for two signatures, full "
+            "validation and the query phases"
+        )
+
+
 def test_a_job_environment_carries_a_path(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PATH", "/opt/toolchain/bin:/usr/bin")
     value = _make_campaign(tmp_path)
