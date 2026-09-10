@@ -301,6 +301,25 @@ The performance claims could not be reproduced from anything in the repository.
 This release rebuilds the harness so that they can be, and re-measures
 everything from scratch.
 
+- **The published tables could not render a Linux campaign at all.** The
+  generator read one hardcoded path, ``benchmarks/results/06_mega.json``, which
+  holds the historical macOS run — four corpora, schema v2, provenance naming a
+  ``gffbase 0.2.0`` that was never built. ``merge --publish`` writes neither
+  that file nor anything the generator can use: its portable projection drops
+  ``input`` and ``db_paths``, two of the fourteen keys a schema-v3 row must
+  carry. So a finished campaign left the site rendering the artifact it
+  superseded. The generator now prefers a per-platform
+  ``06_mega.<platform>.json``, falling back to the macOS artifact;
+  ``tools/gen_published_measurements.py`` derives that file from a campaign's
+  run-local record, where each primary job's payload already *is* a schema-v3
+  row; and ``06_mega.py --publish`` writes under a platform key too, so a local
+  sweep can no longer overwrite the pinned artifact. Selection is on
+  ``primary_eligible``, never the corpus key — a scaling job carries the same
+  ``payload["key"]`` as the canonical row for that corpus, so keying on it would
+  publish a thread-sweep as the headline number. The three prose guards resolve
+  the file through the generator rather than naming it, so they cannot check
+  yesterday's numbers against today's tables.
+
 - **Three of five corpora reported a content divergence that was not one.** The
   signature that decides whether a speedup may be published compared gffbase's
   transitive closure against gffutils' ``relations`` table, but what gffutils
