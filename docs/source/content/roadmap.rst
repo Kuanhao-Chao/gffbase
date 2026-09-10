@@ -17,6 +17,15 @@ Priority 1: memory and trust
   output remains parser-equivalent and peak RSS grows with batch size rather
   than corpus size.
 
+- **Parallel ingest.** Ingest is essentially serial today: measured across five
+  corpora, raising DuckDB threads from 1 to 10 buys between 1.05x and 1.25x, so
+  the ``threads`` setting cannot make ingest much faster whatever it is set to.
+  The cost is attribute-bound -- roughly 160,000 attributes per second,
+  regardless of corpus -- which is why a GENCODE annotation at 16-18 attributes
+  per feature ingests at half the feature rate of one at 2.6. Acceptance: the
+  thread sweep in the benchmark harness shows the ingest scaling with cores, and
+  the correctness signature is unchanged.
+
 - **Persistent source provenance.** Store source checksum, size, parser mode,
   and build identity in database metadata. Acceptance: a database can explain
   exactly which bytes and implementation created it.

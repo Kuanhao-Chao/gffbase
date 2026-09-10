@@ -281,6 +281,48 @@ The performance claims could not be reproduced from anything in the repository.
 This release rebuilds the harness so that they can be, and re-measures
 everything from scratch.
 
+- **The published numbers were a macOS run of a version that was never built.**
+  The tables came from `benchmarks/results/06_mega.json`: four of five corpora,
+  Apple Silicon, provenance naming a `gffbase 0.2.0` that no build ever produced,
+  and GENCODE's comparator censored under a *different* GTF arm than the one the
+  headline names. They claimed 1.20x-1.43x. A Linux run of all five corpora,
+  under the schema-v3 evidence contract with every correctness signature
+  matching, measures **1.14x, 1.21x, 0.93x, 0.90x and 0.69x** -- gffbase ahead
+  where per-feature overhead dominates, behind on attribute-dense whole-genome
+  annotations. Those are the numbers now published; the macOS bytes are retained
+  untouched as the historical platform entry.
+
+- **Ingest is attribute-bound and essentially serial, and the docs now say so.**
+  Cost tracks attributes rather than features -- about 160,000 attributes per
+  second whatever the corpus -- so GENCODE at 16-18 attributes per feature
+  ingests at half the *feature* rate of CHESS at 2.6. A 25-job sweep over five
+  corpora at 1, 2, 4, 8 and 10 threads shows raising DuckDB threads buys between
+  1.05x and 1.25x: ten times the cores, at most a quarter more throughput. The
+  GENCODE GTF result is not a GTF defect -- gffbase moves 157k attributes/s
+  there, between its MANE (168k) and GFF3 (162k) figures -- it is that the
+  comparator's `no-infer` GTF path is a plain bulk insert, its fastest case
+  anywhere at 229k/s. Recorded in the methodology, with parallel ingest on the
+  roadmap.
+
+- **A published "peak RSS" that was six times the cost of ingesting.**
+  `peak_rss_bytes` is the peak of the ingest *subprocess*, and that subprocess
+  also runs `validate(level="full", sample=None)`. Under the canonical
+  exhaustive validation the validation dominates: 62.0 GB where the same corpus
+  validated at `sample=10000` peaks at 10.0 GB. Sitting unlabelled beside an
+  ingest time, it read as the memory needed to ingest. The column now names the
+  work it measured, and the memory *ratio* is gone entirely -- gffbase's figure
+  came from a process that validated exhaustively and the comparator's from one
+  that did not, so their quotient (published as "496x") described neither
+  engine. "Equal work, or no ratio" is the rule the rest of the harness follows.
+
+- **A generated caption was silently dropped from every RST page.**
+  `markdown_to_rst` routed any block containing a pipe to the table converter,
+  which emitted the list-table and discarded everything after it -- including the
+  caption naming how many corpora the ratios cover. A hand-written copy left
+  outside the markers went on claiming three corpora after the run had grown to
+  five: a stale number directly beneath a freshly generated table, which is the
+  exact failure generated blocks exist to prevent.
+
 - **`status` aborted healthy campaigns.** It validates an attempt directory with
   `exact_directory_scan`, which stats every entry, rescans, and requires the two
   passes to agree byte for byte -- the right contract for settled evidence and an

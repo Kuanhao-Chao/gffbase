@@ -20,11 +20,16 @@ Reproducing a run
    pip install -e ".[bench,all]"
 
    python benchmarks/download_corpora.py                # ~257 MB, five corpora
-   python benchmarks/06_mega.py --legacy-timeout 5400 --keep-db gencode-gff3
+   python benchmarks/06_mega.py --legacy-timeout 5400 --publish
 
    # then regenerate the published tables from the measurements
-   cp benchmarks/out/06_mega.json benchmarks/results/06_mega.json
    python tools/gen_benchmark_tables.py --write
+
+``--publish`` writes ``benchmarks/results/06_mega.<platform>.json`` and refuses
+a file that mixes runs: every corpus must have been measured by that same
+invocation, on a clean tree, and the result must satisfy the schema-v3 evidence
+contract. It never writes ``benchmarks/results/06_mega.json`` — that name holds
+the preserved macOS artifact, whose bytes are pinned by three separate digests.
 
 ``tools/gen_benchmark_tables.py --check`` verifies that every published table
 still matches the committed measurements, and is asserted by
@@ -206,6 +211,71 @@ comma would shatter 2,294 correctly escaped CHESS descriptions in order to line
 up twenty gene names. The parse-policy difference itself is a declared API
 deviation, recorded in ``tests/parity/deviations.toml`` and pinned by a
 differential test — it belongs there, not hidden inside a benchmark digest.
+
+----
+
+.. _methodology--what-the-ingest-numbers-do-and-do-not-say:
+
+What the ingest numbers do and do not say
+-----------------------------------------
+
+Two properties of the ingest measurement bound how much weight a single figure
+carries, and both were measured rather than assumed.
+
+**Ingest is attribute-bound, and essentially serial.** Cost tracks the number of
+attributes, not the number of features: gffbase moves roughly 160,000 attributes
+per second across every corpus, so a GENCODE annotation at 16-18 attributes per
+feature ingests at about half the *feature* rate of CHESS at 2.6. Raising the
+DuckDB thread count barely helps. From a 25-job sweep over five corpora at 1, 2,
+4, 8 and 10 threads:
+
+.. list-table::
+   :header-rows: 1
+
+   * - corpus
+     - 1 thread
+     - 10 threads
+     - speedup
+   * - MANE v1.5
+     - 41.6 s
+     - 36.0 s
+     - 1.16x
+   * - CHESS 3.1.3
+     - 99.1 s
+     - 94.6 s
+     - 1.05x
+   * - RefSeq GRCh38.p14
+     - 425.4 s
+     - 340.9 s
+     - 1.25x
+   * - GENCODE v49 (GTF)
+     - 614.4 s
+     - 498.3 s
+     - 1.23x
+   * - GENCODE v49 (GFF3)
+     - 657.2 s
+     - 534.8 s
+     - 1.23x
+
+Ten times the cores buys at most a quarter more throughput. The comparator is
+single-threaded, so the published comparison is largely one serial ingest
+against another, and neither engine's figure should be read as a parallel
+result.
+
+**A single ingest timing carries real uncertainty, and it is asymmetric.**
+Repeating the same corpus with a byte-identical binary on ten pinned physical
+cores of an otherwise idle machine, CHESS ranged 93.9 s to 113.1 s across runs
+-- a 20 percent spread -- while ``gffutils`` on the same corpus spanned 134.2 s
+to 137.0 s, 2 percent. gffbase runs ten DuckDB threads over tens of gigabytes
+and the comparator is single-threaded on under 200 MB, so the parallel,
+allocation-heavy path is far more sensitive to machine state. Hyperthreading,
+temporary-directory placement and machine load were each ruled out as the
+cause. Larger corpora are steadier: GENCODE GTF reproduced within 2 percent
+across repeated runs.
+
+The harness measures each ingest once, while the query phases run five times and
+report their spread. Closing that asymmetry is future work; until it is closed, a
+published ingest ratio near 1.0 should be read as "comparable", not as a ranking.
 
 ----
 

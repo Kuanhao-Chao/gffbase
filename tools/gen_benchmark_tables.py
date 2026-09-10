@@ -145,11 +145,23 @@ def markdown_prose_to_rst(md: str) -> str:
 def markdown_to_rst(md: str) -> str:
     """Route a generated block to the right RST rendering.
 
-    A pipe table becomes a list-table; anything else is prose.
+    A pipe table becomes a list-table; anything else is prose. A block can be
+    BOTH -- the tradeoffs table ends in a caption naming how many corpora its
+    ratios cover -- and routing the whole block to the table converter dropped
+    everything after the last pipe. That caption then vanished from every RST
+    page while a hand-written copy left outside the markers went on claiming a
+    corpus count the run had long since outgrown.
     """
-    if any(line.strip().startswith("|") for line in md.split("\n")):
-        return markdown_table_to_list_table(md)
-    return markdown_prose_to_rst(md)
+    lines = md.split("\n")
+    table = [line for line in lines if line.strip().startswith("|")]
+    if not table:
+        return markdown_prose_to_rst(md)
+    last = max(i for i, line in enumerate(lines) if line.strip().startswith("|"))
+    rendered = markdown_table_to_list_table("\n".join(lines[: last + 1]))
+    trailing = "\n".join(lines[last + 1 :]).strip()
+    if trailing:
+        rendered = f"{rendered}\n\n{markdown_prose_to_rst(trailing)}"
+    return rendered
 
 
 def markdown_table_to_list_table(md: str) -> str:
@@ -328,7 +340,14 @@ def render_corpus_table(data: dict) -> str:
     corpora = data.get("corpora") or {}
     schema_version = data.get("schema_version")
     lines = [
-        "| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |",
+        # NOT "peak RSS": `peak_rss_bytes` is the peak of the ingest subprocess,
+        # which also runs `validate(level="full", …)`. Under the canonical
+        # exhaustive validation that dominates -- 62.0 GB where the same corpus
+        # validated at `sample=10000` peaks at 10.0 GB -- so an unqualified
+        # label beside an ingest time attributes six times the memory to the
+        # ingest. `validate_db` defaults to `sample=200`; no default path pays it.
+        "| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup "
+        "| peak RSS (ingest + full validation) | spatial qps | batched (5 k anchors) |",
         "| --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for key, label, fmt in DISPLAY_ORDER:
@@ -441,7 +460,10 @@ def render_tradeoffs(data: dict) -> str:
         lo, hi = human_bytes(vals[0]), human_bytes(vals[-1])
         return lo if lo == hi else f"{lo} – {hi}"
 
-    rss_ratio = ratio("peak_rss_bytes")
+    # No RSS ratio. gffbase's peak is measured on a process that ingests AND
+    # validates exhaustively; the comparator's on one that only ingests. The
+    # quotient of those was published as "496x", which describes neither engine.
+    # "Equal work, or no ratio" is the rule the rest of this harness follows.
     disk_ratio = ratio("disk_bytes")
     n = len(rows)
     corpus_word = "corpus" if n == 1 else "corpora"
@@ -450,12 +472,17 @@ def render_tradeoffs(data: dict) -> str:
         [
             "| | gffbase | legacy `gffutils` | ratio |",
             "| --- | ---: | ---: | ---: |",
-            f"| **Peak ingest RSS** | {span('peak_rss_bytes', 'gffbase')} "
-            f"| {span('peak_rss_bytes', 'legacy')} | {rss_ratio or '—'} |",
+            f"| **Peak RSS** (gffbase: ingest + full validation) "
+            f"| {span('peak_rss_bytes', 'gffbase')} "
+            f"| {span('peak_rss_bytes', 'legacy')} | not comparable |",
             f"| **On-disk database** | {span('disk_bytes', 'gffbase')} "
             f"| {span('disk_bytes', 'legacy')} | {disk_ratio or '—'} |",
             "",
-            f"*Measured across {n} {corpus_word}; ratios are gffbase ÷ legacy.*",
+            f"*Measured across {n} {corpus_word}; the disk ratio is gffbase ÷ legacy. "
+            f"The two RSS figures are not a ratio: gffbase's is the peak of a "
+            f"process that ingests and then validates exhaustively, the "
+            f"comparator's of one that only ingests. Ingest alone peaks far "
+            f"lower, and `validate_db` defaults to `sample=200`.*",
         ]
     )
 

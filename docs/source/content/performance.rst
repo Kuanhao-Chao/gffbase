@@ -17,10 +17,10 @@ measurements are taken — and what they do and do not claim — is on the
 
 .. BEGIN GENERATED: benchmark-provenance
 
-| **Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O
-| **Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13
-| **Commit:** ``1d52bf6738e0`` · **Run:** 2026-08-15T22:56:50Z
-| *Generated from benchmarks/results/06_mega.json by tools/gen_benchmark_tables.py. Do not edit by hand.*
+| **Measured on** AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34
+| **Versions:** Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14
+| **Commit:** ``42bb900e328c`` · **Run:** 2026-09-10T19:56:52Z
+| *Generated from benchmarks/results/06_mega.linux-x86_64.json by tools/gen_benchmark_tables.py. Do not edit by hand.*
 
 .. END GENERATED: benchmark-provenance
 
@@ -43,45 +43,54 @@ Historical Mac sweep
      - gffbase ingest
      - legacy ingest
      - speedup
-     - peak RSS
+     - peak RSS (ingest + full validation)
      - spatial qps
      - batched (5 k anchors)
    * - **GENCODE v49** (basic)
      - GTF
      - 6,068,892
-     - **4 min 5 s**
-     - censored at 1 hr 30 min
-     - —
-     - 5.62 GB
-     - **1,457**
-     - 522 ms / 1.93 M desc
+     - **10 min 14 s**
+     - 7 min 1 s
+     - **0.69×**
+     - 53.57 GB
+     - **707** ±0% (n=5)
+     - 963 ms / 1.93 M desc
+   * - **GENCODE v49** (basic)
+     - GFF3
+     - 6,066,054
+     - **11 min 8 s**
+     - 9 min 59 s
+     - **0.90×**
+     - 62.00 GB
+     - **705** ±0% (n=5)
+     - 1096 ms / 1.93 M desc
    * - **RefSeq GRCh38.p14**
      - GFF3
      - 4,932,571
-     - **3 min 1 s**
-     - 3 min 37 s
-     - **1.20×**
-     - 4.73 GB
-     - **1,188**
-     - 352 ms / 999 k desc
+     - **7 min 2 s**
+     - 6 min 34 s
+     - **0.93×**
+     - 26.80 GB
+     - **540** ±0% (n=5)
+     - 588 ms / 999 k desc
    * - **CHESS 3.1.3**
      - GFF3
      - 2,761,061
-     - **48.4 s**
-     - 1 min 9 s
-     - **1.43×**
-     - 2.43 GB
-     - **1,893**
-     - 96 ms / 161 k desc
+     - **1 min 53 s**
+     - 2 min 17 s
+     - **1.21×**
+     - 3.38 GB
+     - **702** ±0% (n=5)
+     - 202 ms / 161 k desc
    * - **MANE v1.5** (Ensembl)
      - GFF3
      - 524,834
-     - **19.8 s**
-     - 26.5 s
-     - **1.34×**
-     - 1.61 GB
-     - **2,086**
-     - 80 ms / 156 k desc
+     - **40.0 s**
+     - 45.7 s
+     - **1.14×**
+     - 3.98 GB
+     - **840** ±0% (n=5)
+     - 206 ms / 156 k desc
 
 .. END GENERATED: corpus-table
 
@@ -190,18 +199,18 @@ run as the speed numbers rather than retyped:
      - gffbase
      - legacy ``gffutils``
      - ratio
-   * - **Peak ingest RSS**
-     - 1.61 GB – 4.73 GB
-     - 174.50 MB – 217.52 MB
-     - 9.44–24.24×
+   * - **Peak RSS** (gffbase: ingest + full validation)
+     - 3.38 GB – 62.00 GB
+     - 110.50 MB – 193.74 MB
+     - not comparable
    * - **On-disk database**
-     - 610.51 MB – 4.95 GB
-     - 472.90 MB – 3.79 GB
-     - 1.29–1.36×
+     - 610.76 MB – 7.14 GB
+     - 472.90 MB – 6.05 GB
+     - 1.18–1.36×
+
+| *Measured across 5 corpora; the disk ratio is gffbase ÷ legacy. The two RSS figures are not a ratio: gffbase's is the peak of a process that ingests and then validates exhaustively, the comparator's of one that only ingests. Ingest alone peaks far lower, and validate_db defaults to sample=200.*
 
 .. END GENERATED: tradeoffs-table
-
-*Measured across 3 corpora; ratios are gffbase ÷ legacy.*
 
 The rest of the ledger is qualitative, and stays that way:
 

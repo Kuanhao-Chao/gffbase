@@ -91,7 +91,7 @@ input ID so you can regroup without re-querying.
 Why is my database bigger than the SQLite one?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1.29× to 1.36× across the benchmark corpora, and deliberately: gffbase
+1.18× to 1.36× across the benchmark corpora, and deliberately: gffbase
 materializes a transitive closure and a long-form attributes table so hierarchy
 walks and attribute searches are indexed lookups rather than scans. That is the
 trade for the query speed.

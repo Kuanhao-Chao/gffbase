@@ -139,23 +139,24 @@ database into a legacy `.sqlite` file when you need the old format.
 
 ## 2. What you gain immediately, no code changes
 
-Head-to-head against legacy `gffutils` across the four canonical human-genome
+Head-to-head against legacy `gffutils` across the five canonical human-genome
 annotation releases:
 
 <!-- BEGIN GENERATED: corpus-table -->
-| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS | spatial qps | batched (5 k anchors) |
+| Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS (ingest + full validation) | spatial qps | batched (5 k anchors) |
 | --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **GENCODE v49** (basic) | GTF | 6,068,892 | **4 min 5 s** | censored at 1 hr 30 min | — | 5.62 GB | **1,457** | 522 ms / 1.93 M desc |
-| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **3 min 1 s** | 3 min 37 s | **1.20×** | 4.73 GB | **1,188** | 352 ms / 999 k desc |
-| **CHESS 3.1.3** | GFF3 | 2,761,061 | **48.4 s** | 1 min 9 s | **1.43×** | 2.43 GB | **1,893** | 96 ms / 161 k desc |
-| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **19.8 s** | 26.5 s | **1.34×** | 1.61 GB | **2,086** | 80 ms / 156 k desc |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **10 min 14 s** | 7 min 1 s | **0.69×** | 53.57 GB | **707** ±0% (n=5) | 963 ms / 1.93 M desc |
+| **GENCODE v49** (basic) | GFF3 | 6,066,054 | **11 min 8 s** | 9 min 59 s | **0.90×** | 62.00 GB | **705** ±0% (n=5) | 1096 ms / 1.93 M desc |
+| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **7 min 2 s** | 6 min 34 s | **0.93×** | 26.80 GB | **540** ±0% (n=5) | 588 ms / 999 k desc |
+| **CHESS 3.1.3** | GFF3 | 2,761,061 | **1 min 53 s** | 2 min 17 s | **1.21×** | 3.38 GB | **702** ±0% (n=5) | 202 ms / 161 k desc |
+| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **40.0 s** | 45.7 s | **1.14×** | 3.98 GB | **840** ±0% (n=5) | 206 ms / 156 k desc |
 <!-- END GENERATED: corpus-table -->
 
 <!-- BEGIN GENERATED: benchmark-provenance -->
-**Measured on** Apple M1 Pro · 10 cores · 16.00 GB RAM · macOS-26.3-arm64-arm-64bit-Mach-O  
-**Versions:** Python 3.13.5 · gffbase 0.2.0 · duckdb 1.5.2 · pyarrow 19.0.0 · gffutils 0.13  
-**Commit:** `1d52bf6738e0` · **Run:** 2026-08-15T22:56:50Z  
-*Generated from `benchmarks/results/06_mega.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
+**Measured on** AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34  
+**Versions:** Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14  
+**Commit:** `42bb900e328c` · **Run:** 2026-09-10T19:56:52Z  
+*Generated from `benchmarks/results/06_mega.linux-x86_64.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
 “Censored at” marks a legacy run killed at its safety valve without finishing;
@@ -266,13 +267,15 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
 - **Storage backend**: SQLite → DuckDB. Database file extension is
   `.duckdb` by convention. The legacy SQLite layout is reachable via
   `export_sqlite()` (above) or the compat views.
-- **Disk size**: GFFBase databases are ~1.5× larger than legacy
+- **Disk size**: GFFBase databases are 1.18× to 1.36× larger than legacy
   SQLite -- the price of materializing the transitive closure and the R-tree,
   which is what turns hierarchy and spatial queries into indexed lookups.
   Current measurements: [Performance](https://khchao.com/gffbase/content/performance.html).
-- **Peak ingest RSS**: substantially higher -- a couple of GB against roughly
-  150 MB, on a whole-genome corpus. DuckDB allocates a vectorized ingest
-  buffer pool; cap it with `GFFBASE_THREADS` or
+- **Peak RSS**: substantially higher -- roughly 7-10 GB to ingest a
+  whole-genome annotation, against 111-194 MB for `gffutils`. The published
+  figures are larger still (up to 62 GB) because those runs also validate
+  exhaustively; `validate_db` defaults to `sample=200`, so no default path pays
+  that. DuckDB allocates a vectorized ingest buffer pool; cap it with
   `PRAGMA memory_limit='512MB'` if that matters more than wall time.
 - **Hierarchy depth**: GFFBase materializes the closure to depth 8 by
   default (vs depth 2 in legacy). Anything past 8 falls through to a

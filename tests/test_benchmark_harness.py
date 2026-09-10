@@ -2075,7 +2075,10 @@ def test_tradeoffs_excludes_incomplete_engine_pairs_from_every_statistic():
     assert "8.00 TB" not in rendered
     assert "16.00 TB" not in rendered
     assert "4.00 TB" not in rendered
-    assert "| 1.00 MB | 2.00 MB | 0.50× |" in rendered
+    # The RSS row shows both spans and no ratio: the two sides did different
+    # work, so their quotient means nothing. What matters here is that the
+    # excluded corpus's figures are absent from the spans.
+    assert "| 1.00 MB | 2.00 MB | not comparable |" in rendered
 
 
 @pytest.mark.parametrize(
@@ -2276,6 +2279,70 @@ def test_renderer_reads_actual_schema_v2_top_level_python_version():
 
     assert "Python 3.13.5" in rendered
     assert "Python ?" not in rendered
+
+
+def test_a_generated_block_keeps_its_caption_when_rendered_as_rst():
+    """`markdown_to_rst` routed anything containing a pipe to the table
+    converter, which emitted the list-table and dropped everything after it.
+
+    The tradeoffs block ends in a caption naming how many corpora the ratios
+    cover. In every RST target that line vanished, and a hand-written copy left
+    behind outside the markers went on claiming three corpora after the run had
+    grown to five -- a stale number sitting directly under a freshly generated
+    table, which is the exact failure the generated blocks exist to prevent.
+    """
+    from tools import gen_benchmark_tables as tables
+
+    rendered = tables.markdown_to_rst("| a | b |\n| --- | --- |\n| 1 | 2 |\n\n*counted here*")
+
+    assert "list-table" in rendered
+    assert "counted here" in rendered, "the caption after the table was dropped"
+
+
+def test_the_memory_ratio_is_not_reported_across_unequal_work():
+    """ "Equal work, or no ratio" -- the methodology's own rule.
+
+    gffbase's peak RSS is measured on a process that ingests AND validates
+    exhaustively; the comparator's is measured on one that only ingests. Dividing
+    them produced a published "496×", which says nothing about either engine. The
+    spans are still shown, because those are measurements; the ratio is not.
+    """
+    from tools import gen_benchmark_tables as tables
+
+    data = json.loads(tables.published_measurements_path().read_text(encoding="utf-8"))
+    rendered = tables.render_tradeoffs(data)
+
+    rss_line = [line for line in rendered.splitlines() if "RSS" in line]
+    assert rss_line, rendered
+    assert "×" not in rss_line[0], f"a memory ratio is still published: {rss_line[0]}"
+    assert "not comparable" in rendered.lower()
+
+
+def test_the_published_rss_says_which_work_it_measured():
+    """A "peak RSS" column beside an ingest time reads as the cost of ingesting.
+
+    It is not. `peak_rss_bytes` is the peak of the ingest SUBPROCESS, and that
+    subprocess runs `create_db` and then `validate(level="full", sample=...)`.
+    Under the canonical `validation_sample="all"` the validation dominates:
+    62.0 GB against 10.0 GB for the same GENCODE GFF3 corpus validated at
+    `sample=10000`, roughly six times the figure a reader would attribute to the
+    ingest they see timed next to it. `validate_db` defaults to `sample=200` and
+    the CLI never overrides it, so no default path pays that.
+
+    Whatever the number is, the label has to name the work behind it.
+    """
+    from tools import gen_benchmark_tables as tables
+
+    data = json.loads(tables.published_measurements_path().read_text(encoding="utf-8"))
+    for renderer in (tables.render_corpus_table, tables.render_tradeoffs):
+        rendered = renderer(data).lower()
+        assert "rss" in rendered, renderer.__name__
+        assert "validation" in rendered, (
+            f"{renderer.__name__} reports a peak RSS without saying it includes full validation"
+        )
+        assert "peak ingest rss" not in rendered, (
+            f"{renderer.__name__} calls it the ingest peak; the subprocess also validates"
+        )
 
 
 def test_historical_schema_v2_raw_bytes_are_immutable():

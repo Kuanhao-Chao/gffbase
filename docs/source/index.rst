@@ -96,45 +96,54 @@ typed in. See :doc:`content/performance` for the full sweep and
      - gffbase ingest
      - legacy ingest
      - speedup
-     - peak RSS
+     - peak RSS (ingest + full validation)
      - spatial qps
      - batched (5 k anchors)
    * - **GENCODE v49** (basic)
      - GTF
      - 6,068,892
-     - **4 min 5 s**
-     - censored at 1 hr 30 min
-     - —
-     - 5.62 GB
-     - **1,457**
-     - 522 ms / 1.93 M desc
+     - **10 min 14 s**
+     - 7 min 1 s
+     - **0.69×**
+     - 53.57 GB
+     - **707** ±0% (n=5)
+     - 963 ms / 1.93 M desc
+   * - **GENCODE v49** (basic)
+     - GFF3
+     - 6,066,054
+     - **11 min 8 s**
+     - 9 min 59 s
+     - **0.90×**
+     - 62.00 GB
+     - **705** ±0% (n=5)
+     - 1096 ms / 1.93 M desc
    * - **RefSeq GRCh38.p14**
      - GFF3
      - 4,932,571
-     - **3 min 1 s**
-     - 3 min 37 s
-     - **1.20×**
-     - 4.73 GB
-     - **1,188**
-     - 352 ms / 999 k desc
+     - **7 min 2 s**
+     - 6 min 34 s
+     - **0.93×**
+     - 26.80 GB
+     - **540** ±0% (n=5)
+     - 588 ms / 999 k desc
    * - **CHESS 3.1.3**
      - GFF3
      - 2,761,061
-     - **48.4 s**
-     - 1 min 9 s
-     - **1.43×**
-     - 2.43 GB
-     - **1,893**
-     - 96 ms / 161 k desc
+     - **1 min 53 s**
+     - 2 min 17 s
+     - **1.21×**
+     - 3.38 GB
+     - **702** ±0% (n=5)
+     - 202 ms / 161 k desc
    * - **MANE v1.5** (Ensembl)
      - GFF3
      - 524,834
-     - **19.8 s**
-     - 26.5 s
-     - **1.34×**
-     - 1.61 GB
-     - **2,086**
-     - 80 ms / 156 k desc
+     - **40.0 s**
+     - 45.7 s
+     - **1.14×**
+     - 3.98 GB
+     - **840** ±0% (n=5)
+     - 206 ms / 156 k desc
 
 .. END GENERATED: corpus-table
 

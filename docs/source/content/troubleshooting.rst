@@ -69,9 +69,19 @@ To audit rather than abort, keep the strict rules but downgrade the action:
 Ingest used a lot of memory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected. GFFBase trades memory for speed — peak ingest RSS runs to 1.6–5.6 GB
-across the benchmark corpora, against 174–495 MB for ``gffutils``. The Arrow
-batch builder is the reason, and it is also why ingest is faster.
+Two different costs get confused here, so take them apart.
+
+**Ingest itself** peaks at roughly 7–10 GB on a whole-genome annotation, against
+111–194 MB for ``gffutils``. DuckDB allocates a vectorized buffer pool; cap it
+with ``PRAGMA memory_limit='512MB'`` if that matters more than wall time.
+
+**Exhaustive validation** is what makes the published figures large: the numbers
+in the performance tables span 3.4–62.0 GB because those runs call
+``validate(level="full", sample=None)``, which re-reads every stored attribute.
+**No default path does that** — ``validate_db`` defaults to ``sample=200`` and
+the CLI never overrides it. If you asked for exhaustive validation on a
+six-million-feature annotation, budget tens of gigabytes; otherwise you will not
+see these numbers.
 
 To cap DuckDB's own threads (and with them its memory):
 
@@ -214,7 +224,7 @@ back an empty database that reports itself as complete.
 The database is larger than the SQLite one
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected — 1.29× to 1.36× across the benchmark corpora. GFFBase stores a
+Expected — 1.18× to 1.36× across the benchmark corpora. GFFBase stores a
 materialized transitive closure and a long-form attributes table so that
 hierarchy and attribute queries are indexed lookups instead of scans. That is
 the trade.

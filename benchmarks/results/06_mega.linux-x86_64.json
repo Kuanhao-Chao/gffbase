@@ -1,0 +1,1960 @@
+{
+  "schema_version": "3",
+  "environment": {
+    "timestamp_utc": "2026-09-10T19:56:52Z",
+    "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+    "git_dirty": false,
+    "hostname": "salz13.idies.jhu.edu",
+    "platform": "Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34",
+    "machine": "x86_64",
+    "libc": {
+      "family": "glibc",
+      "version": "2.34"
+    },
+    "cpu_model": "AMD EPYC 7702 64-Core Processor",
+    "cpu_cores_physical": 128,
+    "cpu_cores_logical": 128,
+    "total_ram_bytes": 1081490325504,
+    "free_disk_bytes": 1843458039808,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "python": {
+      "version": "3.11.16",
+      "implementation": "CPython",
+      "executable": "python3.11"
+    },
+    "rustc_version": "rustc 1.83.0 (90b35a623 2024-11-26)",
+    "packages": {
+      "gffbase": "0.2.0rc1",
+      "duckdb": "1.5.5",
+      "pyarrow": "25.0.1",
+      "pandas": "3.0.5",
+      "polars": "1.44.1",
+      "gffutils": "0.14",
+      "psutil": "7.2.2"
+    },
+    "gffbase_install": {
+      "distribution_version": "0.2.0rc1",
+      "python_version": "0.2.0rc1",
+      "python_module": "__init__.py",
+      "native_version": "0.2.0rc1",
+      "native_module": "_native.abi3.so",
+      "native_sha256": "86efa89f96341e06720c64b2fd03131c20522d0c8462d12bb2e236699804282e"
+    },
+    "artifact": {
+      "wheel": "gffbase-0.2.0rc1-cp310-abi3-linux_x86_64.whl",
+      "wheel_sha256": "abf0458bc0f4a30c4af3013c190a45f5b82c9f0e2e2deb50694612040f62e0ff",
+      "metadata": {
+        "name": "gffbase",
+        "version": "0.2.0rc1"
+      },
+      "wheel_tags": [
+        "cp310-abi3-linux_x86_64"
+      ],
+      "native": {
+        "member": "gffbase/_native.abi3.so",
+        "sha256": "86efa89f96341e06720c64b2fd03131c20522d0c8462d12bb2e236699804282e"
+      }
+    },
+    "env": {
+      "GFFBASE_THREADS": "10",
+      "GFFUTILS2_THREADS": "10",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "BLIS_NUM_THREADS": "1",
+      "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+      "PYTHONUNBUFFERED": "1"
+    }
+  },
+  "corpora": {
+    "mane": {
+      "name": "MANE v1.5 (Ensembl IDs)",
+      "key": "mane",
+      "measured": {
+        "timestamp_utc": "2026-09-10T16:30:35+00:00",
+        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "git_dirty": false
+      },
+      "input": "benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
+      "input_bytes": 10349746,
+      "input_sha256": "69089bbc84d1d3c3ce31c2ed3f85b6c3169fb8836d092a082623c59a43fd22ef",
+      "feature_lines": 524834,
+      "gffbase": {
+        "label": "gffbase ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
+        "peak_rss_bytes": 4273946624,
+        "peak_rss_mb": 4075.953125,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 3600,
+        "wall_seconds": 40.01940732821822,
+        "n_features": 524834,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "validation": {
+          "ok": true,
+          "level": "full",
+          "checked": [
+            "INV-1 (unique_ids)",
+            "INV-2 (no_orphan_segments)",
+            "INV-3 (n_segments_matches)",
+            "INV-4 (seg_idx_dense)",
+            "INV-5 (envelope_exact)",
+            "INV-6 (edges_resolve)",
+            "INV-7 (segments_do_not_overlap)",
+            "INV-8 (bbox_matches)",
+            "INV-9 (seqid_map_complete)",
+            "INV-10 (attribute_dedup_consistent)",
+            "INV-11 (closure_sound)",
+            "INV-11b (closure_self_ancestry)",
+            "INV-13 (conflicts_resolve)",
+            "INV-14 (file_order_is_first_segment)",
+            "INV-15 (no_orphan_attributes)",
+            "INV-15a (attribute_segments_resolve)",
+            "INV-16 (gtf_hierarchy_coherent)",
+            "INV-11 exact (closure_exact)",
+            "INV-12 (attributes_reparse)"
+          ],
+          "skipped": [],
+          "errors": [],
+          "warnings": [],
+          "requested_sample": "all",
+          "sample_eligible": 524834,
+          "sample_checked": 524834,
+          "checked_ids": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6",
+            "INV-7",
+            "INV-8",
+            "INV-9",
+            "INV-10",
+            "INV-11",
+            "INV-11b",
+            "INV-13",
+            "INV-14",
+            "INV-15",
+            "INV-15a",
+            "INV-16",
+            "INV-11-exact",
+            "INV-12"
+          ]
+        },
+        "disk_bytes": 640430080,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 524834,
+          "segments_sha256": "f5b33ab0f5dfa5542f25f6d72b2bd218325a278a76b1760ebd303d53e2504b81",
+          "attribute_count": 6711851,
+          "attributes_sha256": "84034a00bd99f7dfd691bb6f4c4ae25fcbb178d6cca9442d9c0b77d3f96d191f",
+          "direct_relationship_count": 505471,
+          "direct_relationships_sha256": "94f910b86b2162189090737b7eac0c09dbe66f6af606949988d39a2cb760c537",
+          "closure_count": 991505,
+          "closure_sha256": "2a9f4906e362914e33272318b44408d5e1ae2b27f7f63b1c1d5a2937cd3d629f",
+          "feature_count": 524834,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              194239
+            ],
+            [
+              "exon",
+              204815
+            ],
+            [
+              "five_prime_UTR",
+              28277
+            ],
+            [
+              "gene",
+              19363
+            ],
+            [
+              "start_codon",
+              19400
+            ],
+            [
+              "stop_codon",
+              19387
+            ],
+            [
+              "three_prime_UTR",
+              19916
+            ],
+            [
+              "transcript",
+              19437
+            ]
+          ],
+          "combined_sha256": "d6e5a994edfb9756078f9f5cb1cf784516e114ab5ad1d809b03dbb003f69071c"
+        }
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
+        "peak_rss_bytes": 138055680,
+        "peak_rss_mb": 131.66015625,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 5400,
+        "wall_seconds": 45.68435161188245,
+        "n_features": 524834,
+        "disk_bytes": 495874048,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 524834,
+          "segments_sha256": "f5b33ab0f5dfa5542f25f6d72b2bd218325a278a76b1760ebd303d53e2504b81",
+          "attribute_count": 6711851,
+          "attributes_sha256": "84034a00bd99f7dfd691bb6f4c4ae25fcbb178d6cca9442d9c0b77d3f96d191f",
+          "direct_relationship_count": 505471,
+          "direct_relationships_sha256": "94f910b86b2162189090737b7eac0c09dbe66f6af606949988d39a2cb760c537",
+          "closure_count": 991505,
+          "closure_sha256": "2a9f4906e362914e33272318b44408d5e1ae2b27f7f63b1c1d5a2937cd3d629f",
+          "feature_count": 524834,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              194239
+            ],
+            [
+              "exon",
+              204815
+            ],
+            [
+              "five_prime_UTR",
+              28277
+            ],
+            [
+              "gene",
+              19363
+            ],
+            [
+              "start_codon",
+              19400
+            ],
+            [
+              "stop_codon",
+              19387
+            ],
+            [
+              "three_prime_UTR",
+              19916
+            ],
+            [
+              "transcript",
+              19437
+            ]
+          ],
+          "combined_sha256": "d6e5a994edfb9756078f9f5cb1cf784516e114ab5ad1d809b03dbb003f69071c"
+        }
+      },
+      "ingest_speedup": 1.141554927018367,
+      "spatial": {
+        "state": "completed",
+        "n_queries": 5000,
+        "wall_seconds": 5.955103232525289,
+        "qps": 839.6160074423642,
+        "total_features_returned": 3850,
+        "timing": {
+          "median": 5.955103232525289,
+          "min": 5.951575342565775,
+          "max": 5.9736157497391105,
+          "values": [
+            5.951575342565775,
+            5.956975894980133,
+            5.954041575081646,
+            5.955103232525289,
+            5.9736157497391105
+          ],
+          "n": 5
+        }
+      },
+      "batched": {
+        "state": "completed",
+        "n_anchors": 5000,
+        "n_descendants": 156327,
+        "wall_seconds": 0.20640211831778288,
+        "qps": 24224.557580857047,
+        "timing": {
+          "median": 0.20640211831778288,
+          "min": 0.2057541674003005,
+          "max": 0.2101896433159709,
+          "values": [
+            0.20832681097090244,
+            0.20640211831778288,
+            0.2101896433159709,
+            0.2057541674003005,
+            0.2060372717678547
+          ],
+          "n": 5
+        }
+      },
+      "db_paths": {
+        "gffbase": "external/mane.duckdb",
+        "legacy": "external/mane_legacy.sqlite"
+      },
+      "params": {
+        "legacy_cap_seconds": 5400,
+        "gffbase_cap_seconds": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "repeats": 5,
+        "region_seed": 20260501,
+        "threads": 10,
+        "gtf_arm": null,
+        "infer_gtf_parents": null,
+        "validation_sample": "all",
+        "benchmark_env": {
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1"
+        }
+      }
+    },
+    "chess": {
+      "name": "CHESS 3.1.3",
+      "key": "chess",
+      "measured": {
+        "timestamp_utc": "2026-09-10T16:41:07+00:00",
+        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "git_dirty": false
+      },
+      "input": "benchmarks/data/chess3.1.3.GRCh38.gff.gz",
+      "input_bytes": 20435645,
+      "input_sha256": "28da847be976780fe38162a7c244749fdc7a0b446741ca8da2b64019c1606e03",
+      "feature_lines": 2761061,
+      "gffbase": {
+        "label": "gffbase ingest(chess3.1.3.GRCh38.gff.gz)",
+        "peak_rss_bytes": 3633422336,
+        "peak_rss_mb": 3465.1015625,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 3600,
+        "wall_seconds": 113.14759543910623,
+        "n_features": 2761061,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "validation": {
+          "ok": true,
+          "level": "full",
+          "checked": [
+            "INV-1 (unique_ids)",
+            "INV-2 (no_orphan_segments)",
+            "INV-3 (n_segments_matches)",
+            "INV-4 (seg_idx_dense)",
+            "INV-5 (envelope_exact)",
+            "INV-6 (edges_resolve)",
+            "INV-7 (segments_do_not_overlap)",
+            "INV-8 (bbox_matches)",
+            "INV-9 (seqid_map_complete)",
+            "INV-10 (attribute_dedup_consistent)",
+            "INV-11 (closure_sound)",
+            "INV-11b (closure_self_ancestry)",
+            "INV-13 (conflicts_resolve)",
+            "INV-14 (file_order_is_first_segment)",
+            "INV-15 (no_orphan_attributes)",
+            "INV-15a (attribute_segments_resolve)",
+            "INV-16 (gtf_hierarchy_coherent)",
+            "INV-11 exact (closure_exact)",
+            "INV-12 (attributes_reparse)"
+          ],
+          "skipped": [],
+          "errors": [],
+          "warnings": [],
+          "requested_sample": "all",
+          "sample_eligible": 2761061,
+          "sample_checked": 2761061,
+          "checked_ids": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6",
+            "INV-7",
+            "INV-8",
+            "INV-9",
+            "INV-10",
+            "INV-11",
+            "INV-11b",
+            "INV-13",
+            "INV-14",
+            "INV-15",
+            "INV-15a",
+            "INV-16",
+            "INV-11-exact",
+            "INV-12"
+          ]
+        },
+        "disk_bytes": 1603284992,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 2761061,
+          "segments_sha256": "90c5edbc6d5290935c90a0e8be54e9737775d8910d387c372f5efbb2fcc2863a",
+          "attribute_count": 7063756,
+          "attributes_sha256": "1e1dd71b9482c6d6c43c1875fde2d15a4088bcf3657efdd84726e7144e91e5ef",
+          "direct_relationship_count": 2697306,
+          "direct_relationships_sha256": "514568e12e03a62d4fbaa66984581e14d8a9ede3703591e50be5bd0e2ff19156",
+          "closure_count": 5226161,
+          "closure_sha256": "6c1823e7b81bd8e292c92918b785621e5bbc038fd8d326f50341e86138bddff7",
+          "feature_count": 2761061,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              1105534
+            ],
+            [
+              "exon",
+              1423321
+            ],
+            [
+              "gene",
+              63755
+            ],
+            [
+              "transcript",
+              168451
+            ]
+          ],
+          "combined_sha256": "d25edf8948a52ef04077040ebe56600454bb8c5e4b840cfb28ae8e4e235cde39"
+        }
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(chess3.1.3.GRCh38.gff.gz)",
+        "peak_rss_bytes": 203149312,
+        "peak_rss_mb": 193.73828125,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 5400,
+        "wall_seconds": 136.9852965734899,
+        "n_features": 2761061,
+        "disk_bytes": 1179586560,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 2761061,
+          "segments_sha256": "90c5edbc6d5290935c90a0e8be54e9737775d8910d387c372f5efbb2fcc2863a",
+          "attribute_count": 7063756,
+          "attributes_sha256": "1e1dd71b9482c6d6c43c1875fde2d15a4088bcf3657efdd84726e7144e91e5ef",
+          "direct_relationship_count": 2697306,
+          "direct_relationships_sha256": "514568e12e03a62d4fbaa66984581e14d8a9ede3703591e50be5bd0e2ff19156",
+          "closure_count": 5226161,
+          "closure_sha256": "6c1823e7b81bd8e292c92918b785621e5bbc038fd8d326f50341e86138bddff7",
+          "feature_count": 2761061,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              1105534
+            ],
+            [
+              "exon",
+              1423321
+            ],
+            [
+              "gene",
+              63755
+            ],
+            [
+              "transcript",
+              168451
+            ]
+          ],
+          "combined_sha256": "d25edf8948a52ef04077040ebe56600454bb8c5e4b840cfb28ae8e4e235cde39"
+        }
+      },
+      "ingest_speedup": 1.2106779294944243,
+      "spatial": {
+        "state": "completed",
+        "n_queries": 5000,
+        "wall_seconds": 7.120141294784844,
+        "qps": 702.2332553515836,
+        "total_features_returned": 12541,
+        "timing": {
+          "median": 7.120141294784844,
+          "min": 7.092992872931063,
+          "max": 7.129592828452587,
+          "values": [
+            7.092992872931063,
+            7.108533817343414,
+            7.120141294784844,
+            7.122397993691266,
+            7.129592828452587
+          ],
+          "n": 5
+        }
+      },
+      "batched": {
+        "state": "completed",
+        "n_anchors": 5000,
+        "n_descendants": 161445,
+        "wall_seconds": 0.20161976292729378,
+        "qps": 24799.15623054796,
+        "timing": {
+          "median": 0.20161976292729378,
+          "min": 0.19376371894031763,
+          "max": 0.208396939560771,
+          "values": [
+            0.208396939560771,
+            0.20161976292729378,
+            0.20247583743184805,
+            0.19376371894031763,
+            0.2001963397487998
+          ],
+          "n": 5
+        }
+      },
+      "db_paths": {
+        "gffbase": "external/chess.duckdb",
+        "legacy": "external/chess_legacy.sqlite"
+      },
+      "params": {
+        "legacy_cap_seconds": 5400,
+        "gffbase_cap_seconds": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "repeats": 5,
+        "region_seed": 20260501,
+        "threads": 10,
+        "gtf_arm": null,
+        "infer_gtf_parents": null,
+        "validation_sample": "all",
+        "benchmark_env": {
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1"
+        }
+      }
+    },
+    "refseq": {
+      "name": "RefSeq GRCh38.p14",
+      "key": "refseq",
+      "measured": {
+        "timestamp_utc": "2026-09-10T17:25:29+00:00",
+        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "git_dirty": false
+      },
+      "input": "benchmarks/data/GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
+      "input_bytes": 78190483,
+      "input_sha256": "4920f0eae7e2197c50b67a201e06d657387137b49dd60f474b4f1d5b29334051",
+      "feature_lines": 4932571,
+      "gffbase": {
+        "label": "gffbase ingest(GCF_000001405.40_GRCh38.p14_genomic.gff.gz)",
+        "peak_rss_bytes": 28774322176,
+        "peak_rss_mb": 27441.33203125,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 3600,
+        "wall_seconds": 421.9399029649794,
+        "n_features": 4932571,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "validation": {
+          "ok": true,
+          "level": "full",
+          "checked": [
+            "INV-1 (unique_ids)",
+            "INV-2 (no_orphan_segments)",
+            "INV-3 (n_segments_matches)",
+            "INV-4 (seg_idx_dense)",
+            "INV-5 (envelope_exact)",
+            "INV-6 (edges_resolve)",
+            "INV-7 (segments_do_not_overlap)",
+            "INV-8 (bbox_matches)",
+            "INV-9 (seqid_map_complete)",
+            "INV-10 (attribute_dedup_consistent)",
+            "INV-11 (closure_sound)",
+            "INV-11b (closure_self_ancestry)",
+            "INV-13 (conflicts_resolve)",
+            "INV-14 (file_order_is_first_segment)",
+            "INV-15 (no_orphan_attributes)",
+            "INV-15a (attribute_segments_resolve)",
+            "INV-16 (gtf_hierarchy_coherent)",
+            "INV-11 exact (closure_exact)",
+            "INV-12 (attributes_reparse)"
+          ],
+          "skipped": [],
+          "errors": [],
+          "warnings": [],
+          "requested_sample": "all",
+          "sample_eligible": 4932571,
+          "sample_checked": 4932571,
+          "checked_ids": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6",
+            "INV-7",
+            "INV-8",
+            "INV-9",
+            "INV-10",
+            "INV-11",
+            "INV-11b",
+            "INV-13",
+            "INV-14",
+            "INV-15",
+            "INV-15a",
+            "INV-16",
+            "INV-11-exact",
+            "INV-12"
+          ]
+        },
+        "disk_bytes": 5291388928,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 4932571,
+          "segments_sha256": "e11beb58356ec74d20d588c0ac041760d5a12c88c335a9b4b73cabd261a70ff4",
+          "attribute_count": 55131071,
+          "attributes_sha256": "a021cd73bb283ff56e8172c8b7a97a3af1f5d7c4e91108dc378f71ce359f284f",
+          "direct_relationship_count": 4378154,
+          "direct_relationships_sha256": "ff40535d31d58431e4514530b188689743e2a6074427bcba284b168526a1013f",
+          "closure_count": 8551262,
+          "closure_sha256": "7585e95e29b494f24f5990a35e87bb0fb37a6cf9400018e2c9f0d02e7517ef5f",
+          "feature_count": 4932571,
+          "featuretype_histogram": [
+            [
+              "CAAT_signal",
+              6
+            ],
+            [
+              "CAGE_cluster",
+              96
+            ],
+            [
+              "CDS",
+              1850767
+            ],
+            [
+              "C_gene_segment",
+              44
+            ],
+            [
+              "DNaseI_hypersensitive_site",
+              177
+            ],
+            [
+              "D_gene_segment",
+              61
+            ],
+            [
+              "D_loop",
+              1
+            ],
+            [
+              "GC_rich_promoter_region",
+              15
+            ],
+            [
+              "J_gene_segment",
+              128
+            ],
+            [
+              "RNase_MRP_RNA",
+              1
+            ],
+            [
+              "RNase_P_RNA",
+              2
+            ],
+            [
+              "TATA_box",
+              30
+            ],
+            [
+              "V_gene_segment",
+              663
+            ],
+            [
+              "Y_RNA",
+              4
+            ],
+            [
+              "antisense_RNA",
+              42
+            ],
+            [
+              "biological_region",
+              137093
+            ],
+            [
+              "cDNA_match",
+              27301
+            ],
+            [
+              "centromere",
+              24
+            ],
+            [
+              "chromosome_breakpoint",
+              16
+            ],
+            [
+              "conserved_region",
+              138
+            ],
+            [
+              "direct_repeat",
+              20
+            ],
+            [
+              "dispersed_repeat",
+              5
+            ],
+            [
+              "enhancer",
+              115208
+            ],
+            [
+              "enhancer_blocking_element",
+              59
+            ],
+            [
+              "epigenetically_modified_region",
+              12
+            ],
+            [
+              "exon",
+              2324920
+            ],
+            [
+              "gene",
+              48173
+            ],
+            [
+              "imprinting_control_region",
+              2
+            ],
+            [
+              "insulator",
+              12
+            ],
+            [
+              "lnc_RNA",
+              33203
+            ],
+            [
+              "locus_control_region",
+              14
+            ],
+            [
+              "mRNA",
+              145477
+            ],
+            [
+              "match",
+              161208
+            ],
+            [
+              "matrix_attachment_site",
+              18
+            ],
+            [
+              "meiotic_recombination_region",
+              370
+            ],
+            [
+              "miRNA",
+              3218
+            ],
+            [
+              "microsatellite",
+              5
+            ],
+            [
+              "minisatellite",
+              13
+            ],
+            [
+              "mitotic_recombination_region",
+              54
+            ],
+            [
+              "mobile_genetic_element",
+              204
+            ],
+            [
+              "non_allelic_homologous_recombination_region",
+              514
+            ],
+            [
+              "nucleotide_cleavage_site",
+              4
+            ],
+            [
+              "nucleotide_motif",
+              623
+            ],
+            [
+              "origin_of_replication",
+              87
+            ],
+            [
+              "primary_transcript",
+              2139
+            ],
+            [
+              "promoter",
+              438
+            ],
+            [
+              "protein_binding_site",
+              1418
+            ],
+            [
+              "pseudogene",
+              19339
+            ],
+            [
+              "rRNA",
+              80
+            ],
+            [
+              "recombination_feature",
+              632
+            ],
+            [
+              "region",
+              709
+            ],
+            [
+              "regulatory_region",
+              2
+            ],
+            [
+              "repeat_instability_region",
+              62
+            ],
+            [
+              "repeat_region",
+              10
+            ],
+            [
+              "replication_regulatory_region",
+              11
+            ],
+            [
+              "replication_start_site",
+              3
+            ],
+            [
+              "response_element",
+              20
+            ],
+            [
+              "scRNA",
+              4
+            ],
+            [
+              "scaRNA",
+              54
+            ],
+            [
+              "sequence_alteration",
+              30
+            ],
+            [
+              "sequence_alteration_artifact",
+              10
+            ],
+            [
+              "sequence_comparison",
+              4
+            ],
+            [
+              "sequence_feature",
+              1964
+            ],
+            [
+              "sequence_secondary_structure",
+              14
+            ],
+            [
+              "silencer",
+              35932
+            ],
+            [
+              "snRNA",
+              174
+            ],
+            [
+              "snoRNA",
+              1300
+            ],
+            [
+              "tRNA",
+              691
+            ],
+            [
+              "tandem_repeat",
+              64
+            ],
+            [
+              "telomerase_RNA",
+              1
+            ],
+            [
+              "transcript",
+              15171
+            ],
+            [
+              "transcriptional_cis_regulatory_region",
+              2259
+            ],
+            [
+              "vault_RNA",
+              4
+            ]
+          ],
+          "combined_sha256": "e6c44bfa116b1ee97870cb7da98c430729bd2262b0375c3a059201ff0a79f059"
+        }
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(GCF_000001405.40_GRCh38.p14_genomic.gff.gz)",
+        "peak_rss_bytes": 138944512,
+        "peak_rss_mb": 132.5078125,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 5400,
+        "wall_seconds": 393.87841872218996,
+        "n_features": 4932571,
+        "disk_bytes": 4071698432,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 4932571,
+          "segments_sha256": "e11beb58356ec74d20d588c0ac041760d5a12c88c335a9b4b73cabd261a70ff4",
+          "attribute_count": 55131071,
+          "attributes_sha256": "a021cd73bb283ff56e8172c8b7a97a3af1f5d7c4e91108dc378f71ce359f284f",
+          "direct_relationship_count": 4378154,
+          "direct_relationships_sha256": "ff40535d31d58431e4514530b188689743e2a6074427bcba284b168526a1013f",
+          "closure_count": 8551262,
+          "closure_sha256": "7585e95e29b494f24f5990a35e87bb0fb37a6cf9400018e2c9f0d02e7517ef5f",
+          "feature_count": 4932571,
+          "featuretype_histogram": [
+            [
+              "CAAT_signal",
+              6
+            ],
+            [
+              "CAGE_cluster",
+              96
+            ],
+            [
+              "CDS",
+              1850767
+            ],
+            [
+              "C_gene_segment",
+              44
+            ],
+            [
+              "DNaseI_hypersensitive_site",
+              177
+            ],
+            [
+              "D_gene_segment",
+              61
+            ],
+            [
+              "D_loop",
+              1
+            ],
+            [
+              "GC_rich_promoter_region",
+              15
+            ],
+            [
+              "J_gene_segment",
+              128
+            ],
+            [
+              "RNase_MRP_RNA",
+              1
+            ],
+            [
+              "RNase_P_RNA",
+              2
+            ],
+            [
+              "TATA_box",
+              30
+            ],
+            [
+              "V_gene_segment",
+              663
+            ],
+            [
+              "Y_RNA",
+              4
+            ],
+            [
+              "antisense_RNA",
+              42
+            ],
+            [
+              "biological_region",
+              137093
+            ],
+            [
+              "cDNA_match",
+              27301
+            ],
+            [
+              "centromere",
+              24
+            ],
+            [
+              "chromosome_breakpoint",
+              16
+            ],
+            [
+              "conserved_region",
+              138
+            ],
+            [
+              "direct_repeat",
+              20
+            ],
+            [
+              "dispersed_repeat",
+              5
+            ],
+            [
+              "enhancer",
+              115208
+            ],
+            [
+              "enhancer_blocking_element",
+              59
+            ],
+            [
+              "epigenetically_modified_region",
+              12
+            ],
+            [
+              "exon",
+              2324920
+            ],
+            [
+              "gene",
+              48173
+            ],
+            [
+              "imprinting_control_region",
+              2
+            ],
+            [
+              "insulator",
+              12
+            ],
+            [
+              "lnc_RNA",
+              33203
+            ],
+            [
+              "locus_control_region",
+              14
+            ],
+            [
+              "mRNA",
+              145477
+            ],
+            [
+              "match",
+              161208
+            ],
+            [
+              "matrix_attachment_site",
+              18
+            ],
+            [
+              "meiotic_recombination_region",
+              370
+            ],
+            [
+              "miRNA",
+              3218
+            ],
+            [
+              "microsatellite",
+              5
+            ],
+            [
+              "minisatellite",
+              13
+            ],
+            [
+              "mitotic_recombination_region",
+              54
+            ],
+            [
+              "mobile_genetic_element",
+              204
+            ],
+            [
+              "non_allelic_homologous_recombination_region",
+              514
+            ],
+            [
+              "nucleotide_cleavage_site",
+              4
+            ],
+            [
+              "nucleotide_motif",
+              623
+            ],
+            [
+              "origin_of_replication",
+              87
+            ],
+            [
+              "primary_transcript",
+              2139
+            ],
+            [
+              "promoter",
+              438
+            ],
+            [
+              "protein_binding_site",
+              1418
+            ],
+            [
+              "pseudogene",
+              19339
+            ],
+            [
+              "rRNA",
+              80
+            ],
+            [
+              "recombination_feature",
+              632
+            ],
+            [
+              "region",
+              709
+            ],
+            [
+              "regulatory_region",
+              2
+            ],
+            [
+              "repeat_instability_region",
+              62
+            ],
+            [
+              "repeat_region",
+              10
+            ],
+            [
+              "replication_regulatory_region",
+              11
+            ],
+            [
+              "replication_start_site",
+              3
+            ],
+            [
+              "response_element",
+              20
+            ],
+            [
+              "scRNA",
+              4
+            ],
+            [
+              "scaRNA",
+              54
+            ],
+            [
+              "sequence_alteration",
+              30
+            ],
+            [
+              "sequence_alteration_artifact",
+              10
+            ],
+            [
+              "sequence_comparison",
+              4
+            ],
+            [
+              "sequence_feature",
+              1964
+            ],
+            [
+              "sequence_secondary_structure",
+              14
+            ],
+            [
+              "silencer",
+              35932
+            ],
+            [
+              "snRNA",
+              174
+            ],
+            [
+              "snoRNA",
+              1300
+            ],
+            [
+              "tRNA",
+              691
+            ],
+            [
+              "tandem_repeat",
+              64
+            ],
+            [
+              "telomerase_RNA",
+              1
+            ],
+            [
+              "transcript",
+              15171
+            ],
+            [
+              "transcriptional_cis_regulatory_region",
+              2259
+            ],
+            [
+              "vault_RNA",
+              4
+            ]
+          ],
+          "combined_sha256": "e6c44bfa116b1ee97870cb7da98c430729bd2262b0375c3a059201ff0a79f059"
+        }
+      },
+      "ingest_speedup": 0.9334941207370981,
+      "spatial": {
+        "state": "completed",
+        "n_queries": 5000,
+        "wall_seconds": 9.2598524261266,
+        "qps": 539.9654087242837,
+        "total_features_returned": 14588,
+        "timing": {
+          "median": 9.2598524261266,
+          "min": 9.225137805566192,
+          "max": 9.28128173109144,
+          "values": [
+            9.225137805566192,
+            9.24971494358033,
+            9.28128173109144,
+            9.262769455090165,
+            9.2598524261266
+          ],
+          "n": 5
+        }
+      },
+      "batched": {
+        "state": "completed",
+        "n_anchors": 5000,
+        "n_descendants": 999468,
+        "wall_seconds": 0.5881044678390026,
+        "qps": 8501.890860262572,
+        "timing": {
+          "median": 0.5881044678390026,
+          "min": 0.5746306190267205,
+          "max": 0.6003573462367058,
+          "values": [
+            0.6003573462367058,
+            0.5910005373880267,
+            0.5881044678390026,
+            0.5746306190267205,
+            0.5849443441256881
+          ],
+          "n": 5
+        }
+      },
+      "db_paths": {
+        "gffbase": "external/refseq.duckdb",
+        "legacy": "external/refseq_legacy.sqlite"
+      },
+      "params": {
+        "legacy_cap_seconds": 5400,
+        "gffbase_cap_seconds": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "repeats": 5,
+        "region_seed": 20260501,
+        "threads": 10,
+        "gtf_arm": null,
+        "infer_gtf_parents": null,
+        "validation_sample": "all",
+        "benchmark_env": {
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1"
+        }
+      }
+    },
+    "gencode-gtf": {
+      "name": "GENCODE v49 (GTF)",
+      "key": "gencode-gtf",
+      "measured": {
+        "timestamp_utc": "2026-09-10T18:39:18+00:00",
+        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "git_dirty": false
+      },
+      "input": "benchmarks/data/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
+      "input_bytes": 70588995,
+      "input_sha256": "576dddae36169ad648afbe706535361309786e549ad7daf529cca7674fb0058f",
+      "feature_lines": 6068892,
+      "gffbase": {
+        "label": "gffbase ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz)",
+        "peak_rss_bytes": 57518280704,
+        "peak_rss_mb": 54853.70703125,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 3600,
+        "wall_seconds": 614.0879075564444,
+        "n_features": 6068892,
+        "rtree_built": true,
+        "fmt": "gtf",
+        "validation": {
+          "ok": true,
+          "level": "full",
+          "checked": [
+            "INV-1 (unique_ids)",
+            "INV-2 (no_orphan_segments)",
+            "INV-3 (n_segments_matches)",
+            "INV-4 (seg_idx_dense)",
+            "INV-5 (envelope_exact)",
+            "INV-6 (edges_resolve)",
+            "INV-7 (segments_do_not_overlap)",
+            "INV-8 (bbox_matches)",
+            "INV-9 (seqid_map_complete)",
+            "INV-10 (attribute_dedup_consistent)",
+            "INV-11 (closure_sound)",
+            "INV-11b (closure_self_ancestry)",
+            "INV-13 (conflicts_resolve)",
+            "INV-14 (file_order_is_first_segment)",
+            "INV-15 (no_orphan_attributes)",
+            "INV-15a (attribute_segments_resolve)",
+            "INV-16 (gtf_hierarchy_coherent)",
+            "INV-11 exact (closure_exact)",
+            "INV-12 (attributes_reparse)"
+          ],
+          "skipped": [],
+          "errors": [],
+          "warnings": [],
+          "requested_sample": "all",
+          "sample_eligible": 6068892,
+          "sample_checked": 6068892,
+          "checked_ids": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6",
+            "INV-7",
+            "INV-8",
+            "INV-9",
+            "INV-10",
+            "INV-11",
+            "INV-11b",
+            "INV-13",
+            "INV-14",
+            "INV-15",
+            "INV-15a",
+            "INV-16",
+            "INV-11-exact",
+            "INV-12"
+          ]
+        },
+        "disk_bytes": 6664761344,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 6068892,
+          "segments_sha256": "42e36ff1096b988d2961df85e4dc3697ed03f641c42debac869986a4b24df9b0",
+          "attribute_count": 96291901,
+          "attributes_sha256": "81122b5c5dc8f70a898134db2b3069e972ac05c0fc06721967d4fe048fb49aa4",
+          "direct_relationship_count": 5982523,
+          "direct_relationships_sha256": "3de24c906f2b34c336c9fa293093b8f93995d45369478bafd32de444ae7e15a5",
+          "closure_count": 11671843,
+          "closure_sha256": "943123ba783fd9b69ef37a5d50d9fcee73269e05e1b0029f19ef2bb2dbf0ec58",
+          "feature_count": 6068892,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              2111235
+            ],
+            [
+              "Selenocysteine",
+              108
+            ],
+            [
+              "UTR",
+              580731
+            ],
+            [
+              "exon",
+              2608521
+            ],
+            [
+              "gene",
+              86369
+            ],
+            [
+              "start_codon",
+              194701
+            ],
+            [
+              "stop_codon",
+              194024
+            ],
+            [
+              "transcript",
+              293203
+            ]
+          ],
+          "combined_sha256": "86c49a36a6358c12a5f0689d8538f7f0f5861af96bbe03d223612407d1a9a8d6"
+        }
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz)",
+        "peak_rss_bytes": 115871744,
+        "peak_rss_mb": 110.50390625,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 5400,
+        "wall_seconds": 420.76745446771383,
+        "n_features": 6068892,
+        "disk_bytes": 5407047680,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 6068892,
+          "segments_sha256": "42e36ff1096b988d2961df85e4dc3697ed03f641c42debac869986a4b24df9b0",
+          "attribute_count": 96291901,
+          "attributes_sha256": "81122b5c5dc8f70a898134db2b3069e972ac05c0fc06721967d4fe048fb49aa4",
+          "direct_relationship_count": 5982523,
+          "direct_relationships_sha256": "3de24c906f2b34c336c9fa293093b8f93995d45369478bafd32de444ae7e15a5",
+          "closure_count": 11671843,
+          "closure_sha256": "943123ba783fd9b69ef37a5d50d9fcee73269e05e1b0029f19ef2bb2dbf0ec58",
+          "feature_count": 6068892,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              2111235
+            ],
+            [
+              "Selenocysteine",
+              108
+            ],
+            [
+              "UTR",
+              580731
+            ],
+            [
+              "exon",
+              2608521
+            ],
+            [
+              "gene",
+              86369
+            ],
+            [
+              "start_codon",
+              194701
+            ],
+            [
+              "stop_codon",
+              194024
+            ],
+            [
+              "transcript",
+              293203
+            ]
+          ],
+          "combined_sha256": "86c49a36a6358c12a5f0689d8538f7f0f5861af96bbe03d223612407d1a9a8d6"
+        }
+      },
+      "ingest_speedup": 0.6851909136951025,
+      "spatial": {
+        "state": "completed",
+        "n_queries": 5000,
+        "wall_seconds": 7.068133122287691,
+        "qps": 707.4003719926666,
+        "total_features_returned": 10981,
+        "timing": {
+          "median": 7.068133122287691,
+          "min": 7.045949036255479,
+          "max": 7.086436772719026,
+          "values": [
+            7.059358563274145,
+            7.086436772719026,
+            7.068133122287691,
+            7.077416829764843,
+            7.045949036255479
+          ],
+          "n": 5
+        }
+      },
+      "batched": {
+        "state": "completed",
+        "n_anchors": 5000,
+        "n_descendants": 1933583,
+        "wall_seconds": 0.9629110265523195,
+        "qps": 5192.58774915309,
+        "timing": {
+          "median": 0.9629110265523195,
+          "min": 0.9573602322489023,
+          "max": 0.9688235269859433,
+          "values": [
+            0.9629110265523195,
+            0.9621087126433849,
+            0.9573602322489023,
+            0.9683271665126085,
+            0.9688235269859433
+          ],
+          "n": 5
+        }
+      },
+      "db_paths": {
+        "gffbase": "external/gencode-gtf.duckdb",
+        "legacy": "external/gencode-gtf_legacy.sqlite"
+      },
+      "params": {
+        "legacy_cap_seconds": 5400,
+        "gffbase_cap_seconds": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "repeats": 5,
+        "region_seed": 20260501,
+        "threads": 10,
+        "gtf_arm": "no-infer",
+        "infer_gtf_parents": false,
+        "validation_sample": "all",
+        "benchmark_env": {
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1"
+        }
+      }
+    },
+    "gencode-gff3": {
+      "name": "GENCODE v49 (GFF3)",
+      "key": "gencode-gff3",
+      "measured": {
+        "timestamp_utc": "2026-09-10T19:56:51+00:00",
+        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "git_dirty": false
+      },
+      "input": "benchmarks/data/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
+      "input_bytes": 89385177,
+      "input_sha256": "22ffa691aac993603f7f21effacf19848262bec74545bd979863e7af602e5a1d",
+      "feature_lines": 6066054,
+      "gffbase": {
+        "label": "gffbase ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
+        "peak_rss_bytes": 66568019968,
+        "peak_rss_mb": 63484.2109375,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 3600,
+        "wall_seconds": 668.2786516500637,
+        "n_features": 6066054,
+        "rtree_built": true,
+        "fmt": "gff3",
+        "validation": {
+          "ok": true,
+          "level": "full",
+          "checked": [
+            "INV-1 (unique_ids)",
+            "INV-2 (no_orphan_segments)",
+            "INV-3 (n_segments_matches)",
+            "INV-4 (seg_idx_dense)",
+            "INV-5 (envelope_exact)",
+            "INV-6 (edges_resolve)",
+            "INV-7 (segments_do_not_overlap)",
+            "INV-8 (bbox_matches)",
+            "INV-9 (seqid_map_complete)",
+            "INV-10 (attribute_dedup_consistent)",
+            "INV-11 (closure_sound)",
+            "INV-11b (closure_self_ancestry)",
+            "INV-13 (conflicts_resolve)",
+            "INV-14 (file_order_is_first_segment)",
+            "INV-15 (no_orphan_attributes)",
+            "INV-15a (attribute_segments_resolve)",
+            "INV-16 (gtf_hierarchy_coherent)",
+            "INV-11 exact (closure_exact)",
+            "INV-12 (attributes_reparse)"
+          ],
+          "skipped": [],
+          "errors": [],
+          "warnings": [],
+          "requested_sample": "all",
+          "sample_eligible": 6066054,
+          "sample_checked": 6066054,
+          "checked_ids": [
+            "INV-1",
+            "INV-2",
+            "INV-3",
+            "INV-4",
+            "INV-5",
+            "INV-6",
+            "INV-7",
+            "INV-8",
+            "INV-9",
+            "INV-10",
+            "INV-11",
+            "INV-11b",
+            "INV-13",
+            "INV-14",
+            "INV-15",
+            "INV-15a",
+            "INV-16",
+            "INV-11-exact",
+            "INV-12"
+          ]
+        },
+        "disk_bytes": 7665364992,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 6066054,
+          "segments_sha256": "c64e37c18b8b0f362995ce718e553d081ced38c942e5524ed84bad47fc0e8bc3",
+          "attribute_count": 108289882,
+          "attributes_sha256": "ac0a5fea9d52120560606667582eedd936ebe099b87038ee8f24de84b8c99527",
+          "direct_relationship_count": 5979685,
+          "direct_relationships_sha256": "d800719b0b42392b232791aa6b9d5f9ee317c505d1b9e214db52bda973c22361",
+          "closure_count": 11666275,
+          "closure_sha256": "3184d35fbcb7170f7afa3d05f98c2ba7338a8d5db92408b1e6ac38dc95f5374d",
+          "feature_count": 6066054,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              2111770
+            ],
+            [
+              "exon",
+              2608521
+            ],
+            [
+              "five_prime_UTR",
+              372382
+            ],
+            [
+              "gene",
+              86369
+            ],
+            [
+              "start_codon",
+              194701
+            ],
+            [
+              "stop_codon",
+              194024
+            ],
+            [
+              "stop_codon_redefined_as_selenocysteine",
+              108
+            ],
+            [
+              "three_prime_UTR",
+              204976
+            ],
+            [
+              "transcript",
+              293203
+            ]
+          ],
+          "combined_sha256": "623e50669ad957aac3915879a0060b432c8da8f4a4a85de36082185a23e66b84"
+        }
+      },
+      "legacy": {
+        "label": "legacy gffutils ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
+        "peak_rss_bytes": 163495936,
+        "peak_rss_mb": 155.921875,
+        "exit_code": 0,
+        "state": "completed",
+        "benchmark_env": {
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1"
+        },
+        "cap_seconds": 5400,
+        "wall_seconds": 598.732997033745,
+        "n_features": 6066054,
+        "disk_bytes": 6495186944,
+        "correctness_signature": {
+          "schema_version": "database-signature-v3",
+          "segment_count": 6066054,
+          "segments_sha256": "c64e37c18b8b0f362995ce718e553d081ced38c942e5524ed84bad47fc0e8bc3",
+          "attribute_count": 108289882,
+          "attributes_sha256": "ac0a5fea9d52120560606667582eedd936ebe099b87038ee8f24de84b8c99527",
+          "direct_relationship_count": 5979685,
+          "direct_relationships_sha256": "d800719b0b42392b232791aa6b9d5f9ee317c505d1b9e214db52bda973c22361",
+          "closure_count": 11666275,
+          "closure_sha256": "3184d35fbcb7170f7afa3d05f98c2ba7338a8d5db92408b1e6ac38dc95f5374d",
+          "feature_count": 6066054,
+          "featuretype_histogram": [
+            [
+              "CDS",
+              2111770
+            ],
+            [
+              "exon",
+              2608521
+            ],
+            [
+              "five_prime_UTR",
+              372382
+            ],
+            [
+              "gene",
+              86369
+            ],
+            [
+              "start_codon",
+              194701
+            ],
+            [
+              "stop_codon",
+              194024
+            ],
+            [
+              "stop_codon_redefined_as_selenocysteine",
+              108
+            ],
+            [
+              "three_prime_UTR",
+              204976
+            ],
+            [
+              "transcript",
+              293203
+            ]
+          ],
+          "combined_sha256": "623e50669ad957aac3915879a0060b432c8da8f4a4a85de36082185a23e66b84"
+        }
+      },
+      "ingest_speedup": 0.8959331493762345,
+      "spatial": {
+        "state": "completed",
+        "n_queries": 5000,
+        "wall_seconds": 7.089976935647428,
+        "qps": 705.2209119130823,
+        "total_features_returned": 10739,
+        "timing": {
+          "median": 7.089976935647428,
+          "min": 7.055673802271485,
+          "max": 7.119549820199609,
+          "values": [
+            7.055673802271485,
+            7.119549820199609,
+            7.089976935647428,
+            7.079669300466776,
+            7.118247747421265
+          ],
+          "n": 5
+        }
+      },
+      "batched": {
+        "state": "completed",
+        "n_anchors": 5000,
+        "n_descendants": 1932935,
+        "wall_seconds": 1.09594308398664,
+        "qps": 4562.280717910851,
+        "timing": {
+          "median": 1.09594308398664,
+          "min": 1.0924320444464684,
+          "max": 1.1197585696354508,
+          "values": [
+            1.112987664528191,
+            1.09404756128788,
+            1.0924320444464684,
+            1.1197585696354508,
+            1.09594308398664
+          ],
+          "n": 5
+        }
+      },
+      "db_paths": {
+        "gffbase": "external/gencode-gff3.duckdb",
+        "legacy": "external/gencode-gff3_legacy.sqlite"
+      },
+      "params": {
+        "legacy_cap_seconds": 5400,
+        "gffbase_cap_seconds": 3600,
+        "n_spatial": 5000,
+        "n_batched": 5000,
+        "repeats": 5,
+        "region_seed": 20260501,
+        "threads": 10,
+        "gtf_arm": null,
+        "infer_gtf_parents": null,
+        "validation_sample": "all",
+        "benchmark_env": {
+          "GFFBASE_THREADS": "10",
+          "GFFUTILS2_THREADS": "10",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "VECLIB_MAXIMUM_THREADS": "1",
+          "BLIS_NUM_THREADS": "1",
+          "DUCKDB_DISABLE_PROGRESS_BAR": "1",
+          "PYTHONUNBUFFERED": "1"
+        }
+      }
+    }
+  }
+}
