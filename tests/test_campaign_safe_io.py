@@ -1043,6 +1043,70 @@ def test_exact_scan_rejects_extra_symlink_and_wrong_types(tmp_path: Path) -> Non
         safe_io.exact_directory_scan(root, {"a.json": "file", "logs": "directory", "alias": "file"})
 
 
+def test_a_scan_can_tolerate_a_file_the_owner_is_still_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An in-flight attempt directory cannot be scanned exactly, and must not be.
+
+    `exact_directory_scan` stats every entry, rescans, and requires the two
+    passes to agree on `st_size` and `st_mtime_ns`. That is the right contract
+    for settled evidence and an impossible one for a directory whose owner is
+    still working in it: a DuckDB `.wal` grows continuously, so `status` on a
+    healthy campaign aborted with "directory entry changed during scan" the
+    moment a poll landed mid-write -- which ended a 36-job run at 14 jobs.
+
+    `require_stable=False` keeps every check that detects tampering -- the name
+    set, symlink rejection, entry types, and device/inode/mode/link-count
+    identity across both passes -- and drops only the claim that the bytes did
+    not move.
+    """
+    root = tmp_path / "scratch"
+    root.mkdir()
+    growing = root / "db.duckdb.wal"
+    growing.write_bytes(b"x")
+    expected = {"db.duckdb.wal": "file"}
+
+    real_stat = os.stat
+    appended = False
+
+    def append_between_passes(*args, **kwargs):
+        nonlocal appended
+        item = real_stat(*args, **kwargs)
+        if not appended and args and args[0] == "db.duckdb.wal":
+            appended = True
+            with open(growing, "ab") as handle:
+                handle.write(b"y" * 4096)
+        return item
+
+    monkeypatch.setattr(os, "stat", append_between_passes)
+    with pytest.raises(CampaignError, match="changed during scan|changed during exact scan"):
+        safe_io.exact_directory_scan(root, expected)
+
+    appended = False
+    entries = safe_io.exact_directory_scan(root, expected, require_stable=False)
+    assert set(entries) == {"db.duckdb.wal"}
+
+
+def test_a_tolerant_scan_still_refuses_a_stray_entry_or_a_symlink(tmp_path: Path) -> None:
+    """Tolerating a growing file is not tolerating a different directory."""
+    root = tmp_path / "scratch"
+    root.mkdir()
+    (root / "db.duckdb").write_text("{}", encoding="utf-8")
+    expected = {"db.duckdb": "file"}
+    assert set(safe_io.exact_directory_scan(root, expected, require_stable=False)) == {"db.duckdb"}
+
+    (root / "stray").write_text("x", encoding="utf-8")
+    with pytest.raises(CampaignError, match="entries"):
+        safe_io.exact_directory_scan(root, expected, require_stable=False)
+    (root / "stray").unlink()
+
+    (root / "alias").symlink_to(root / "db.duckdb")
+    with pytest.raises(CampaignError, match="entries|symlink"):
+        safe_io.exact_directory_scan(
+            root, {"db.duckdb": "file", "alias": "file"}, require_stable=False
+        )
+
+
 def test_exact_scan_rechecks_for_entries_added_during_the_scan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
