@@ -208,7 +208,7 @@ def test_reverse_applies_to_every_key(db):
     # to be meaningful, and flipping it would stop `reverse=True` being the
     # exact reverse of the forward order for tied rows.
     assert FeatureDB._order_clause(("seqid", "start"), reverse=True) == (
-        "seqid DESC, start DESC, id ASC"
+        "seqid DESC, start DESC, file_order ASC, id ASC"
     )
     assert [f.id for f in db.all_features(order_by=("seqid", "start"), reverse=True)] == [
         "g2",
@@ -228,18 +228,20 @@ def test_the_default_is_still_file_order(db):
 def test_end_is_quoted_and_length_is_an_expression():
     """`end` is a SQL reserved word, and `length` is gffbase's own sort key
     rather than a column at all."""
-    assert FeatureDB._order_clause("end", reverse=False) == '"end" ASC, id ASC'
-    assert FeatureDB._order_clause("length", reverse=False) == '("end" - start) ASC, id ASC'
+    assert FeatureDB._order_clause("end", reverse=False) == ('"end" ASC, file_order ASC, id ASC')
+    assert FeatureDB._order_clause("length", reverse=False) == (
+        '("end" - start) ASC, file_order ASC, id ASC'
+    )
     assert (
         FeatureDB._order_clause_qualified("length", False, "f")
-        == '(f."end" - f.start) ASC, f.id ASC'
+        == '(f."end" - f.start) ASC, f.file_order ASC, f.id ASC'
     )
 
 
 def test_the_qualified_form_qualifies_every_key():
     assert (
         FeatureDB._order_clause_qualified(("seqid", "end"), False, "f")
-        == 'f.seqid ASC, f."end" ASC, f.id ASC'
+        == 'f.seqid ASC, f."end" ASC, f.file_order ASC, f.id ASC'
     )
 
 

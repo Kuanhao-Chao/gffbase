@@ -399,7 +399,15 @@ everything from scratch.
   `MIN(file_order)` of its children. DuckDB sorts in parallel and does not
   preserve ties, so the same query over the same database could return tied
   rows in a different order on consecutive runs. Every ordered query now
-  appends `id ASC` as a final tiebreak.
+  appends `file_order ASC, id ASC` as a final tiebreak.
+
+  `file_order` comes first so that tied rows come back in the order they
+  appeared in the file, which is what the oracle does -- breaking ties by `id`
+  alone put `FBgn0031208:3` ahead of `exon_2` at the same start, purely because
+  `F` sorts before `e`. Same features, same coordinates, different sequence:
+  the kind of difference that surfaces only once someone's output does, and the
+  parity suite caught it. `id` still follows, because `file_order` is not
+  unique either.
 
   The tiebreak is ascending regardless of `reverse`: it exists to be stable,
   not meaningful, and flipping it alongside the caller's key would make

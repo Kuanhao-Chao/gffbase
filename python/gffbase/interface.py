@@ -193,7 +193,18 @@ def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
     # order for tied rows.
     #
     # `region_batched` already did this and explains why at its own ORDER BY.
+    #
+    # `file_order` comes first, because a tiebreak has to be stable AND it may
+    # as well agree with the oracle. gffutils orders tied rows by rowid, which
+    # is the order they appeared in the file; breaking ties by `id` instead put
+    # `FBgn0031208:3` ahead of `exon_2` at the same start, purely because `F`
+    # sorts before `e`. Same six exons, same coordinates, different sequence --
+    # the kind of difference that only shows up once someone's output does.
+    # `id` still follows, because `file_order` is not unique: GTF synthesis
+    # stamps a synthesized parent with MIN(file_order) of its children.
     if "id" not in names:
+        if "file_order" not in names:
+            parts.append(f"{q}file_order ASC")
         parts.append(f"{q}id ASC")
     return ", ".join(parts)
 

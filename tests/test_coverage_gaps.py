@@ -151,12 +151,17 @@ def test_order_clause_comma_separated_string():
     individually -- which is what the caller meant, and is what closes the
     injection this branch used to be.
 
-    The trailing ``id ASC`` is the total-order tiebreak: none of the sort
-    keys is unique, and DuckDB's parallel sort does not preserve ties, so
-    without it the same query returned different orders across runs.
+    The trailing ``file_order ASC, id ASC`` is the total-order tiebreak: none
+    of the sort keys is unique, and DuckDB's parallel sort does not preserve
+    ties, so without it the same query returned different orders across runs.
+    `file_order` comes first so that tied rows come back in the order they
+    appeared in the file, which is what the oracle does; `id` follows because
+    `file_order` is not unique either.
     """
     db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
-    assert db._order_clause("seqid, start", reverse=False) == "seqid ASC, start ASC, id ASC"
+    assert db._order_clause("seqid, start", reverse=False) == (
+        "seqid ASC, start ASC, file_order ASC, id ASC"
+    )
 
 
 def test_order_clause_rejects_anything_not_whitelisted():
@@ -790,7 +795,7 @@ def test_order_clause_qualified_applies_the_same_whitelist():
     pass-through escape hatch, so `children(..., order_by=<payload>)` was
     injectable exactly like `all_features`."""
     out = FeatureDB._order_clause_qualified(("seqid", "start"), reverse=True, qualifier="f")
-    assert out == "f.seqid DESC, f.start DESC, f.id ASC"
+    assert out == "f.seqid DESC, f.start DESC, f.file_order ASC, f.id ASC"
     with pytest.raises(ValueError, match="cannot order by"):
         FeatureDB._order_clause_qualified("f.seqid", reverse=True, qualifier="f")
 
