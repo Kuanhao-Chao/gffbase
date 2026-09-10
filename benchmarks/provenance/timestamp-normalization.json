@@ -9,6 +9,19 @@
       "canonical_sha256": "16d2ec31d90225eadc8c7f8eab6dce710b2b85ef62b947b1e82037415585a3a5",
       "normalized_timestamp_fields": [],
       "revision_references_remapped": true
+    },
+    {
+      "path": "benchmarks/results/06_mega.linux-x86_64.json",
+      "canonical_sha256": "eee1e966c3245f64034be3c3e182edc4b66a09374093fe1c5ce04473909937b0",
+      "normalized_timestamp_fields": [
+        "/environment/timestamp_utc",
+        "/corpora/mane/measured/timestamp_utc",
+        "/corpora/chess/measured/timestamp_utc",
+        "/corpora/refseq/measured/timestamp_utc",
+        "/corpora/gencode-gtf/measured/timestamp_utc",
+        "/corpora/gencode-gff3/measured/timestamp_utc"
+      ],
+      "revision_references_remapped": true
     }
   ]
 }
