@@ -842,7 +842,7 @@ def _attempt_numbers(attempts_dir: Path) -> tuple[int, ...]:
     return tuple(numbers)
 
 
-def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
+def _scan_scratch(path: Path, spec: model.JobSpec, *, settled: bool = True) -> None:
     names = _directory_names(path, "campaign attempt scratch")
     expected: dict[str, str] = {}
     database_bases = (
@@ -881,7 +881,7 @@ def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
             raise model.CampaignError(
                 f"campaign attempt scratch contains an unexpected entry: {name!r}"
             )
-    entries = safe_io.exact_directory_scan(path, expected)
+    entries = safe_io.exact_directory_scan(path, expected, require_stable=settled)
     for name, item in entries.items():
         if expected[name] == "file" and stat.S_IMODE(item.st_mode) != 0o600:
             raise model.CampaignError(f"campaign scratch file {name!r} must use mode 0600")
@@ -896,15 +896,28 @@ def _scan_scratch(path: Path, spec: model.JobSpec) -> None:
                     f"{sorted(nested_names - nested_allowed)!r}"
                 )
             nested_entries = safe_io.exact_directory_scan(
-                nested, {nested_name: "file" for nested_name in nested_names}
+                nested,
+                {nested_name: "file" for nested_name in nested_names},
+                require_stable=settled,
             )
             if any(stat.S_IMODE(value.st_mode) != 0o600 for value in nested_entries.values()):
                 raise model.CampaignError("signature scratch files must use mode 0600")
 
 
 def _scan_attempt_directory(path: Path, spec: model.JobSpec) -> None:
+    """Validate one attempt directory, exactly if nothing is still writing it.
+
+    `result.json` is written once, last, and never rewritten, so its absence is
+    what "the worker is still in here" looks like from outside. Until then the
+    logs are being appended to and the databases are being built, and demanding
+    that two passes over the directory agree byte for byte is demanding that a
+    running job stand still: `status` aborted a healthy 36-job campaign at job
+    14 on a DuckDB `.wal` that had grown between the passes. A settled attempt
+    still gets the full exact scan, which is where tamper detection matters.
+    """
     _require_private_directory(path, "campaign attempt")
     names = _directory_names(path, "campaign attempt")
+    settled = "result.json" in names
     allowed = {
         "scratch": "directory",
         "stdout.log": "file",
@@ -917,7 +930,9 @@ def _scan_attempt_directory(path: Path, spec: model.JobSpec) -> None:
         raise model.CampaignError(
             f"campaign attempt contains unexpected entries: {sorted(unknown)!r}"
         )
-    entries = safe_io.exact_directory_scan(path, {name: allowed[name] for name in names})
+    entries = safe_io.exact_directory_scan(
+        path, {name: allowed[name] for name in names}, require_stable=settled
+    )
     for name, item in entries.items():
         expected_mode = 0o700 if allowed[name] == "directory" else 0o600
         if stat.S_IMODE(item.st_mode) != expected_mode:
@@ -925,7 +940,7 @@ def _scan_attempt_directory(path: Path, spec: model.JobSpec) -> None:
                 f"campaign attempt entry {name!r} must use mode {expected_mode:04o}"
             )
     if "scratch" in names:
-        _scan_scratch(path / "scratch", spec)
+        _scan_scratch(path / "scratch", spec, settled=settled)
 
 
 def allocate_attempt(

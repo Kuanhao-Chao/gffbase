@@ -1647,7 +1647,9 @@ def atomic_write_public_json_durable(
         )
 
 
-def _scan_directory_fd(descriptor: int, expected: Mapping[str, str]) -> dict[str, os.stat_result]:
+def _scan_directory_fd(
+    descriptor: int, expected: Mapping[str, str], *, require_stable: bool = True
+) -> dict[str, os.stat_result]:
     expected_record = dict(expected)
     for name, kind in expected_record.items():
         if type(name) is not str or not name or name in {".", ".."} or "/" in name:
@@ -1675,6 +1677,15 @@ def _scan_directory_fd(descriptor: int, expected: Mapping[str, str]) -> dict[str
         if kind == "directory" and not stat.S_ISDIR(item.st_mode):
             raise CampaignError(f"unsafe directory entry: {entry.name}")
         result[entry.name] = item
+
+    if not require_stable:
+        # The caller is looking at a directory whose owner is still working in
+        # it, so "nothing moved while I looked" is not a property it can have.
+        # Everything above still held: the exact name set, no symlink, the right
+        # entry kinds. What is given up is only the second pass, which exists to
+        # prove the bytes did not change -- and a live DuckDB `.wal` changes by
+        # design. Requiring it here aborted `status` on healthy campaigns.
+        return result
 
     try:
         final_entries = sorted(os.scandir(descriptor), key=lambda entry: entry.name)
@@ -1713,14 +1724,29 @@ def _scan_directory_fd(descriptor: int, expected: Mapping[str, str]) -> dict[str
 
 
 def exact_directory_scan(
-    path: os.PathLike[str] | str, expected: Mapping[str, str]
+    path: os.PathLike[str] | str,
+    expected: Mapping[str, str],
+    *,
+    require_stable: bool = True,
 ) -> dict[str, os.stat_result]:
+    """Scan a directory whose exact contents are known, and stat every entry.
+
+    `require_stable` defaults to True, which additionally proves the directory
+    did not change while it was being read: every entry is re-stat'd and must
+    match on device, inode, mode, link count, size and timestamps. That is the
+    contract settled evidence must meet.
+
+    Pass False only for a directory the campaign itself is still writing -- an
+    in-flight attempt. The name set, symlink rejection and entry kinds are still
+    enforced; only the "nothing moved" claim is dropped, because a database
+    being built moves by design.
+    """
     directory = lexical_absolute(path)
     with _open_directory(directory) as descriptor:
         opened = os.fstat(descriptor)
         identity = (opened.st_dev, opened.st_ino)
         _assert_parent_identity(directory, descriptor, identity)
-        result = _scan_directory_fd(descriptor, expected)
+        result = _scan_directory_fd(descriptor, expected, require_stable=require_stable)
         _assert_parent_identity(directory, descriptor, identity)
         return result
 

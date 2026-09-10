@@ -281,6 +281,18 @@ The performance claims could not be reproduced from anything in the repository.
 This release rebuilds the harness so that they can be, and re-measures
 everything from scratch.
 
+- **`status` aborted healthy campaigns.** It validates an attempt directory with
+  `exact_directory_scan`, which stats every entry, rescans, and requires the two
+  passes to agree byte for byte -- the right contract for settled evidence and an
+  impossible one for a directory whose worker is still in it. A DuckDB `.wal`
+  grows continuously, so a 36-job run died at job 14 on
+  `gencode-gff3.duckdb.gffbase-building.<pid>.wal`, with nothing actually wrong.
+  An earlier fix had allowed those *names*; the exactness requirement remained.
+  `result.json` is written once and last, so its absence is what "still running"
+  looks like from outside: an attempt without it is now scanned without the
+  second pass, keeping the name set, symlink rejection, entry kinds, modes and
+  device/inode identity, and giving up only the claim that the bytes held still.
+
 - **The published tables could not render a Linux campaign at all.** The
   generator read one hardcoded path, `benchmarks/results/06_mega.json`, which
   holds the historical macOS run — four corpora, schema v2, provenance naming a

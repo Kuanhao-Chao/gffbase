@@ -43,15 +43,36 @@ decision.
 3. Finish benchmark evidence
 ----------------------------
 
-- Complete the parallel cluster audit and then the isolated canonical run.
-- Verify input hashes, job-status records, environment provenance, result
-  schema, correctness signatures, and full-validation reports.
+What a published number must rest on is one isolated canonical run of the five
+corpora, measured on the installed artifact and admitted by the schema-v3
+evidence contract. That contract is not advisory: it refuses a row whose
+validation was sampled rather than exhaustive, refuses a run whose tree was
+dirty or whose rows disagree about the commit, and refuses a speedup unless both
+engines' correctness signatures match.
 
-- Keep Linux canonical, Mac historical, GTF controls, and version-bridge
-  results distinct; regenerate documentation from the checked-in result index.
+- Run all five corpora in one invocation, on the candidate wheel, with no
+  repository ``PYTHONPATH``, exhaustive validation, and the canonical
+  ``no-infer`` GTF arm. Write the databases to a local filesystem: the default
+  output directory is inside the repository, and on network storage the ingest
+  numbers measure the network.
+
+- Verify input hashes, environment provenance, result schema, correctness
+  signatures, and full-validation reports. A censored comparator is a result:
+  it records its cap, reports no wall time, and publishes no ratio.
+
+- Keep Linux and Mac measurements distinct. The macOS artifact is retained
+  byte-for-byte under its own name and is never the target of a write;
+  regenerate the documentation from the platform artifact.
 
 - Re-run an affected canonical row after any source, dependency, input, or
   harness change.
+
+The 36-job cluster campaign — thread scaling, GTF-inference controls, and the
+0.1.0 version bridge — is deeper evidence and remains supported, but it is not
+what a candidate has to clear. It measures roughly seven times the work for the
+same five published rows, and the parts a release depends on are exactly the
+five this section requires. Record which of the two produced the numbers being
+published; do not present one as the other.
 
 .. _release_checklist--4-preparebut-do-not-publishthe-release-metadata:
 
