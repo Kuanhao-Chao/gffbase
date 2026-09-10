@@ -670,6 +670,22 @@ def run_one(corpus: dict, args) -> dict:
     }
 
 
+def _platform_key() -> str:
+    """`linux-x86_64`-style key for the platform this sweep ran on.
+
+    Mirrors the campaign's own key so a locally published sweep and a campaign
+    publication land on the same filename for the same machine, rather than
+    quietly accumulating two files that say different things.
+    """
+    import platform as _platform
+
+    system = _platform.system().casefold()
+    machine = {"amd64": "x86_64", "arm64": "arm64"}.get(
+        _platform.machine().casefold(), _platform.machine().casefold()
+    )
+    return f"{system or 'unknown'}-{machine or 'unknown'}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -879,7 +895,11 @@ def main() -> None:
             )
             return
 
-        published = RESULTS / "06_mega.json"
+        # NOT `06_mega.json`: that name holds the historical macOS run, whose
+        # bytes are pinned by three separate digests and registered in the
+        # campaign results index. A local sweep publishes under its own
+        # platform key, which is also what `gen_benchmark_tables.py` prefers.
+        published = RESULTS / f"06_mega.{_platform_key()}.json"
         published.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(out_path, published)
         print(f"Published → {published.relative_to(ROOT)}", flush=True)
