@@ -55,7 +55,37 @@ if str(ROOT) not in sys.path:
 from benchmarks.common import benchmark_results_evidence_error  # noqa: E402
 
 RESULTS = ROOT / "benchmarks" / "results"
-MEGA = RESULTS / "06_mega.json"
+
+#: The macOS run this project published before it could measure on Linux. It is
+#: schema v2, covers four corpora, and its provenance names a `gffbase 0.2.0`
+#: that was never built. Kept byte-for-byte -- three separate digests pin it,
+#: and the campaign's results index registers it as a legacy-opaque platform
+#: entry -- so it is the fallback, never the target of a write.
+HISTORICAL_MEGA = RESULTS / "06_mega.json"
+
+#: Where a campaign publishes the measurements that supersede it, one file per
+#: platform, named by `campaign.results.derive_linux_platform_key` and friends.
+#: Preferring these is what lets the published tables describe the platform the
+#: numbers were actually measured on.
+_PLATFORM_MEGA_GLOB = "06_mega.*.json"
+
+
+def published_measurements_path() -> Path:
+    """The measurement file the published tables are rendered from.
+
+    A platform-specific artifact wins over the historical macOS one, and the
+    newest wins among several. Exported because the prose guards in
+    `tests/test_release_hygiene.py` recompute published claims from this file:
+    if they resolved it independently they could check yesterday's numbers
+    against today's tables and pass.
+    """
+    platform_files = sorted(RESULTS.glob(_PLATFORM_MEGA_GLOB))
+    if platform_files:
+        return max(platform_files, key=lambda path: path.stat().st_mtime)
+    return HISTORICAL_MEGA
+
+
+MEGA = published_measurements_path()
 
 HISTORICAL_SCHEMA_V2_RAW_SHA256 = "d215d19fcf67d226dda401ed9069c75d524494904faced588f23cc81712db53d"
 HISTORICAL_SCHEMA_V2_CANONICAL_SHA256 = (
@@ -361,7 +391,7 @@ def render_provenance(data: dict) -> str:
         f"{line1}  \n"
         f"**Versions:** Python {python_version or '?'} · {versions}  \n"
         f"**Commit:** `{commit}`{dirty} · **Run:** {stamp}  \n"
-        f"*Generated from `benchmarks/results/06_mega.json` by "
+        f"*Generated from `{published_measurements_path().relative_to(ROOT)}` by "
         f"`tools/gen_benchmark_tables.py`. Do not edit by hand.*"
     )
 
@@ -511,14 +541,17 @@ def main() -> int:
     group.add_argument("--check", action="store_true", help="fail if any table is out of date")
     args = ap.parse_args()
 
-    if not MEGA.is_file():
-        print(f"no measurements at {MEGA.relative_to(ROOT)}", file=sys.stderr)
+    mega = published_measurements_path()
+    if not mega.is_file():
+        print(f"no measurements at {mega.relative_to(ROOT)}", file=sys.stderr)
         print(
-            "Run: python benchmarks/06_mega.py, then copy out/06_mega.json there.", file=sys.stderr
+            "Run a campaign and `tools/gen_published_measurements.py`, or restore "
+            "the historical artifact.",
+            file=sys.stderr,
         )
         return 1
     try:
-        raw = MEGA.read_bytes()
+        raw = mega.read_bytes()
         data = json.loads(raw)
         if (
             data.get("schema_version") == "2"

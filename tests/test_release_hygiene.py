@@ -564,6 +564,19 @@ def test_the_two_changelogs_carry_the_same_entries():
     assert not differences, "the two changelogs disagree:\n" + "\n".join(differences)
 
 
+def _published_measurements():
+    """The measurement file `gen_benchmark_tables.py` renders from, or None."""
+    import importlib.util
+
+    script = REPO_ROOT / "tools" / "gen_benchmark_tables.py"
+    if not script.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("_gbt_for_prose", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.published_measurements_path()
+
+
 def test_the_disk_and_rss_ranges_in_prose_match_the_measurements():
     """Four pages quote a disk ratio and a legacy RSS figure in prose.
 
@@ -573,14 +586,17 @@ def test_the_disk_and_rss_ranges_in_prose_match_the_measurements():
     legacy RSS, which is the *smallest* corpus (MANE, 174.50 MB) generalised
     to all of them -- GENCODE is 495.06 MB, nearly three times that.
 
-    Recomputed here from `06_mega.json` so a refreshed campaign makes this
+    Recomputed here from whichever measurement file the tables were rendered
+    from -- resolved through `gen_benchmark_tables` rather than named, so a
+    campaign that publishes a new platform artifact cannot leave these checking
+    yesterday's numbers against today's tables. A refreshed campaign makes this
     fail rather than making the prose quietly wrong again.
     """
     import json
 
-    results = REPO_ROOT / "benchmarks" / "results" / "06_mega.json"
-    if not results.is_file():
-        pytest.skip("benchmarks/results/06_mega.json is not present")
+    results = _published_measurements()
+    if results is None or not results.is_file():
+        pytest.skip("no published benchmark measurements are present")
     corpora = json.loads(results.read_text(encoding="utf-8"))["corpora"].values()
 
     ratios = [c["gffbase"]["disk_bytes"] / c["legacy"]["disk_bytes"] for c in corpora]
@@ -623,9 +639,9 @@ def test_the_headline_corpus_count_matches_the_corpora_actually_measured():
     """
     import json
 
-    results = REPO_ROOT / "benchmarks" / "results" / "06_mega.json"
-    if not results.is_file():
-        pytest.skip("benchmarks/results/06_mega.json is not present")
+    results = _published_measurements()
+    if results is None or not results.is_file():
+        pytest.skip("no published benchmark measurements are present")
     measured = len(json.loads(results.read_text(encoding="utf-8"))["corpora"])
     word = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}[measured]
 

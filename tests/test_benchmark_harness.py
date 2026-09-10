@@ -2309,7 +2309,10 @@ def test_generator_main_rejects_schema_v2_with_changed_raw_bytes(tmp_path, monke
         process_called = True
         return []
 
-    monkeypatch.setattr(tables, "MEGA", altered)
+    # `main` resolves the measurement file per call, so that a platform
+    # artifact written after import is still seen; patch the resolver, not the
+    # module constant it was read from before.
+    monkeypatch.setattr(tables, "published_measurements_path", lambda: altered)
     monkeypatch.setattr(tables, "process", unexpected_process)
     monkeypatch.setattr(sys, "argv", ["gen_benchmark_tables.py", "--check"])
 
