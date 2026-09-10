@@ -118,7 +118,7 @@ Security
 
   An audit of every remaining f-string SQL site found no third instance.
 
-  See ``docs/advisory_sql_injection.rst`` for both write-ups and mitigations
+  See the :doc:`SQL injection advisory <advisory_sql_injection>` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
 - The thread-count environment variable is now ``GFFBASE_THREADS``.

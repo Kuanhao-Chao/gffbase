@@ -25,7 +25,7 @@ Supported versions
 but never published). It carries two SQL injection vulnerabilities fixed on
 the 0.2.0 release branch and not backported. Until 0.2.0 is published, install
 the reviewed candidate from its exact commit or use the mitigations in
-the advisory in ``docs/advisory_sql_injection.rst``. Do not treat ``pip install gffbase`` as an
+the :doc:`SQL injection advisory <advisory_sql_injection>`. Do not treat ``pip install gffbase`` as an
 upgrade to 0.2.0 until PyPI lists that version.
 
 .. _security--reporting-a-vulnerability:
