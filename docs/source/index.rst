@@ -223,3 +223,4 @@ See :doc:`content/installation` for the supported platforms, and
    content/changelog
    content/contributing
    content/security
+   content/advisory_sql_injection

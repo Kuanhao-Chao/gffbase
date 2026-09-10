@@ -313,7 +313,7 @@ def make_query(
     validated even when it is a plain string.** Upstream checks its whitelist
     only for the iterable form and interpolates a bare string verbatim, which
     is the same class of hole that `FeatureDB.order_by` had. See
-    `docs/advisory_sql_injection.rst`.
+    `docs/source/content/advisory_sql_injection.rst`.
 
     .. danger:: ``other`` and ``extra`` are raw SQL
 

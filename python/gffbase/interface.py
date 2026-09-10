@@ -1631,7 +1631,7 @@ class FeatureDB:
         featuretype : str or list of str, optional
         order_by : str or sequence of str, optional
             A whitelisted sort key; anything else raises `ValueError` naming
-            the accepted set. See `docs/advisory_sql_injection.rst` for
+            the accepted set. See `docs/source/content/advisory_sql_injection.rst` for
             why this is not a free-text field.
         reverse : bool
             Applies to every key, not just the last.

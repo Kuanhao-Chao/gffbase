@@ -15,10 +15,10 @@ Summary
 
 Two ``FeatureDB`` parameters were interpolated directly into SQL:
 
-1. **``order_by``**, on ``all_features`` / ``features_of_type`` / ``children`` /
+1. ``order_by``, on ``all_features`` / ``features_of_type`` / ``children`` /
    ``parents``;
 
-2. **``set_pragmas``**, which interpolated both the pragma *name* and its
+2. ``set_pragmas``, which interpolated both the pragma *name* and its
    *value*.
 
 A caller who passes attacker-influenced text to either allows arbitrary SQL —
@@ -201,7 +201,7 @@ gffutils' ``set_pragmas`` is:
 
 ``executescript`` exists precisely to run several statements, so SQLite's
 one-statement rule does not apply. **gffutils 0.14 is genuinely vulnerable
-through ``set_pragmas``.** This has not been reported upstream; see the
+through its own** ``set_pragmas``. This has not been reported upstream; see the
 checklist.
 
 .. _advisory_sql_injection--impact:
@@ -311,7 +311,7 @@ Checklist before publishing
 
 - ☐ Decide severity and CVSS
 - ☐ Report ``set_pragmas`` to the gffutils maintainer privately — 0.14 is
-  affected and unpatched (draft in ``docs/private/upstream-note-gffutils.md``)
+  affected and unpatched
 
 - ☐ Decide whether 0.1.x gets a backported patch release or is yanked
 - ☐ File the GitHub Security Advisory (draft privately first)

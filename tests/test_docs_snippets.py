@@ -470,7 +470,13 @@ def test_internal_unlisted_and_transitive_import_failures_are_not_skipped(
 #: the way `docs/guides/modes.md` and `docs/getting-started/quickstart.md` now
 #: do. That is a documentation improvement waiting to happen, and this number
 #: is the scoreboard for it.
-MAX_SKIPPED = 62
+#:
+#: Six of the exemptions are not that, and never will be: the SQL injection
+#: advisory demonstrates the attacks, so its blocks are payloads and elided
+#: before/after fragments. A runnable one would be a working exploit sitting in
+#: the documentation. They were outside the docs tree, and therefore outside
+#: this count, only while the advisory was not published on the site.
+MAX_SKIPPED = 68
 
 
 def test_the_skip_list_does_not_grow():

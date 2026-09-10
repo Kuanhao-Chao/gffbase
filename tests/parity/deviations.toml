@@ -97,7 +97,7 @@ reason = """Validates `order_by` against the whitelist for a plain string as
 well as for an iterable. The oracle checks only the iterable form and
 interpolates a bare string verbatim -- the same defect class as the `order_by`
 and `set_pragmas` injections fixed in this release (see
-docs/advisory_sql_injection.rst). Pinned by
+docs/source/content/advisory_sql_injection.rst). Pinned by
 `test_make_query_validates_a_string_order_by`."""
 
 [[deviation]]

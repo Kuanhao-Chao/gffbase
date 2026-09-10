@@ -106,7 +106,7 @@ nobody can install would only mislead. Everything below is the delta from
 
   An audit of every remaining f-string SQL site found no third instance.
 
-  See `docs/advisory_sql_injection.rst` for both write-ups and mitigations
+  See `docs/source/content/advisory_sql_injection.rst` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
 - The thread-count environment variable is now **`GFFBASE_THREADS`**.
