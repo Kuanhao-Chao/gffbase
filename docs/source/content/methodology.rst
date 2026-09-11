@@ -226,8 +226,10 @@ carries, and both were measured rather than assumed.
 attributes, not the number of features: gffbase moves roughly 160,000 attributes
 per second across every corpus, so a GENCODE annotation at 16-18 attributes per
 feature ingests at about half the *feature* rate of CHESS at 2.6. Raising the
-DuckDB thread count barely helps. From a 25-job sweep over five corpora at 1, 2,
-4, 8 and 10 threads:
+DuckDB thread count barely helps. From the 25-job thread sweep of one cluster
+campaign run, over five corpora at 1, 2, 4, 8 and 10 threads -- all twenty-five
+figures from that single run, since thread scaling is only meaningful within
+one:
 
 .. list-table::
    :header-rows: 1
@@ -261,6 +263,12 @@ Ten times the cores buys at most a quarter more throughput. The comparator is
 single-threaded, so the published comparison is largely one serial ingest
 against another, and neither engine's figure should be read as a parallel
 result.
+
+A second, partial sweep measured the same corpora 12-15 percent slower at every
+thread count -- 47.4 s rather than 41.6 s for MANE at one thread, 506.8 s rather
+than 425.4 s for RefSeq -- while reproducing the same shape. Absolute figures
+from a thread sweep are therefore run-specific; the conclusion that ingest does
+not parallelise is not.
 
 **Ingest uncertainty is asymmetric, and it falls with corpus size.** Repeating
 the same corpus with a byte-identical binary on ten pinned physical cores of an
