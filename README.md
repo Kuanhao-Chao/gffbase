@@ -32,11 +32,12 @@ migrate by changing one import line.
 
 ### Three reasons it matters
 
-1. **Whole-genome ingest, measured.** The historical Mac sweep records the
-   complete commands and environment for four large annotations. A controlled
-   Linux campaign now separates modern GTF with existing parents, inference
-   disabled, and a reproducibly parent-stripped synthesis workload before
-   making a causal performance claim. *([The numbers](#-measured-against-legacy-gffutils))*
+1. **Whole-genome ingest, measured — and reported as it came out.** Five large
+   annotations, one run, one commit, with the complete commands and environment
+   recorded. Ingest lands between 1.21× and 0.69× against `gffutils`: ahead
+   where per-feature overhead dominates, behind on the attribute-dense
+   whole-genome files. Nothing is published unless both engines' correctness
+   signatures agree first. *([The numbers](#-measured-against-legacy-gffutils))*
 2. **Bulk extraction without Python objects.**
    `children_batched(format='arrow')` answers "every exon for these tens of
    thousands of transcripts" with a single set-based query returning a
@@ -133,9 +134,13 @@ pipelines with PyTorch and Hugging Face `datasets`.
 
 ## ⚡ Measured against legacy `gffutils`
 
-The table below is the retained historical Mac run. It contains four of the
-five canonical inputs and used default legacy GTF inference. It is useful
-platform-specific evidence, but it does not isolate the cost of synthesis.
+One run, one machine, one commit, over all five canonical inputs. **Read the
+ingest column as a draw rather than a win**: gffbase spans 1.21× to 0.69×, ahead
+where per-feature overhead dominates and behind on the attribute-dense
+whole-genome files, because both engines are attribute-bound and effectively
+serial at a comparable rate. The durable advantages — batched extraction,
+spatial indexing, SQL over the whole corpus — are elsewhere and are untouched by
+that result.
 
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS (ingest + full validation) | spatial qps | batched (5 k anchors) |
@@ -154,14 +159,28 @@ platform-specific evidence, but it does not isolate the cost of synthesis.
 *Generated from `benchmarks/results/06_mega.linux-x86_64.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
-“Censored at” means the comparator was killed at its safety valve without
-finishing. It is cap evidence only: no comparator wall or speedup is claimed.
+All five corpora completed; nothing is censored. Had a comparator been killed at
+its safety valve the cell would read “censored at”, which is cap evidence only —
+never a wall time or a speedup.
 
-**Do not interpret the GTF row as a synthesis-only comparison.** GENCODE v49's
-GTF already contains gene and transcript rows. Leaving legacy inference enabled
-can repeat work that its own modern-GENCODE guidance recommends disabling. The
-cluster campaign therefore reports default behavior, inference-disabled real
-data, and parent-stripped synthesis as three independent arms.
+**`peak RSS` is ingest plus exhaustive validation**, not the cost of ingest and
+not what you pay: `validate_db` defaults to `sample=200`, the CLI never
+overrides it, and the same corpora at `validation_sample=10000` peak at
+8.6–9.2 GB rather than tens of GB.
+
+**The GTF row is the inference-disabled arm**, which is the configuration least
+favourable to gffbase. GENCODE v49's GTF already contains gene and transcript
+rows, so this is the arm where `gffutils` does no synthesis at all and its
+ingest becomes a plain bulk insert — 229 k attributes/s, its fastest anywhere,
+against gffbase's entirely ordinary 157 k. The cluster campaign reports default
+inference, inference-disabled real data, and parent-stripped synthesis as three
+independent arms; only the second is published here.
+
+**Ingest wall time is measured once per corpus**, while query phases repeat five
+times. A separate probe put the run-to-run spread at 1.3 % on RefSeq and 2.7 %
+on GENCODE GTF, but ~20 % on CHESS, where a 90-second run is dominated by
+startup. Treat the whole-genome ratios as solid and the CHESS ratio as
+indicative.
 
 **Robustness.** Publication now requires matching deterministic feature and
 relationship signatures plus a full structural-validation pass. Parser
