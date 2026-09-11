@@ -282,9 +282,11 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
   SQLite -- the price of materializing the transitive closure and the R-tree,
   which is what turns hierarchy and spatial queries into indexed lookups.
   Current measurements: [Performance](https://khchao.com/gffbase/content/performance.html).
-- **Peak RSS**: substantially higher -- roughly 7-10 GB to ingest a
-  whole-genome annotation, against 111-194 MB for `gffutils`. The published
-  figures are larger still (up to 62 GB) because those runs also validate
+- **Peak RSS**: substantially higher -- 6.4-10.2 GB to ingest a whole-genome
+  annotation and validate a 10,000-feature sample (RefSeq 6.4-6.9, GENCODE GTF
+  8.5-9.2, GENCODE GFF3 9.5-10.2), against 111-194 MB for `gffutils`, which
+  only ingests. No run measures ingest with no validation at all. The published
+  figures are larger still (up to 62 GB) because those runs validate
   exhaustively; `validate_db` defaults to `sample=200`, so no default path pays
   that. DuckDB allocates a vectorized ingest buffer pool; cap it with
   `PRAGMA memory_limit='512MB'` if that matters more than wall time.
