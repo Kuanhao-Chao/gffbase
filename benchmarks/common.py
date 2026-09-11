@@ -87,6 +87,9 @@ LEGACY_DB = OUT / "gencode-gff3_legacy.sqlite"
 #: Results schema. Bump when the shape changes so a stale file is detectable
 #: rather than silently misread.
 SCHEMA_VERSION = "3"
+#: The build whose measurements are published, not the package version: the
+#: evidence gate pins every published row to it, and the Linux run measured
+#: 0.2.0rc1. Bump it only together with a new measured run.
 _CANDIDATE_VERSION = "0.2.0rc1"
 _COMPARATOR_VERSION = "0.14"
 _MAX_CANDIDATE_WHEEL_BYTES = 256 << 20

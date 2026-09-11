@@ -1,7 +1,7 @@
 .. _release_checklist--020rc1-release-checklist:
 
-0.2.0rc1 release checklist
-==========================
+0.2.0 release checklist
+=======================
 
 This checklist stops at a tag-ready commit. Tagging, pushing, TestPyPI, PyPI,
 GitHub Releases, and security-advisory publication require an explicit release
@@ -18,7 +18,7 @@ decision.
 
 - Record each artifact's SHA-256 and inspect its file list.
 - Install the wheel into a clean environment and verify the Python package and
-  native extension report exactly ``0.2.0rc1`` and resolve inside that environment.
+  native extension report exactly ``0.2.0`` and resolve inside that environment.
 
 - Run the installed-wheel parser sentinels, CLI entry point, and small database
   round trip without repository ``PYTHONPATH`` injection.

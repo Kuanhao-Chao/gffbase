@@ -48,6 +48,8 @@ RESULTS_SCHEMA = "campaign-results-v2"
 INDEX_SCHEMA = "results-index-v2"
 SIGNATURE_SCHEMA = "database-signature-v3"
 
+# The build the campaign measures, not the package version -- see
+# `benchmarks/common.py:_CANDIDATE_VERSION`. Bump both with a new run.
 PUBLIC_VERSION = "0.2.0rc1"
 CARGO_VERSION = "0.2.0-rc.1"
 REGION_SEED = 20260501

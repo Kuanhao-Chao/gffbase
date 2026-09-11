@@ -4,16 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.0 candidate | ✅ Fixed on the release branch; not yet published |
-| 0.1.0   | ⚠️ Only public release; affected by known issues below |
+| 0.2.0   | ✅ Current release |
+| 0.1.0   | ⚠️ Affected by two SQL injection vulnerabilities; upgrade to 0.2.0 |
 | < 0.1   | ❌ |
 
-0.1.0 is currently the only tagged and published release (0.1.1 was prepared
-but never published). It carries two SQL injection vulnerabilities fixed on
-the 0.2.0 release branch and not backported. Until 0.2.0 is published, install
-the reviewed candidate from its exact commit or use the mitigations in
-the advisory in `docs/source/content/advisory_sql_injection.rst`. Do not treat `pip install gffbase` as an
-upgrade to 0.2.0 until PyPI lists that version.
+0.1.0 carries two SQL injection vulnerabilities, fixed in 0.2.0 and not
+backported ([GHSA-5f5g-g3v5-prrg](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg)). Upgrade to 0.2.0, or if you cannot
+yet, apply the mitigations in `docs/source/content/advisory_sql_injection.rst`.
+0.1.1 was prepared but never published.
 
 ## Reporting a vulnerability
 
