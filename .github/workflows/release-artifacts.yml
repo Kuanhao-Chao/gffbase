@@ -151,7 +151,9 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
-          args: --locked --out dist --manifest-path rust/Cargo.toml
+          # No `--locked`: `maturin sdist` compiles nothing and rejects it. The
+          # lock file ships inside the sdist and binds its builds.
+          args: --out dist --manifest-path rust/Cargo.toml
           rust-toolchain: 1.83.0
       - name: Inspect before immutable upload
         run: |
@@ -212,17 +214,25 @@ jobs:
       - name: Reinspect and install the exact wheel
         shell: bash
         run: |
-          python -m pip install --upgrade pip 'packaging==25.0'
+          # tools/release_artifacts.py needs a TOML reader; tomllib is 3.11+.
+          python -m pip install --upgrade pip 'packaging==25.0' 'tomli>=2; python_version < "3.11"'
           python tools/release_artifacts.py inspect \
             --artifact-dir "$WHEEL_DIR" \
             --expected-version "$EXPECTED_VERSION" \
             --expected-target "$EXPECTED_TARGET"
           wheel=$(find "$WHEEL_DIR" -maxdepth 1 -type f -name '*.whl' -print -quit)
           test -n "$wheel"
-          python -m pip install --force-reinstall "$wheel"
-          python -m pip check
+          # A fresh venv, as sdist-smoke does: `pip check` in the runner's own
+          # interpreter also checks what the image preinstalls (pipx on the
+          # Windows 3.12 image requires packaging>=26 and failed the job).
+          python -m venv "$RUNNER_TEMP/wheel-install"
+          venv_bin="$RUNNER_TEMP/wheel-install/bin"
+          [ -d "$venv_bin" ] || venv_bin="$RUNNER_TEMP/wheel-install/Scripts"
+          "$venv_bin/python" -m pip install --upgrade pip
+          "$venv_bin/python" -m pip install --force-reinstall "$wheel"
+          "$venv_bin/python" -m pip check
           cd "$RUNNER_TEMP"
-          python - <<'PY'
+          "$venv_bin/python" - <<'PY'
           import importlib.metadata
           import gffbase
           import gffbase._native as native
@@ -237,7 +247,7 @@ jobs:
           assert gffbase.validate_db(db, level="full").ok
           db.close()
           PY
-          gffbase --version
+          PATH="$venv_bin:$PATH" gffbase --version
 
   sdist-smoke:
     name: Clean-build and install the exact sdist
