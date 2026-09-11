@@ -3,20 +3,19 @@
 Installation
 ============
 
-.. warning::
+.. note::
 
-   **0.2.0rc1 is still a release candidate**
+   **This documentation describes gffbase 0.2.0**
 
-   PyPI currently serves 0.1.0. The commands and APIs in this documentation
-   describe the 0.2.0rc1 candidate; verify ``gffbase.__version__`` after installing.
-   Until 0.2.0 is tagged, install the candidate from an exact reviewed commit
-   rather than assuming an unpinned ``pip install`` supplies it.
+   Verify ``gffbase.__version__`` after installing. Upgrading from 0.1.0 fixes two
+   SQL injection vulnerabilities and includes breaking changes; read the
+   :doc:`migration guide <migration>` first.
 
 .. code-block:: bash
 
    pip install gffbase
 
-That will be the normal 0.2.0 installation after publication. GFFBase builds
+GFFBase builds
 **abi3 wheels**, so one binary per platform covers CPython 3.10 through 3.14
 and **no Rust toolchain is needed when a matching wheel is available**.
 

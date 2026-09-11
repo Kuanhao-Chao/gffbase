@@ -136,7 +136,7 @@ Rebuild after **any** change under ``rust/``:
 
 .. code-block:: bash
 
-   python -c "import gffbase; print(gffbase.__version__)"      # 0.2.0rc1
+   python -c "import gffbase; print(gffbase.__version__)"      # 0.2.0
    python -c "from gffbase import native_available; print(native_available())"   # True
 
 If ``native_available()`` returns ``False``, the Rust extension didn't

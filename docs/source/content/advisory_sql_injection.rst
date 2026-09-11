@@ -1,12 +1,11 @@
-.. _advisory_sql_injection--draft-security-advisory-sql-injection-via-order_by-and-set_pragmas:
+.. _advisory_sql_injection--security-advisory-sql-injection-via-order_by-and-set_pragmas:
 
-DRAFT security advisory — SQL injection via ``order_by`` and ``set_pragmas``
-============================================================================
+Security advisory — SQL injection via ``order_by`` and ``set_pragmas``
+======================================================================
 
-   **Status: DRAFT, not published.** This file is a prepared advisory for review.
-   Nothing has been filed with GitHub, sent to PyPI, or otherwise disclosed.
-   Publishing it, requesting a CVE, and yanking or re-releasing any artefact are
-   all decisions for the maintainer.
+   **Published 2026-09-11** as `GHSA-5f5g-g3v5-prrg <https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg>`__. Severity **High**, CVSS 3.1
+   base score 8.1 (``CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H``). A CVE has been requested. **Fixed in 0.2.0**;
+   0.1.0 is affected.
 
 .. _advisory_sql_injection--summary:
 
@@ -54,7 +53,10 @@ PyPI, plus anyone tracking the branch.
 Severity
 --------
 
-Assessed by the maintainer. The relevant factors:
+**High** — CVSS 3.1 8.1. Attack complexity is rated High because exploitation
+requires the application to route untrusted input into these parameters; when
+it does, confidentiality, integrity and availability are all fully exposed.
+The factors behind that assessment:
 
 - it is reachable from a **documented public parameter**, not an internal one;
 - the payload runs with the full authority of the caller's DuckDB connection,
@@ -201,8 +203,8 @@ gffutils' ``set_pragmas`` is:
 
 ``executescript`` exists precisely to run several statements, so SQLite's
 one-statement rule does not apply. **gffutils 0.14 is genuinely vulnerable
-through its own** ``set_pragmas``. This has not been reported upstream; see the
-checklist.
+through its own** ``set_pragmas``, and has no fix available at the time of
+writing; the mitigation below applies to it as well.
 
 .. _advisory_sql_injection--impact:
 
@@ -304,16 +306,14 @@ their column lists from the Arrow schema, the thread pragma coerces through
 ``int()``, and the region/relation CTEs interpolate only internally-derived
 fragments with all caller values bound.
 
-.. _advisory_sql_injection--checklist-before-publishing:
+.. _advisory_sql_injection--disclosure:
 
-Checklist before publishing
----------------------------
+Disclosure
+----------
 
-- ☐ Decide severity and CVSS
-- ☐ Report ``set_pragmas`` to the gffutils maintainer privately — 0.14 is
-  affected and unpatched
-
-- ☐ Decide whether 0.1.x gets a backported patch release or is yanked
-- ☐ File the GitHub Security Advisory (draft privately first)
-- ☐ Request a CVE if warranted
-- ☐ Reference the advisory from ``CHANGELOG.md`` once it has an ID
+- Published as `GHSA-5f5g-g3v5-prrg <https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg>`__ on 2026-09-11, together with the
+  0.2.0 release that fixes it.
+- Severity High, CVSS 3.1 8.1; CVE requested through GitHub.
+- 0.1.0 stays on PyPI rather than being yanked: 0.2.0 carries breaking
+  changes, so users who cannot migrate at once keep a working install and can
+  apply the mitigation above. There is no 0.1.x backport.

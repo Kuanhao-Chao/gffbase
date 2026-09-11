@@ -163,11 +163,11 @@ Install
 
    pip install gffbase
 
-.. warning::
+.. note::
 
-   PyPI currently provides 0.1.0. This site describes the unreleased 0.2.0rc1
-   candidate; verify the installed version, and use an exact reviewed commit
-   for candidate testing.
+   This site documents gffbase 0.2.0, released 2026-09-11. Upgrading from 0.1.0
+   fixes two SQL injection vulnerabilities; see the
+   :doc:`security advisory <content/advisory_sql_injection>`.
 
 Quick start
 -----------

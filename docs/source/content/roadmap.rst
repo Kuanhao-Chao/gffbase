@@ -3,9 +3,8 @@
 Roadmap
 =======
 
-The 0.2.0rc1 candidate is feature-frozen while correctness, reproducibility, and
-release evidence are hardened. The items below are follow-up work, not promises
-silently added to the release candidate.
+0.2.0 is released. The items below are follow-up work for later releases, not
+promises about any particular one.
 
 .. _roadmap--priority-1-memory-and-trust:
 

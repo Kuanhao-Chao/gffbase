@@ -190,10 +190,10 @@ _VERSION_LITERALS = [
     # were deleted in the migration, and `_read` skipped rather than failed --
     # so these four checks silently stopped running.
     ("docs/source/content/citation.rst", r"\(Version ([^)]+)\)"),
-    ("docs/source/index.rst", r"describes the unreleased ([0-9A-Za-z.]+)\s+candidate"),
+    ("docs/source/index.rst", r"This site documents gffbase ([0-9A-Za-z.]+), released"),
     (
         "docs/source/content/installation.rst",
-        r"\*\*([0-9A-Za-z.]+) is still a release candidate\*\*",
+        r"\*\*This documentation describes gffbase ([0-9A-Za-z.]+)\*\*",
     ),
     ("docs/release_checklist.rst", r"native extension report exactly ``([^`]+)``"),
     # The Sphinx site states the version twice and was in no gate at all --
@@ -221,13 +221,16 @@ def test_secondary_version_literals_agree(filename, pattern):
     )
 
 
-def test_candidate_version_is_the_canonical_pep440_rc():
-    """The candidate tag spelling is intentional and must stay canonical."""
+def test_the_release_version_is_canonical_and_stable():
+    """0.2.0 is a stable release: canonical PEP 440, no pre- or dev-release part,
+    and spelled the way `release.yml`'s `vMAJOR.MINOR.PATCH` tag grammar expects.
+    It replaced the candidate check that pinned `0.2.0rc1`.
+    """
     from packaging.version import Version
 
     version = Version(gffbase.__version__)
-    assert str(version) == gffbase.__version__ == "0.2.0rc1"
-    assert version.is_prerelease
+    assert str(version) == gffbase.__version__ == "0.2.0"
+    assert not version.is_prerelease and not version.is_devrelease
 
 
 def test_every_advertised_extra_actually_exists():

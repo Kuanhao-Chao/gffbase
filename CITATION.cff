@@ -3,8 +3,7 @@ title: >-
   GFFBase: Rust-accelerated GFF3/GTF parser with a DuckDB-backed
   storage engine and zero-copy PyArrow interface
 message: >-
-  This repository describes the unreleased 0.2.0rc1 candidate. Cite a tagged
-  release when possible; if GFFBase contributes to your research, please cite it.
+  If GFFBase contributes to your research, please cite it.
 type: software
 authors:
   - given-names: Kuan-Hao
@@ -14,9 +13,8 @@ authors:
 repository-code: https://github.com/Kuanhao-Chao/gffbase
 url: https://khchao.com/gffbase/
 license: Apache-2.0
-version: 0.2.0rc1
-# `date-released` is added only in the authorized release-metadata commit. A
-# guessed date would make an unpublished candidate look like a tagged release.
+version: 0.2.0
+date-released: 2026-09-11
 keywords:
   - bioinformatics
   - genomics
