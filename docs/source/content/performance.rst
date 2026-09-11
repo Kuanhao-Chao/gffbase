@@ -3,17 +3,28 @@
 Performance
 ===========
 
-Historical head-to-head measurements against legacy
-`gffutils <https://github.com/daler/gffutils>`__. The retained Mac run covers
-four canonical human-genome annotations; the Linux five-corpus campaign is a
-separate result set.
+Head-to-head measurements against legacy
+`gffutils <https://github.com/daler/gffutils>`__ over the five canonical
+human-genome annotations, from a single run on one machine, at one commit.
 
-Every number below is **generated from the committed historical Mac file**
-(``benchmarks/results/06_mega.json``) by ``tools/gen_benchmark_tables.py``. A test
-in the release-hygiene suite fails if a published table stops matching the data
-behind it, so these cannot drift from what was actually measured. How the
-measurements are taken — and what they do and do not claim — is on the
-:doc:`Methodology <methodology>` page.
+Every number below is **generated from a committed measurement file** —
+``benchmarks/results/06_mega.linux-x86_64.json`` — by
+``tools/gen_benchmark_tables.py``. A test in the release-hygiene suite fails if a
+published table stops matching the data behind it, so these cannot drift from
+what was actually measured. How the measurements are taken — and what they do
+and do not claim — is on the :doc:`Methodology <methodology>` page.
+
+.. important::
+
+   **Read the ingest column as a draw, not a win.** Across the five corpora
+   gffbase ranges from 1.21× to 0.69× against ``gffutils`` on ingest wall time:
+   it is ahead where per-feature overhead dominates (CHESS, MANE) and behind on
+   the attribute-dense whole-genome files. Both engines are attribute-bound and
+   effectively serial, at a comparable rate. The durable advantages are
+   elsewhere — batched extraction, spatial indexing, and SQL over the corpus —
+   and those are unaffected by the ingest result. See
+   :ref:`What the ingest numbers do and do not say
+   <methodology--what-the-ingest-numbers-do-and-do-not-say>`.
 
 .. BEGIN GENERATED: benchmark-provenance
 
@@ -26,10 +37,10 @@ measurements are taken — and what they do and do not claim — is on the
 
 ----
 
-.. _performance--historical-mac-sweep:
+.. _performance--the-five-corpus-run:
 
-Historical Mac sweep
---------------------
+The five-corpus run
+-------------------
 
 .. BEGIN GENERATED: corpus-table
 
@@ -94,29 +105,30 @@ Historical Mac sweep
 
 .. END GENERATED: corpus-table
 
-“Censored at” means that comparator was **killed at the safety valve without
-finishing**. The cap is shown as censoring evidence; no wall or speedup is
-derived from it. See
+All five :doc:`corpora <datasets>` completed; no row is censored, and every row
+published a speedup only because the two engines' correctness signatures agreed
+on it. Had a comparator been killed at its safety valve the cell would read
+“censored at”, which is cap evidence and never a wall time — see
 :doc:`Capped runs <methodology>`.
 
 .. note::
 
-   **GENCODE v49 GFF3 is missing from this run**
+   **What a single figure here is worth**
 
-   The sweep measures four of the five :doc:`corpora <datasets>`. GENCODE's
-   GFF3 edition needs ~14 GiB free to hold both databases at once, and the
-   run machine had 13.2 GiB, so the harness **refused to start it** rather
-   than fail partway through. It is a gap in coverage, not a result: nothing
-   here is inferred from the missing row, and the previous measurement for it
-   was discarded rather than carried forward, because it came from a
-   contaminated run on a different commit.
+   Ingest wall time was measured once per corpus, not repeated — only the query
+   phases use ``--repeats 5``. A separate probe of the same binary put the
+   run-to-run spread at **1.3 % on RefSeq and 2.7 % on GENCODE GTF**, but at
+   roughly **20 % on CHESS**, where a 90-second run is dominated by startup.
+   Read the large-corpus ratios as reliable to a few percent and the CHESS
+   ratio as indicative. The per-corpus figures and the conditions they were
+   taken under are in :ref:`What the ingest numbers do and do not say
+   <methodology--what-the-ingest-numbers-do-and-do-not-say>`.
 
-   Reproduce it on a machine with the headroom:
-
-   .. code-block:: bash
-
-      python benchmarks/06_mega.py --only gencode-gff3 --publish
-      python tools/gen_benchmark_tables.py --write
+   The ``peak RSS`` column is the peak of a process that ingests **and then
+   validates exhaustively** (``validation_sample="all"``), which is why it
+   reaches tens of GB. It is not the cost of ingest, and it is not what a user
+   pays: ``validate_db`` defaults to ``sample=200``, the CLI never overrides
+   it, and the same corpora at ``validation_sample=10000`` peak at 8.6–9.2 GB.
 
 ----
 
@@ -126,22 +138,33 @@ Controlled GTF inference and synthesis
 --------------------------------------
 
 GENCODE v49 ships related GTF and GFF3 annotations, but the GTF is not
-leaf-only: it contains explicit gene and transcript rows. Default gffutils
-inference may therefore perform redundant work. The historical table retained
-that default and cannot establish that synthesis caused the observed gap.
+leaf-only: it contains explicit gene and transcript rows, so leaving legacy
+inference enabled makes ``gffutils`` re-derive parents that the file already
+states. Comparing against that default would flatter gffbase for a reason that
+has nothing to do with either engine's storage.
 
-The Linux campaign corrects the design with three separately reported arms:
+**The GTF row in the table above is the inference-disabled arm**
+(``gtf_arm="no-infer"``, ``infer_gtf_parents=False`` on both sides) — the
+recommended real-data configuration, and the one that is least favourable to
+gffbase. On that arm ``gffutils`` reaches 229,000 attributes per second, its
+fastest result on any corpus, because its GTF path becomes a plain bulk insert
+with no synthesis; gffbase is at 157,000, squarely between its own MANE
+(168,000) and GFF3 (162,000) figures. The 0.69× is the comparator running
+unusually fast, not gffbase running unusually slow.
+
+The 36-job cluster campaign reports three separate arms over these bytes, and
+they are not mixed:
 
 1. Unmodified GENCODE GTF with each engine's default compatibility behavior.
-2. The same bytes with gene and transcript inference disabled in both engines;
-   this is the recommended real-data headline.
+2. The same bytes with gene and transcript inference disabled in both engines —
+   **the arm published above**.
+3. A generated parent-stripped GTF with inference enabled in both engines; its
+   source hash, transformation recipe, removed-row counts and output hash make
+   this the controlled synthesis workload.
 
-3. A generated parent-stripped GTF with inference enabled in both engines;
-   its source hash, transformation recipe, removed-row counts, and output hash
-   make this the controlled synthesis workload.
-
-Only the third arm supports conclusions about synthesis. No speedup is shown
-for any arm unless normalized feature and relationship signatures agree.
+Only the third arm supports conclusions about synthesis, and it is not part of
+this release's published numbers. No speedup is shown for any arm unless
+normalized feature and relationship signatures agree.
 
 ----
 
@@ -222,8 +245,9 @@ The rest of the ledger is qualitative, and stays that way:
      - gffbase
      - legacy ``gffutils``
    * - **Ingest wall**
-     - faster in each completed, comparable corpus
-     - —
+     - faster where per-feature overhead dominates; **slower** on
+       attribute-dense whole-genome files
+     - the mirror of the same trade
    * - **Single-feature point query**
      - comparable
      - comparable
@@ -237,10 +261,12 @@ The rest of the ledger is qualitative, and stays that way:
      - R-tree, or B-tree fallback
      - none
 
-The memory and disk costs buy the speed: an Arrow batch builder that stages
-columns before writing, a materialized transitive closure so hierarchy walks
-are indexed lookups rather than recursion, and a long-form attributes table so
-attribute search does not scan.
+The memory and disk costs buy the query behavior rather than the ingest wall:
+an Arrow batch builder that stages columns before writing, a materialized
+transitive closure so hierarchy walks are indexed lookups rather than recursion,
+and a long-form attributes table so attribute search does not scan. Ingest pays
+for all three up front, which is a large part of why it does not win outright on
+the biggest files.
 
 ----
 
