@@ -177,6 +177,17 @@ database into a legacy ``.sqlite`` file when you need the old format.
 Head-to-head against legacy ``gffutils`` across the five canonical human-genome
 annotation releases:
 
+**The ingest column is a draw, not a win.** gffbase spans 1.21× to 0.69×:
+ahead where per-feature overhead dominates, behind on the attribute-dense
+whole-genome files, because both engines are attribute-bound and effectively
+serial at a similar rate. What you gain on day one is in the other columns —
+the spatial index, batched extraction, and SQL over the whole corpus — plus
+the fact that no ratio is published at all unless both engines' correctness
+signatures agree. The GTF row is the inference-disabled arm, the configuration
+least favourable to gffbase. ``peak RSS`` is ingest **plus exhaustive
+validation**; ``validate_db`` defaults to ``sample=200`` and the CLI never
+overrides it.
+
 .. BEGIN GENERATED: corpus-table
 
 .. list-table::

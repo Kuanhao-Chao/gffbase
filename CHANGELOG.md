@@ -292,6 +292,26 @@ everything from scratch.
   annotations. Those are the numbers now published; the macOS bytes are retained
   untouched as the historical platform entry.
 
+- **Five pages told the reader the table above them was something else.** The
+  generated blocks moved to the Linux artifact; the hand-written prose wrapped
+  around them did not. `README.md` and `performance.rst` introduced a
+  five-corpus Linux table as "the retained historical Mac run", under a
+  *Historical Mac sweep* heading, sourced to "the committed historical Mac file"
+  — while the provenance block three lines below named
+  `06_mega.linux-x86_64.json`. `performance.rst` also carried a note explaining
+  that GENCODE GFF3 was *missing from this run*, directly above the row
+  measuring it at 11 min 8 s, and a trade-off ledger still reading "faster in
+  each completed, comparable corpus" over a table with three rows below 1.0x.
+  `datasets.rst` sent readers to the vanished note. None of it was caught,
+  because the release guards check the generated blocks and three specific
+  strings, and every one of these lived in the prose between them. The pages now
+  say what was measured: the ingest column is a draw, ahead where per-feature
+  overhead dominates and behind on attribute-dense whole-genome files; the GTF
+  row is the inference-disabled arm, which is the arm least favourable to
+  gffbase; `peak RSS` is ingest plus exhaustive validation and not what the
+  default path costs; and ingest wall is measured once per corpus, with the
+  measured spread stated so a single figure is worth what it is worth.
+
 - **Ingest is attribute-bound and essentially serial, and the docs now say so.**
   Cost tracks attributes rather than features -- about 160,000 attributes per
   second whatever the corpus -- so GENCODE at 16-18 attributes per feature

@@ -84,6 +84,13 @@ Every figure below is generated from the committed benchmark artifact, never
 typed in. See :doc:`content/performance` for the full sweep and
 :doc:`content/methodology` for how it was run.
 
+**Read the ingest column as a draw.** gffbase spans 1.21× to 0.69× against
+``gffutils``: ahead where per-feature overhead dominates, behind on the
+attribute-dense whole-genome files. Both engines are attribute-bound and
+effectively serial. The durable advantages — batched extraction, spatial
+indexing, SQL over the whole corpus — are elsewhere. ``peak RSS`` is ingest plus
+exhaustive validation, not what the default path costs.
+
 .. BEGIN GENERATED: corpus-table
 
 .. list-table::

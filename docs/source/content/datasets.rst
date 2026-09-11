@@ -63,9 +63,9 @@ At a glance
 GENCODE ships the **same biological release in both GTF and GFF3**, which is
 why both are here. They are related biological releases, but their row models
 and default inference behavior still differ, so they are not by themselves a
-controlled measurement of format cost. The GFF3 half is not in the historical
-Mac sweep — see the note on
-:doc:`Performance <performance>`. Method:
+controlled measurement of format cost — the published GTF row is measured with
+inference disabled on both sides, and the GFF3 row with each engine's defaults.
+Numbers: :doc:`Performance <performance>`. Method:
 :doc:`Methodology <methodology>`.
 
 ----
