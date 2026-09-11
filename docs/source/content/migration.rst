@@ -411,8 +411,10 @@ file with ``gffutils.FeatureDB("legacy_compatible.sqlite")``.
 - **Peak RSS**: substantially higher -- 3.4–62.0 GB against 111–194 MB across
   the same corpora. Read that number carefully: it is the peak of a process that
   ingests **and then validates exhaustively**, which is what the published runs
-  do. Ingest alone peaks at roughly 7–10 GB on a whole-genome annotation, and
-  ``validate_db`` defaults to ``sample=200``, so no default path pays the rest.
+  do. Ingesting a whole-genome annotation and validating a 10,000-feature sample
+  peaks at 6.4–10.2 GB (RefSeq 6.4–6.9, GENCODE GTF 8.5–9.2, GENCODE GFF3
+  9.5–10.2); no run measures ingest with no validation at all. ``validate_db``
+  defaults to ``sample=200``, so no default path pays the rest.
   DuckDB allocates a vectorized ingest buffer pool; cap it with
   ``PRAGMA memory_limit='512MB'`` if that matters more than wall time.
 

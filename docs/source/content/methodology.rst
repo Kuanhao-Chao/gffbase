@@ -157,8 +157,11 @@ share the same code paths:
    python benchmarks/06_mega.py --repeats 5 --only mane --only chess
 
 ``--repeats`` applies to the two cheap in-process measurements — the spatial
-sweep and the batched extraction — and **not** to the ingest walls, where a
-single legacy GENCODE run already costs over an hour. When it is greater than
+sweep and the batched extraction — and **not** to the ingest walls, where one
+GENCODE job already runs over an hour: 71 minutes for GENCODE GFF3, of which the
+two ingests are about 21 and signature verification the rest. (The legacy
+ingest itself is 7–10 minutes on the published arms; it is the unpublished
+default-inference GTF arm that does not finish inside 90.) When it is greater than
 1, the first pass is discarded as a warm-up: a smoke test measured a 6.7×
 max/min ratio that was entirely cold page cache, and a spread that is really a
 cold-start artifact is worse than no spread, because it gets published as
