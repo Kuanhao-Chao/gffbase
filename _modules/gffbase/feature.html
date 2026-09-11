@@ -1,0 +1,1360 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/_modules/gffbase/feature.html">
+        <link rel="prefetch" href="../../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>gffbase.feature - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../content/cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for gffbase.feature</h1><div class="highlight"><pre>
+<span></span><span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Author: Kuan-Hao Chao &lt;kuanhao.chao@gmail.com&gt;</span>
+<span class="c1"># Copyright 2026 Kuan-Hao Chao</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the "License");</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1">#     http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an "AS IS" BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="sd">"""Feature objects.</span>
+
+<span class="sd">This module hosts two distinct types:</span>
+
+<span class="sd">* ``ParsedFeature`` — slotted dataclass emitted by the parser.</span>
+<span class="sd">* ``Feature`` — full backward-compatible public class, mirroring legacy</span>
+<span class="sd">  ``gffutils.Feature``. It supports lazy attribute parsing so that DB rows</span>
+<span class="sd">  loaded but never inspected don't pay the cost of decoding col-9.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">MutableMapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">gffbase._serialize</span><span class="w"> </span><span class="kn">import</span> <span class="n">_reconstruct</span>
+
+<span class="c1"># `slots=True` landed in Python 3.10. `ParsedFeature` is instantiated once per</span>
+<span class="c1"># parsed line — millions of times on a GENCODE-scale file — so the per-instance</span>
+<span class="c1"># memory saving is worth keeping wherever it is available. On 3.9 we fall back</span>
+<span class="c1"># to a plain dataclass rather than failing at import time.</span>
+<span class="n">_SLOTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"slots"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span> <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="k">else</span> <span class="p">{}</span>
+
+
+<div class="viewcode-block" id="ParsedFeature">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.ParsedFeature">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="o">**</span><span class="n">_SLOTS</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ParsedFeature</span><span class="p">:</span>
+    <span class="n">seqid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">featuretype</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">score</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">strand</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># Raw col-9 bytes preserved for a byte-faithful round-trip.</span>
+    <span class="n">attributes_blob</span><span class="p">:</span> <span class="nb">bytes</span>
+    <span class="c1"># Long-form (key, value, multivalue_index) triples. `idx` preserves</span>
+    <span class="c1"># the order of multi-valued attributes (e.g., Parent=a,b,c becomes</span>
+    <span class="c1"># three rows with idx 0,1,2).</span>
+    <span class="n">attributes_pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="c1"># Tab-separated columns past column 9, if any.</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chrom</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for `seqid`, the name gffutils uses."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for `end`, the name gffutils uses."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span>
+
+<div class="viewcode-block" id="ParsedFeature.attributes_dict">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.ParsedFeature.attributes_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">attributes_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Materialize attributes as `{key: [values...]}`. Preserves first-seen</span>
+<span class="sd">        key order and multi-value ordering. Defers to `attributes_pairs` so the</span>
+<span class="sd">        Rust and Python parsers remain trivially comparable."""</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributes_pairs</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="n">_drop_lone_empty_values</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="ParsedFeature.from_tuple">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.ParsedFeature.from_tuple">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_tuple</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">tup</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParsedFeature</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build from the 11-tuple shape that the Rust extension yields.</span>
+
+<span class="sd">        The fields are stored as handed over. `rust/src/lib.rs` already builds</span>
+<span class="sd">        a `PyBytes` for the blob, a `PyList` of `PyTuple(str, str, int)` for</span>
+<span class="sd">        the pairs, and a fresh `PyList` for `extra` -- so the coercions that</span>
+<span class="sd">        used to sit here (`bytes(blob)`, `int(i)` in a rebuilt list</span>
+<span class="sd">        comprehension, `list(extra)`) never converted anything. They allocated</span>
+<span class="sd">        a second copy of every attribute list, 6,068,892 times on GENCODE:</span>
+<span class="sd">        20.4 s in the comprehension alone, and 13.5% of the whole parse stage.</span>
+
+<span class="sd">        Nothing else can reach this method. `parser.py` calls it only when</span>
+<span class="sd">        `self._native` is true; the pure-Python fallback constructs</span>
+<span class="sd">        `ParsedFeature` directly with values it has already normalized. The</span>
+<span class="sd">        coercions were defending against a caller that does not exist.</span>
+<span class="sd">        """</span>
+        <span class="p">(</span>
+            <span class="n">seqid</span><span class="p">,</span>
+            <span class="n">source</span><span class="p">,</span>
+            <span class="n">featuretype</span><span class="p">,</span>
+            <span class="n">start</span><span class="p">,</span>
+            <span class="n">end</span><span class="p">,</span>
+            <span class="n">score</span><span class="p">,</span>
+            <span class="n">strand</span><span class="p">,</span>
+            <span class="n">frame</span><span class="p">,</span>
+            <span class="n">blob</span><span class="p">,</span>
+            <span class="n">pairs</span><span class="p">,</span>
+            <span class="n">extra</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="n">tup</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">seqid</span><span class="o">=</span><span class="n">seqid</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span>
+            <span class="n">featuretype</span><span class="o">=</span><span class="n">featuretype</span><span class="p">,</span>
+            <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span>
+            <span class="n">end</span><span class="o">=</span><span class="n">end</span><span class="p">,</span>
+            <span class="n">score</span><span class="o">=</span><span class="n">score</span><span class="p">,</span>
+            <span class="n">strand</span><span class="o">=</span><span class="n">strand</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
+            <span class="n">attributes_blob</span><span class="o">=</span><span class="n">blob</span><span class="p">,</span>
+            <span class="n">attributes_pairs</span><span class="o">=</span><span class="n">pairs</span><span class="p">,</span>
+            <span class="n">extra</span><span class="o">=</span><span class="n">extra</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Public ``Feature`` class — backward-compatible with legacy ``gffutils.Feature``.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="c1"># Field order for integer-indexed __getitem__ / __setitem__ (legacy semantics).</span>
+<span class="n">_FIELD_ORDER</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"seqid"</span><span class="p">,</span>
+    <span class="s2">"source"</span><span class="p">,</span>
+    <span class="s2">"featuretype"</span><span class="p">,</span>
+    <span class="s2">"start"</span><span class="p">,</span>
+    <span class="s2">"end"</span><span class="p">,</span>
+    <span class="s2">"score"</span><span class="p">,</span>
+    <span class="s2">"strand"</span><span class="p">,</span>
+    <span class="s2">"frame"</span><span class="p">,</span>
+    <span class="s2">"attributes"</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coord_to_int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Normalize a coordinate. Legacy accepts int, '.', '', or None."""</span>
+    <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">v</span> <span class="o">==</span> <span class="s2">""</span> <span class="ow">or</span> <span class="n">v</span> <span class="o">==</span> <span class="s2">"."</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_drop_lone_empty_values</span><span class="p">(</span><span class="n">mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Normalize `{key: [""]}` to `{key: []}`, in place.</span>
+
+<span class="sd">    gffutils' rule, which user code depends on: a wholly empty value string</span>
+<span class="sd">    (`ID=`) yields the key with NO values, while a multi-valued attribute keeps</span>
+<span class="sd">    its empty parts (`Parent=x,` -&gt; `["x", ""]`). It matters because callers</span>
+<span class="sd">    write `if f.attributes["ID"]:`, and `[""]` is truthy where `[]` is not. The</span>
+<span class="sd">    raw col-9 bytes are untouched, so serialization still round-trips `ID=`.</span>
+<span class="sd">    """</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">values</span> <span class="o">==</span> <span class="p">[</span><span class="s2">""</span><span class="p">]:</span>
+            <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_LazyAttributes</span><span class="p">(</span><span class="n">MutableMapping</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Dict-like attribute store. Values are always lists.</span>
+
+<span class="sd">    If constructed with a raw col-9 ``blob``, parsing is deferred until first</span>
+<span class="sd">    access. This honors the storage invariant: attributes are never decoded</span>
+<span class="sd">    unless someone reads them.</span>
+<span class="sd">    """</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"_d"</span><span class="p">,</span> <span class="s2">"_blob"</span><span class="p">,</span> <span class="s2">"_dialect_fmt"</span><span class="p">,</span> <span class="s2">"_parsed"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">initial</span><span class="p">:</span> <span class="n">Mapping</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">blob</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dialect_fmt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gff3"</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span> <span class="o">=</span> <span class="n">blob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dialect_fmt</span> <span class="o">=</span> <span class="n">dialect_fmt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parsed</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">initial</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ingest</span><span class="p">(</span><span class="n">initial</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_parsed</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># ----- internal -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ingest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial</span><span class="p">,</span> <span class="n">_LazyAttributes</span><span class="p">):</span>
+            <span class="n">initial</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">initial</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">initial</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">v</span><span class="p">]</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>  <span class="c1"># list of (key, value, idx)</span>
+            <span class="k">for</span> <span class="n">triple</span> <span class="ow">in</span> <span class="n">initial</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">_idx</span> <span class="o">=</span> <span class="n">triple</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">triple</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="n">_drop_lone_empty_values</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unsupported attributes init type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">initial</span><span class="p">)</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_materialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parsed</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span> <span class="o">==</span> <span class="sa">b</span><span class="s2">""</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_parsed</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+        <span class="c1"># Defer to the pure-Python attribute parser to avoid a Rust hop on a</span>
+        <span class="c1"># single line. This is the warm path for users who *do* read attrs.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase._pyfallback.attributes</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_attributes</span>
+
+        <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">"replace"</span><span class="p">)</span>
+        <span class="n">pairs</span><span class="p">,</span> <span class="n">_obs</span> <span class="o">=</span> <span class="n">parse_attributes</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">_idx</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="n">_drop_lone_empty_values</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parsed</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_blob</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># ----- MutableMapping -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="c1"># `constants.always_return_list` is a documented global that callers</span>
+        <span class="c1"># flip at runtime, so it is read here on every access rather than</span>
+        <span class="c1"># captured once -- upstream's own doctests toggle it mid-test and</span>
+        <span class="c1"># expect the very next lookup to change shape. Imported inside the</span>
+        <span class="c1"># method because `gffbase.constants` is a compatibility module and</span>
+        <span class="c1"># importing it at module scope would make it load on every import of</span>
+        <span class="c1"># `gffbase`.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">constants</span><span class="o">.</span><span class="n">always_return_list</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">value</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"Attributes(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="si">!r}</span><span class="s2">)"</span>
+
+    <span class="c1"># ----- helpers -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_d</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="Feature">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Feature</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Backward-compatible public Feature object.</span>
+
+<span class="sd">    Mirrors the legacy ``gffutils.Feature`` constructor and observable</span>
+<span class="sd">    behavior: 1-based inclusive coordinates, list-wrapped multi-value</span>
+<span class="sd">    attributes, dialect-faithful ``__str__`` round-trip.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: False for every ordinary feature. `MultipartFeature` overrides it.</span>
+    <span class="c1">#: A ClassVar rather than an instance attribute so the singleton case --</span>
+    <span class="c1">#: which is every feature in almost every file -- costs nothing per object.</span>
+    <span class="n">is_multipart</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: How many physical input lines this feature was built from.</span>
+    <span class="c1">#:</span>
+    <span class="c1">#: A class attribute, so an ordinary feature carries no per-instance cost</span>
+    <span class="c1">#: for it -- but deliberately NOT a `ClassVar`, because `MultipartFeature`</span>
+    <span class="c1">#: shadows it with a real slot and assigns per instance. Declaring it</span>
+    <span class="c1">#: `ClassVar` would make that assignment a type error.</span>
+    <span class="n">n_segments</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"seqid"</span><span class="p">,</span>
+        <span class="s2">"source"</span><span class="p">,</span>
+        <span class="s2">"featuretype"</span><span class="p">,</span>
+        <span class="s2">"start"</span><span class="p">,</span>
+        <span class="s2">"end"</span><span class="p">,</span>
+        <span class="s2">"score"</span><span class="p">,</span>
+        <span class="s2">"strand"</span><span class="p">,</span>
+        <span class="s2">"frame"</span><span class="p">,</span>
+        <span class="s2">"attributes"</span><span class="p">,</span>
+        <span class="s2">"extra"</span><span class="p">,</span>
+        <span class="s2">"bin"</span><span class="p">,</span>
+        <span class="s2">"id"</span><span class="p">,</span>
+        <span class="s2">"dialect"</span><span class="p">,</span>
+        <span class="s2">"file_order"</span><span class="p">,</span>
+        <span class="s2">"keep_order"</span><span class="p">,</span>
+        <span class="s2">"sort_attribute_values"</span><span class="p">,</span>
+        <span class="s2">"_attributes_blob"</span><span class="p">,</span>
+        <span class="s2">"children"</span><span class="p">,</span>  <span class="c1"># populated by FeatureDB.merge to expose component features</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">seqid</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">featuretype</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">start</span><span class="o">=</span><span class="s2">"."</span><span class="p">,</span>
+        <span class="n">end</span><span class="o">=</span><span class="s2">"."</span><span class="p">,</span>
+        <span class="n">score</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">strand</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">attributes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="nb">bin</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dialect</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">file_order</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">keep_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">sort_attribute_values</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span> <span class="o">=</span> <span class="n">seqid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span> <span class="o">=</span> <span class="n">featuretype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">=</span> <span class="n">_coord_to_int</span><span class="p">(</span><span class="n">start</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">=</span> <span class="n">_coord_to_int</span><span class="p">(</span><span class="n">end</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score</span> <span class="o">=</span> <span class="n">score</span> <span class="k">if</span> <span class="n">score</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strand</span> <span class="o">=</span> <span class="n">strand</span> <span class="k">if</span> <span class="n">strand</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span> <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin</span> <span class="o">=</span> <span class="nb">bin</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="nb">id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dialect</span> <span class="o">=</span> <span class="n">dialect</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_order</span> <span class="o">=</span> <span class="n">file_order</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keep_order</span> <span class="o">=</span> <span class="n">keep_order</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sort_attribute_values</span> <span class="o">=</span> <span class="n">sort_attribute_values</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attributes_blob</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Transient: populated by FeatureDB.merge() to expose the component</span>
+        <span class="c1"># features that were merged into this one. Not persisted.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Feature</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">fmt</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dialect</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fmt"</span><span class="p">,</span> <span class="s2">"gff3"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">attributes</span><span class="p">,</span> <span class="n">_LazyAttributes</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span> <span class="o">=</span> <span class="n">attributes</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">attributes</span><span class="p">,</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="nb">bytearray</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_attributes_blob</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">attributes</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span> <span class="o">=</span> <span class="n">_LazyAttributes</span><span class="p">(</span><span class="n">blob</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_attributes_blob</span><span class="p">,</span> <span class="n">dialect_fmt</span><span class="o">=</span><span class="n">fmt</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">attributes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span> <span class="o">=</span> <span class="n">_LazyAttributes</span><span class="p">(</span><span class="n">initial</span><span class="o">=</span><span class="p">{},</span> <span class="n">dialect_fmt</span><span class="o">=</span><span class="n">fmt</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span> <span class="o">=</span> <span class="n">_LazyAttributes</span><span class="p">(</span><span class="n">initial</span><span class="o">=</span><span class="n">attributes</span><span class="p">,</span> <span class="n">dialect_fmt</span><span class="o">=</span><span class="n">fmt</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">extra</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">extra</span><span class="p">,</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="nb">bytearray</span><span class="p">):</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">extra</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">"replace"</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)</span> <span class="k">if</span> <span class="n">text</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">extra</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="o">=</span> <span class="n">extra</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)</span> <span class="k">if</span> <span class="n">extra</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+
+    <span class="c1"># ----- aliases -----</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chrom</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for `seqid` (GFF column 1), the name gffutils uses.</span>
+
+<span class="sd">        Reading and writing either name affects the same underlying value.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span>
+
+    <span class="nd">@chrom</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chrom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span> <span class="o">=</span> <span class="n">v</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for `end` (GFF column 5), the name gffutils uses.</span>
+
+<span class="sd">        `None` when the source line carried `.` -- such a feature has no</span>
+<span class="sd">        coordinates and is skipped by `region()`.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span>
+
+    <span class="nd">@stop</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">=</span> <span class="n">_coord_to_int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+
+    <span class="c1"># ----- dunders -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"&lt;Feature </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="si">}</span><span class="s2">"</span>
+            <span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">strand</span><span class="si">}</span><span class="s2">]) at </span><span class="si">{</span><span class="nb">hex</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span><span class="si">}</span><span class="s2">&gt;"</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_line</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__unicode__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_format_line</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Feature</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">NotImplemented</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_line</span><span class="p">()</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">_format_line</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__ne__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">eq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__eq__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">eq</span> <span class="ow">is</span> <span class="bp">NotImplemented</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">eq</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="n">eq</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_FIELD_ORDER</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_FIELD_ORDER</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="c1"># ----- formatting -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_format_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># If we have the original col-9 bytes and the user hasn't materialized</span>
+        <span class="c1"># / mutated the attributes mapping, re-emit them verbatim. This is the</span>
+        <span class="c1"># byte-faithful round-trip path.</span>
+        <span class="n">blob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attributes_blob</span>
+        <span class="n">blob_is_authoritative</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="p">,</span> <span class="n">_LazyAttributes</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="o">.</span><span class="n">_parsed</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">blob_is_authoritative</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">normalized</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">blob</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">"replace"</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">blob_is_authoritative</span><span class="p">:</span>
+            <span class="c1"># `normalized=True` re-renders from the parsed pairs -- but reading</span>
+            <span class="c1"># `self.attributes` would materialize the lazy mapping, and that</span>
+            <span class="c1"># permanently invalidates the blob fast-path above. Asking for the</span>
+            <span class="c1"># normalized form once would then silently change what `str()`</span>
+            <span class="c1"># returns forever after. Parse into a throwaway instead.</span>
+            <span class="n">scratch</span> <span class="o">=</span> <span class="n">_LazyAttributes</span><span class="p">(</span>
+                <span class="n">blob</span><span class="o">=</span><span class="n">blob</span><span class="p">,</span>
+                <span class="n">dialect_fmt</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dialect</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fmt"</span><span class="p">,</span> <span class="s2">"gff3"</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="n">scratch</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span>
+
+        <span class="c1"># A Feature can be hand-built with no dialect at all; `_reconstruct`</span>
+        <span class="c1"># refuses that, as the oracle does, so supply the GFF3 default rather</span>
+        <span class="c1"># than making every caller pass one.</span>
+        <span class="n">dialect</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dialect</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialect</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="n">dialect</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"fmt"</span><span class="p">,</span> <span class="s2">"gff3"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dialect</span><span class="p">[</span><span class="s2">"fmt"</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">"gff3"</span><span class="p">:</span>
+            <span class="c1"># GTF's own default. `quoted GFF2 values` is deliberately defaulted</span>
+            <span class="c1"># True here and not in `_reconstruct`: the oracle reads the key</span>
+            <span class="c1"># straight from a dialect its parser always populates, whereas a</span>
+            <span class="c1"># hand-built gffbase Feature routinely has a partial one.</span>
+            <span class="n">dialect</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"quoted GFF2 values"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">items</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">v</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">v</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">_reconstruct</span><span class="p">(</span>
+            <span class="n">items</span><span class="p">,</span>
+            <span class="n">dialect</span><span class="p">,</span>
+            <span class="n">keep_order</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">keep_order</span><span class="p">,</span>
+            <span class="n">sort_attribute_values</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sort_attribute_values</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dialect</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"leading semicolon"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">s</span><span class="p">:</span>
+            <span class="c1"># `_reconstruct` stays oracle-exact and drops this; gffbase puts it</span>
+            <span class="c1"># back, so a file whose column 9 starts with `;` round-trips.</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="s2">";"</span> <span class="o">+</span> <span class="n">s</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_format_line</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">start_s</span> <span class="o">=</span> <span class="s2">"."</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">)</span>
+        <span class="n">end_s</span> <span class="o">=</span> <span class="s2">"."</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+        <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span>
+            <span class="n">start_s</span><span class="p">,</span>
+            <span class="n">end_s</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">score</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">strand</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_format_attributes</span><span class="p">(</span><span class="n">normalized</span><span class="p">),</span>
+        <span class="p">]</span>
+        <span class="n">cols</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extra</span><span class="p">)</span>
+        <span class="k">return</span> <span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cols</span><span class="p">)</span>
+
+    <span class="c1"># ----- segments -----</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">segments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FeatureSegment</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""This feature's physical input lines.</span>
+
+<span class="sd">        An ordinary feature is its own sole segment, so callers can write</span>
+<span class="sd">        ``for seg in feature.segments`` without first asking whether the</span>
+<span class="sd">        feature is discontinuous.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">_segment_from</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="mi">0</span><span class="p">),)</span>
+
+<div class="viewcode-block" id="Feature.to_line">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature.to_line">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_line</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Render this feature as one GFF line.</span>
+
+<span class="sd">        By default this is byte-faithful: if the original column 9 was never</span>
+<span class="sd">        parsed or mutated, its bytes are re-emitted verbatim, so a file that</span>
+<span class="sd">        round-trips through gffbase comes back unchanged. That is what</span>
+<span class="sd">        ``str(feature)`` does too.</span>
+
+<span class="sd">        ``normalized=True`` instead re-renders column 9 from the parsed</span>
+<span class="sd">        attribute mapping, applying the dialect's separators and the</span>
+<span class="sd">        ``sort_attribute_values`` setting. This is what gffutils always does,</span>
+<span class="sd">        so it is the form to use when comparing against the oracle -- at the</span>
+<span class="sd">        cost of losing whatever the source file's exact spacing was.</span>
+
+<span class="sd">        Values are percent-encoded on this path, so a value containing `;`,</span>
+<span class="sd">        `,`, `=`, `&amp;` or `%` re-emits as valid GFF3. Spaces and non-ASCII are</span>
+<span class="sd">        left alone, which is what the spec says and what the oracle does.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_line</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Feature.to_lines">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature.to_lines">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lines</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Every physical line of this feature. One, unless it is multipart."""</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">to_line</span><span class="p">(</span><span class="n">normalized</span><span class="p">)]</span></div>
+
+
+    <span class="c1"># ----- legacy methods -----</span>
+
+<div class="viewcode-block" id="Feature.astuple">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature.astuple">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">astuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Legacy 12-tuple shape used by the SQLite export path.</span>
+
+<span class="sd">        The elements, in order::</span>
+
+<span class="sd">            id, seqid, source, featuretype, start, end, score, strand,</span>
+<span class="sd">            frame, attributes_json, extra_json, bin</span>
+<span class="sd">        """</span>
+        <span class="n">attrs_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">score</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">strand</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">attrs_dict</span><span class="p">,</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">":"</span><span class="p">)),</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extra</span><span class="p">,</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">":"</span><span class="p">))</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="k">else</span> <span class="s2">"[]"</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bin</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc_bin</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Feature.calc_bin">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature.calc_bin">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calc_bin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_bin</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute and store this feature's UCSC bin.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            _bin: Set the bin directly instead of deriving it.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The bin, or `None` when the feature has no coordinates.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">_bin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bin</span> <span class="o">=</span> <span class="n">_bin</span>
+            <span class="k">return</span> <span class="n">_bin</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase._bins</span><span class="w"> </span><span class="kn">import</span> <span class="n">bin_from_coords</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin</span> <span class="o">=</span> <span class="n">bin_from_coords</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin</span></div>
+
+
+<div class="viewcode-block" id="Feature.sequence">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.Feature.sequence">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fasta</span><span class="p">,</span> <span class="n">use_strand</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Extract sequence from a FASTA path or a pyfaidx-style mapping."""</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fasta</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># pragma: no cover - pyfaidx is optional</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">pyfaidx</span>
+            <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">"Feature.sequence(path=...) requires the optional `pyfaidx` package"</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+            <span class="n">fa</span> <span class="o">=</span> <span class="n">pyfaidx</span><span class="o">.</span><span class="n">Fasta</span><span class="p">(</span><span class="n">fasta</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fa</span> <span class="o">=</span> <span class="n">fasta</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"cannot extract sequence for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="si">!r}</span><span class="s2">: feature has no start/end coordinates"</span>
+            <span class="p">)</span>
+        <span class="n">seq</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">fa</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">use_strand</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">strand</span> <span class="o">==</span> <span class="s2">"-"</span><span class="p">:</span>
+            <span class="n">seq</span> <span class="o">=</span> <span class="n">_revcomp</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">seq</span></div>
+</div>
+
+
+
+<span class="n">_COMPLEMENT</span> <span class="o">=</span> <span class="nb">str</span><span class="o">.</span><span class="n">maketrans</span><span class="p">(</span><span class="s2">"ACGTNacgtn"</span><span class="p">,</span> <span class="s2">"TGCANtgcan"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_revcomp</span><span class="p">(</span><span class="n">seq</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">seq</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">_COMPLEMENT</span><span class="p">)[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Discontinuous (multipart) features.</span>
+<span class="c1">#</span>
+<span class="c1"># GFF3 lets one logical feature span several lines sharing an `ID` -- how NCBI</span>
+<span class="c1"># represents a split CDS. Both classes SUBCLASS `Feature`, and the reason is</span>
+<span class="c1"># concrete rather than stylistic: `isinstance(x, Feature)` is load-bearing at</span>
+<span class="c1"># nine call sites inside gffbase alone (`__getitem__`, `__contains__`,</span>
+<span class="c1"># `children`, `parents`, `_coerce_ids`, `_coerce_id_list`,</span>
+<span class="c1"># `_normalize_region_args`, `update`, `merge`), and `Feature.__eq__` returns</span>
+<span class="c1"># `NotImplemented` for a non-`Feature` operand, so a sibling class would</span>
+<span class="c1"># compare unequal to an otherwise identical `Feature`.</span>
+<span class="c1">#</span>
+<span class="c1"># Subclassing also lets both classes override NOTHING of `__str__`, `__len__`,</span>
+<span class="c1"># `__hash__`, `__eq__`, `__getitem__`, `astuple`, `_format_line` or</span>
+<span class="c1"># `_format_attributes`. The compatibility surface is preserved by inaction,</span>
+<span class="c1"># which is the only way to preserve it reliably.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="FeatureSegment">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.FeatureSegment">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FeatureSegment</span><span class="p">(</span><span class="n">Feature</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One physical input line of a discontinuous feature.</span>
+
+<span class="sd">    Carries its OWN coordinates, score, phase and column 9 -- per-segment CDS</span>
+<span class="sd">    phase is the main reason the storage exists -- while `seqid`, `source`,</span>
+<span class="sd">    `featuretype` and `strand` come from the logical feature, which by</span>
+<span class="sd">    definition shares them.</span>
+
+<span class="sd">    ``self.id`` is the LOGICAL id, so `db[seg.id]` finds the whole feature.</span>
+<span class="sd">    The segment's own ``ID=`` is preserved byte-for-byte in the attributes</span>
+<span class="sd">    blob, so `str(segment)` reproduces the input line exactly.</span>
+<span class="sd">    """</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"seg_idx"</span><span class="p">,)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">seg_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="c1">#: 0-based position in FILE order, not coordinate order. GFF3 does not</span>
+        <span class="c1">#: require segments to be sorted, and `to_lines()` has to reproduce the</span>
+        <span class="c1">#: input.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seg_idx</span> <span class="o">=</span> <span class="n">seg_idx</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"&lt;FeatureSegment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span><span class="si">}</span><span class="s2">[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seg_idx</span><span class="si">}</span><span class="s2">] "</span>
+            <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="si">}</span><span class="s2">[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">strand</span><span class="si">}</span><span class="s2">]) at </span><span class="si">{</span><span class="nb">hex</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span><span class="si">}</span><span class="s2">&gt;"</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="MultipartFeature">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.MultipartFeature">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MultipartFeature</span><span class="p">(</span><span class="n">Feature</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A logical feature assembled from more than one input line.</span>
+
+<span class="sd">    Its own `start`/`end` are the ENVELOPE -- `MIN(segment.start)` and</span>
+<span class="sd">    `MAX(segment.end)` -- and every inherited method operates on that envelope,</span>
+<span class="sd">    so a caller that knows nothing about discontinuous features sees exactly</span>
+<span class="sd">    the gffutils behaviour for a feature spanning that range.</span>
+
+<span class="sd">    Consequently ``len(f)`` is the envelope span, matching `Feature`.</span>
+<span class="sd">    `covered_length` is the different, new quantity.</span>
+<span class="sd">    """</span>
+
+    <span class="c1"># `n_segments` is a slot here, shadowing `Feature`'s class attribute. A</span>
+    <span class="c1"># read-only property would not do: it cannot override a writeable</span>
+    <span class="c1"># attribute, and a slot descriptor is cheaper to read anyway.</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"n_segments"</span><span class="p">,</span> <span class="s2">"_segments"</span><span class="p">,</span> <span class="s2">"_segment_loader"</span><span class="p">)</span>
+
+    <span class="n">is_multipart</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">n_segments</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">segment_loader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_segments</span> <span class="o">=</span> <span class="n">n_segments</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_segments</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">segments</span><span class="p">)</span> <span class="k">if</span> <span class="n">segments</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># Called with no arguments to fetch this feature's segments, for the</span>
+        <span class="c1"># case where they were not prefetched. `_yield_features` prefetches one</span>
+        <span class="c1"># chunk at a time so the common path never calls this -- without that,</span>
+        <span class="c1"># iterating a multipart corpus would be an N+1.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_segment_loader</span> <span class="o">=</span> <span class="n">segment_loader</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">segments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FeatureSegment</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_segments</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_segment_loader</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"segments for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="si">!r}</span><span class="s2"> were neither prefetched nor loadable; "</span>
+                    <span class="s2">"this feature was built without a database connection"</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_segments</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_segment_loader</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_segments</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">covered_length</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Total length actually covered, with the gaps excluded.</span>
+
+<span class="sd">        Differs from ``len(self)``, which is the envelope span. For a CDS split</span>
+<span class="sd">        across two 100 bp exons 700 bp apart, `len` is 900 and this is 200.</span>
+
+<span class="sd">        Segments of a discontinuous feature must not overlap; if a malformed</span>
+<span class="sd">        file provides overlapping ones, the shared bases are counted twice.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seg</span><span class="p">)</span> <span class="k">for</span> <span class="n">seg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultipartFeature.to_lines">
+<a class="viewcode-back" href="../../content/api.html#gffbase.feature.MultipartFeature.to_lines">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lines</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Every input line of this feature, in file order."""</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">seg</span><span class="o">.</span><span class="n">to_line</span><span class="p">(</span><span class="n">normalized</span><span class="p">)</span> <span class="k">for</span> <span class="n">seg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"&lt;MultipartFeature </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">featuretype</span><span class="si">}</span><span class="s2"> x</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_segments</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seqid</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end</span><span class="si">}</span><span class="s2">[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">strand</span><span class="si">}</span><span class="s2">]) at </span><span class="si">{</span><span class="nb">hex</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span><span class="si">}</span><span class="s2">&gt;"</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_segment_from</span><span class="p">(</span><span class="n">feature</span><span class="p">:</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">seg_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FeatureSegment</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""View an ordinary `Feature` as its own sole segment."""</span>
+    <span class="n">seg</span> <span class="o">=</span> <span class="n">FeatureSegment</span><span class="p">(</span>
+        <span class="n">seqid</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+        <span class="n">featuretype</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span>
+        <span class="n">start</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+        <span class="n">end</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+        <span class="n">score</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">score</span><span class="p">,</span>
+        <span class="n">strand</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">strand</span><span class="p">,</span>
+        <span class="n">frame</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="n">attributes</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">_attributes_blob</span>
+        <span class="k">if</span> <span class="n">feature</span><span class="o">.</span><span class="n">_attributes_blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">feature</span><span class="o">.</span><span class="n">attributes</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">feature</span><span class="o">.</span><span class="n">extra</span><span class="p">),</span>
+        <span class="nb">id</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">dialect</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">dialect</span><span class="p">,</span>
+        <span class="n">file_order</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">file_order</span><span class="p">,</span>
+        <span class="n">keep_order</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">keep_order</span><span class="p">,</span>
+        <span class="n">sort_attribute_values</span><span class="o">=</span><span class="n">feature</span><span class="o">.</span><span class="n">sort_attribute_values</span><span class="p">,</span>
+        <span class="n">seg_idx</span><span class="o">=</span><span class="n">seg_idx</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">seg</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Construction from a DuckDB row.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<span class="c1">#: The database columns `feature_from_row` consumes, in the order it unpacks</span>
+<span class="c1">#: them. This is the SINGLE SOURCE OF TRUTH for the projection: `interface`</span>
+<span class="c1">#: builds both its SQL column lists from it via `db_row_projection`.</span>
+<span class="c1">#:</span>
+<span class="c1">#: It used to be written out three times independently -- here, as</span>
+<span class="c1">#: `interface._SELECT_FEATURE`, and again inside</span>
+<span class="c1">#: `interface._select_feature_aliased`. Since `feature_from_row` unpacks</span>
+<span class="c1">#: positionally, getting one of the three wrong did not raise; it silently</span>
+<span class="c1">#: shifted every field by one.</span>
+<span class="n">_DB_ROW_FIELDS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"id"</span><span class="p">,</span>
+    <span class="s2">"seqid"</span><span class="p">,</span>
+    <span class="s2">"source"</span><span class="p">,</span>
+    <span class="s2">"featuretype"</span><span class="p">,</span>
+    <span class="s2">"start"</span><span class="p">,</span>
+    <span class="s2">"end"</span><span class="p">,</span>
+    <span class="s2">"score"</span><span class="p">,</span>
+    <span class="s2">"strand"</span><span class="p">,</span>
+    <span class="s2">"frame"</span><span class="p">,</span>
+    <span class="s2">"attributes_blob"</span><span class="p">,</span>
+    <span class="s2">"extra_blob"</span><span class="p">,</span>
+    <span class="s2">"file_order"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: Row fields that collide with SQL reserved words and need quoting.</span>
+<span class="n">_SQL_RESERVED_FIELDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">"end"</span><span class="p">})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">db_row_projection</span><span class="p">(</span><span class="n">alias</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The SELECT column list that :func:`feature_from_row` expects.</span>
+
+<span class="sd">    Pass ``alias`` to qualify each column for a joined query.</span>
+<span class="sd">    """</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_DB_ROW_FIELDS</span><span class="p">:</span>
+        <span class="n">column</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">'"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">"'</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SQL_RESERVED_FIELDS</span> <span class="k">else</span> <span class="n">name</span>
+        <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">alias</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">column</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">alias</span> <span class="k">else</span> <span class="n">column</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+
+
+<span class="c1">#: Column order of the `segments` rows `feature_from_row` accepts, matching the</span>
+<span class="c1">#: projection in `FeatureDB._prefetch_segments`.</span>
+<span class="n">_SEGMENT_ROW_FIELDS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"feature_id"</span><span class="p">,</span>
+    <span class="s2">"seg_idx"</span><span class="p">,</span>
+    <span class="s2">"start"</span><span class="p">,</span>
+    <span class="s2">"end"</span><span class="p">,</span>
+    <span class="s2">"score"</span><span class="p">,</span>
+    <span class="s2">"frame"</span><span class="p">,</span>
+    <span class="s2">"attributes_blob"</span><span class="p">,</span>
+    <span class="s2">"extra_blob"</span><span class="p">,</span>
+    <span class="s2">"file_order"</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">feature_from_row</span><span class="p">(</span>
+    <span class="n">row</span><span class="p">,</span>
+    <span class="n">dialect</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">keep_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">sort_attribute_values</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">segments</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Feature</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes.</span>
+
+<span class="sd">    `keep_order` and `sort_attribute_values` are database-wide settings that</span>
+<span class="sd">    control how a feature renders itself, so they have to reach every feature</span>
+<span class="sd">    the database hands out. They used to be stored on `FeatureDB` and never</span>
+<span class="sd">    passed on, which made both options inert.</span>
+
+<span class="sd">    Passing `segments` -- prefetched rows from the `segments` table -- produces</span>
+<span class="sd">    a `MultipartFeature` instead. Presence of those rows IS the test: only a</span>
+<span class="sd">    discontinuous feature has any, so no extra column is needed in the</span>
+<span class="sd">    projection, which is also what keeps a v1 database readable.</span>
+<span class="sd">    """</span>
+    <span class="p">(</span>
+        <span class="n">fid</span><span class="p">,</span>
+        <span class="n">seqid</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">,</span>
+        <span class="n">featuretype</span><span class="p">,</span>
+        <span class="n">start</span><span class="p">,</span>
+        <span class="n">end</span><span class="p">,</span>
+        <span class="n">score</span><span class="p">,</span>
+        <span class="n">strand</span><span class="p">,</span>
+        <span class="n">frame</span><span class="p">,</span>
+        <span class="n">blob</span><span class="p">,</span>
+        <span class="n">extra_blob</span><span class="p">,</span>
+        <span class="n">file_order</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">=</span> <span class="n">row</span>
+    <span class="n">score</span> <span class="o">=</span> <span class="n">score</span> <span class="k">if</span> <span class="n">score</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span>
+    <span class="n">strand</span> <span class="o">=</span> <span class="n">strand</span> <span class="k">if</span> <span class="n">strand</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span>
+    <span class="n">dialect</span> <span class="o">=</span> <span class="n">dialect</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">"fmt"</span><span class="p">:</span> <span class="s2">"gff3"</span><span class="p">}</span>
+    <span class="n">shared</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"seqid"</span><span class="p">:</span> <span class="n">seqid</span><span class="p">,</span>
+        <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
+        <span class="s2">"featuretype"</span><span class="p">:</span> <span class="n">featuretype</span><span class="p">,</span>
+        <span class="s2">"id"</span><span class="p">:</span> <span class="n">fid</span><span class="p">,</span>
+        <span class="s2">"dialect"</span><span class="p">:</span> <span class="n">dialect</span><span class="p">,</span>
+        <span class="s2">"keep_order"</span><span class="p">:</span> <span class="n">keep_order</span><span class="p">,</span>
+        <span class="s2">"sort_attribute_values"</span><span class="p">:</span> <span class="n">sort_attribute_values</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">segments</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Feature</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span>
+            <span class="n">end</span><span class="o">=</span><span class="n">end</span><span class="p">,</span>
+            <span class="n">score</span><span class="o">=</span><span class="n">score</span><span class="p">,</span>
+            <span class="n">strand</span><span class="o">=</span><span class="n">strand</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">frame</span> <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span><span class="p">,</span>
+            <span class="n">attributes</span><span class="o">=</span><span class="n">blob</span> <span class="k">if</span> <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">extra</span><span class="o">=</span><span class="n">extra_blob</span> <span class="k">if</span> <span class="n">extra_blob</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">file_order</span><span class="o">=</span><span class="n">file_order</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">shared</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># `seqid`, `source`, `featuretype` and `strand` are invariant across</span>
+    <span class="c1"># segments -- the ingest predicate guarantees it -- so each segment takes</span>
+    <span class="c1"># them from the logical row and supplies only its own coordinates, score,</span>
+    <span class="c1"># phase and column 9. That is what makes `str(segment)` reproduce the</span>
+    <span class="c1"># input line byte for byte.</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">FeatureSegment</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="n">seg_start</span><span class="p">,</span>
+            <span class="n">end</span><span class="o">=</span><span class="n">seg_end</span><span class="p">,</span>
+            <span class="n">score</span><span class="o">=</span><span class="n">seg_score</span> <span class="k">if</span> <span class="n">seg_score</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span><span class="p">,</span>
+            <span class="n">strand</span><span class="o">=</span><span class="n">strand</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">seg_frame</span> <span class="k">if</span> <span class="n">seg_frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span><span class="p">,</span>
+            <span class="n">attributes</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">seg_blob</span><span class="p">)</span> <span class="k">if</span> <span class="n">seg_blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">extra</span><span class="o">=</span><span class="n">seg_extra</span> <span class="k">if</span> <span class="n">seg_extra</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">file_order</span><span class="o">=</span><span class="n">seg_order</span><span class="p">,</span>
+            <span class="n">seg_idx</span><span class="o">=</span><span class="n">seg_idx</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">shared</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="p">(</span>
+            <span class="n">_fid</span><span class="p">,</span>
+            <span class="n">seg_idx</span><span class="p">,</span>
+            <span class="n">seg_start</span><span class="p">,</span>
+            <span class="n">seg_end</span><span class="p">,</span>
+            <span class="n">seg_score</span><span class="p">,</span>
+            <span class="n">seg_frame</span><span class="p">,</span>
+            <span class="n">seg_blob</span><span class="p">,</span>
+            <span class="n">seg_extra</span><span class="p">,</span>
+            <span class="n">seg_order</span><span class="p">,</span>
+        <span class="p">)</span> <span class="ow">in</span> <span class="n">segments</span>
+    <span class="p">]</span>
+    <span class="k">return</span> <span class="n">MultipartFeature</span><span class="p">(</span>
+        <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span>
+        <span class="n">end</span><span class="o">=</span><span class="n">end</span><span class="p">,</span>
+        <span class="n">score</span><span class="o">=</span><span class="n">score</span><span class="p">,</span>
+        <span class="n">strand</span><span class="o">=</span><span class="n">strand</span><span class="p">,</span>
+        <span class="n">frame</span><span class="o">=</span><span class="n">frame</span> <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"."</span><span class="p">,</span>
+        <span class="n">attributes</span><span class="o">=</span><span class="n">blob</span> <span class="k">if</span> <span class="n">blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="n">extra_blob</span> <span class="k">if</span> <span class="n">extra_blob</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">file_order</span><span class="o">=</span><span class="n">file_order</span><span class="p">,</span>
+        <span class="n">n_segments</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">),</span>
+        <span class="n">segments</span><span class="o">=</span><span class="n">parts</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">shared</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#: Integer index -&gt; field name, backing `Feature[0]`. Same mapping as</span>
+<span class="c1">#: `_FIELD_ORDER`, exposed under the name upstream's tests import.</span>
+<span class="n">_position_lookup</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">_FIELD_ORDER</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">feature_from_line</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dialect</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">keep_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Build a `Feature` from a single GFF/GTF line.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    line : str</span>
+<span class="sd">        One tab-delimited record.</span>
+<span class="sd">    dialect : dict, optional</span>
+<span class="sd">        Use this dialect instead of inferring one from the line.</span>
+<span class="sd">    strict : bool</span>
+<span class="sd">        True (default) requires a single tab-delimited line. False accepts a</span>
+<span class="sd">        multi-line string with exactly one non-blank line, and -- when there</span>
+<span class="sd">        are no more than nine fields -- allows runs of spaces instead of tabs.</span>
+<span class="sd">        That is for hand-written test data, not for parsing files: with more</span>
+<span class="sd">        than nine fields the ninth would swallow the rest, so tabs are still</span>
+<span class="sd">        required there.</span>
+<span class="sd">    keep_order : bool</span>
+<span class="sd">        Passed through to `Feature`.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase._pyfallback.attributes</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_attributes</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase.dialect</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_dialect</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">strict</span><span class="p">:</span>
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[</span><span class="n">chunk</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span> <span class="k">if</span> <span class="n">chunk</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"expected exactly one non-blank line, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">candidates</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)</span> <span class="k">if</span> <span class="s2">"</span><span class="se">\t</span><span class="s2">"</span> <span class="ow">in</span> <span class="n">line</span> <span class="k">else</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"</span><span class="se">\n\r</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="n">attr_string</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">8</span> <span class="k">else</span> <span class="s2">""</span>
+    <span class="n">pairs</span><span class="p">,</span> <span class="n">observed</span> <span class="o">=</span> <span class="n">parse_attributes</span><span class="p">(</span><span class="n">attr_string</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dialect</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">dialect</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">default_dialect</span><span class="p">(),</span> <span class="o">**</span><span class="n">observed</span><span class="p">}</span>
+
+    <span class="c1"># `strict=False`: a lenient line may carry fewer than eight columns, and</span>
+    <span class="c1"># the defaults below fill in what is missing.</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">_FIELD_ORDER</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span> <span class="n">fields</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">Feature</span><span class="p">(</span>
+        <span class="n">seqid</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"seqid"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">source</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">featuretype</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"featuretype"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">start</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"start"</span><span class="p">),</span>
+        <span class="n">end</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"end"</span><span class="p">),</span>
+        <span class="n">score</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"score"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">strand</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"strand"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">frame</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"frame"</span><span class="p">,</span> <span class="s2">"."</span><span class="p">),</span>
+        <span class="n">attributes</span><span class="o">=</span><span class="n">pairs</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="n">fields</span><span class="p">[</span><span class="mi">9</span><span class="p">:],</span>
+        <span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">,</span>
+        <span class="n">keep_order</span><span class="o">=</span><span class="n">keep_order</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

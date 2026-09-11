@@ -1,0 +1,916 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Cookbooks" href="cookbooks.html"><link rel="prev" title="Connections &amp; concurrency" href="connections.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/content/migration.html">
+        <link rel="prefetch" href="../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Migrating from gffutils to gffbase - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/docs/source/content/migration.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/edit/main/docs/source/content/migration.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="migrating-from-gffutils-to-gffbase">
+<span id="migration-migrating-from-gffutils-to-gffbase"></span><h1>Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code><a class="headerlink" href="#migrating-from-gffutils-to-gffbase" title="Link to this heading">¶</a></h1>
+<p>GFFBase is a drop-in successor to legacy
+<a class="reference external" href="https://github.com/daler/gffutils">gffutils</a>. For most users, the
+migration is one import change.</p>
+<div class="admonition danger">
+<p class="admonition-title">Danger</p>
+<p>READ THIS FIRST — the OLAP/OLTP gotcha</p>
+<p><strong>There is exactly one common code pattern that gets slower, not
+faster, when you migrate to gffbase.</strong> It’s the per-id Python loop:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># ❌ ANTI-PATTERN with gffbase: 50 000 small queries.</span>
+<span class="c1"># Pays DuckDB's vectorization startup × 50 000 + per-row Feature</span>
+<span class="c1"># construction × 1.6 M. Can take many minutes on a full GENCODE v49 run.</span>
+<span class="k">for</span> <span class="n">transcript_id</span> <span class="ow">in</span> <span class="n">fifty_thousand_transcript_ids</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">exon</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="n">transcript_id</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">):</span>
+        <span class="n">starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exon</span><span class="o">.</span><span class="n">start</span><span class="p">)</span>
+        <span class="n">ends</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exon</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>DuckDB is an <strong>OLAP</strong> engine — designed for big set-based queries.
+Iterating it row-by-row pays vectorization startup <em>per call</em> and
+never amortizes. SQLite (legacy gffutils) is <strong>OLTP</strong> — its B-tree
+seek on a cache-warm file is microseconds per call.</p>
+<p><strong>The fix — one canonical PyArrow snippet</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># ✅ ONE set-based SQL query for all 50 000 transcripts.</span>
+<span class="c1"># Returns a zero-copy pyarrow.Table — no `Feature` object is ever</span>
+<span class="c1"># constructed — one set-based query instead of N.</span>
+<span class="n">exons</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span>
+    <span class="n">fifty_thousand_transcript_ids</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">,</span>         <span class="c1"># or "df" / "polars"</span>
+<span class="p">)</span>
+
+<span class="c1"># NumPy / PyTorch / JAX / Hugging Face datasets — all native.</span>
+<span class="n">starts</span> <span class="o">=</span> <span class="n">exons</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"start"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+<span class="n">ends</span>   <span class="o">=</span> <span class="n">exons</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"end"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+<span class="c1"># The "anchor" column carries the input transcript_id for each row,</span>
+<span class="c1"># so you can groupby in Python or downstream Arrow tooling without</span>
+<span class="c1"># re-issuing N queries:</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
+<span class="n">per_tx_exon_count</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">exons</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"anchor"</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>If your code has a <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">x</span> <span class="pre">in</span> <span class="pre">ids:</span> <span class="pre">db.children(x,</span> <span class="pre">…)</span></code> loop and you
+care about wall time, <strong>convert it now</strong>, before you migrate. It is
+the only change required for <em>performance</em>; §6 lists the behaviour
+changes that may require one for <em>correctness</em>.</p>
+</div>
+<hr class="docutils" />
+<section id="drop-in-compatibility-the-easy-part">
+<span id="migration-1-drop-in-compatibility-the-easy-part"></span><h2>1. Drop-in compatibility — the easy part<a class="headerlink" href="#drop-in-compatibility-the-easy-part" title="Link to this heading">¶</a></h2>
+<p><strong>86 of 89 symbols (97%)</strong> of the legacy <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> public surface are
+preserved verbatim. The three that are not are deliberate, recorded in
+<code class="docutils literal notranslate"><span class="pre">tests/parity/deviations.toml</span></code>, and are surfaces upstream does not implement
+either. A differential suite compares gffbase against a pinned gffutils
+checkout on every corpus fixture, so this figure is derived rather than
+asserted – <code class="docutils literal notranslate"><span class="pre">tests/test_release_hygiene.py</span></code> recomputes it from the manifest
+and fails if this sentence drifts.</p>
+<p>The mapping:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">gffutils</span></code> symbol</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gffbase</span></code> equivalent</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.create_db(path,</span> <span class="pre">dbfn,</span> <span class="pre">...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.create_db(path,</span> <span class="pre">dbfn,</span> <span class="pre">...)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.FeatureDB(dbfn)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.FeatureDB(dbfn)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.Feature(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.Feature(...)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.DataIterator(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.DataIterator(...)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.GFFWriter(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.GFFWriter(...)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.merge_criteria.*</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.merge_criteria.*</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gffutils.example_filename(name)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gffbase.example_filename(name)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Exceptions (<code class="docutils literal notranslate"><span class="pre">FeatureNotFoundError</span></code>, …)</p></td>
+<td><p>same names</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Before</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gffutils</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">gffutils</span><span class="o">.</span><span class="n">create_db</span><span class="p">(</span><span class="s2">"annotation.gff3"</span><span class="p">,</span> <span class="s2">"annotation.db"</span><span class="p">)</span>
+
+<span class="c1"># After</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gffutils</span>      <span class="c1"># one-line alias migration</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">gffutils</span><span class="o">.</span><span class="n">create_db</span><span class="p">(</span><span class="s2">"annotation.gff3"</span><span class="p">,</span> <span class="s2">"annotation.duckdb"</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="the-one-addition-worth-making-straight-away-close-the-handle">
+<span id="migration-the-one-addition-worth-making-straight-away-close-the-handle"></span><h3>The one addition worth making straight away: close the handle<a class="headerlink" href="#the-one-addition-worth-making-straight-away-close-the-handle" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">gffutils</span></code> uses SQLite, which hands out shared connections and never locks a
+reader out. gffbase uses DuckDB, which takes an <strong>exclusive lock on the
+database file for the life of a writable handle</strong>. Ported code that opens a
+database and never closes it will work — right up until something else needs
+that file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureDB</span><span class="p">,</span> <span class="n">create_db</span>
+
+<span class="c1"># Best: scope it.</span>
+<span class="k">with</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"annotation.gff3"</span><span class="p">,</span> <span class="s2">"annotation.duckdb"</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+    <span class="o">...</span>
+
+<span class="k">with</span> <span class="n">FeatureDB</span><span class="p">(</span><span class="s2">"annotation.duckdb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+    <span class="o">...</span>
+
+<span class="c1"># Or close it yourself.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">FeatureDB</span><span class="p">(</span><span class="s2">"annotation.duckdb"</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="o">...</span>
+<span class="k">finally</span><span class="p">:</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Two symptoms tell you the lock is the problem: another process cannot open the
+database, and on Windows the file cannot be deleted or replaced.</p>
+<p>If you fan work out across processes — a PyTorch <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> with
+<code class="docutils literal notranslate"><span class="pre">num_workers</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, or a <code class="docutils literal notranslate"><span class="pre">multiprocessing.Pool</span></code> — open each worker’s handle
+<strong>read-only</strong>, which takes no exclusive lock and so allows any number of
+concurrent readers:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">FeatureDB</span><span class="p">(</span><span class="s2">"annotation.duckdb"</span><span class="p">,</span> <span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>Full detail: <a class="reference external" href="https://khchao.com/gffbase/content/connections.html">Connections &amp; concurrency</a>.</p>
+<p>All <code class="docutils literal notranslate"><span class="pre">FeatureDB</span></code> methods (<code class="docutils literal notranslate"><span class="pre">children</span></code>, <code class="docutils literal notranslate"><span class="pre">parents</span></code>, <code class="docutils literal notranslate"><span class="pre">region</span></code>,
+<code class="docutils literal notranslate"><span class="pre">features_of_type</span></code>, <code class="docutils literal notranslate"><span class="pre">interfeatures</span></code>, <code class="docutils literal notranslate"><span class="pre">merge</span></code>, <code class="docutils literal notranslate"><span class="pre">bed12</span></code>, <code class="docutils literal notranslate"><span class="pre">update</span></code>,
+<code class="docutils literal notranslate"><span class="pre">delete</span></code>, <code class="docutils literal notranslate"><span class="pre">add_relation</span></code>, <code class="docutils literal notranslate"><span class="pre">execute</span></code>, …) accept the same arguments and
+return generators of <code class="docutils literal notranslate"><span class="pre">Feature</span></code> objects — identical to the legacy API.</p>
+<p>The <strong>storage backend</strong> changes (DuckDB instead of SQLite). This is
+transparent for almost all callers, but raw SQL queries that hit the
+legacy schema directly via <code class="docutils literal notranslate"><span class="pre">db.execute(...)</span></code> need rewriting against
+the GFFBase schema (or against the SQLite-compat views; see §4). We
+also ship <code class="docutils literal notranslate"><span class="pre">gffbase.export_sqlite(con,</span> <span class="pre">path)</span></code> to dump a GFFBase
+database into a legacy <code class="docutils literal notranslate"><span class="pre">.sqlite</span></code> file when you need the old format.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="what-you-gain-immediately-no-code-changes">
+<span id="migration-2-what-you-gain-immediately-no-code-changes"></span><h2>2. What you gain immediately, no code changes<a class="headerlink" href="#what-you-gain-immediately-no-code-changes" title="Link to this heading">¶</a></h2>
+<p>Head-to-head against legacy <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> across the five canonical human-genome
+annotation releases:</p>
+<p><strong>The ingest column is a draw, not a win.</strong> gffbase spans 1.21× to 0.69×:
+ahead where per-feature overhead dominates, behind on the attribute-dense
+whole-genome files, because both engines are attribute-bound and effectively
+serial at a similar rate. What you gain on day one is in the other columns —
+the spatial index, batched extraction, and SQL over the whole corpus — plus
+the fact that no ratio is published at all unless both engines’ correctness
+signatures agree. The GTF row is the inference-disabled arm, the configuration
+least favourable to gffbase. <code class="docutils literal notranslate"><span class="pre">peak</span> <span class="pre">RSS</span></code> is ingest <strong>plus exhaustive
+validation</strong>; <code class="docutils literal notranslate"><span class="pre">validate_db</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">sample=200</span></code> and the CLI never
+overrides it.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Corpus</p></th>
+<th class="head"><p>Format</p></th>
+<th class="head"><p>Lines</p></th>
+<th class="head"><p>gffbase ingest</p></th>
+<th class="head"><p>legacy ingest</p></th>
+<th class="head"><p>speedup</p></th>
+<th class="head"><p>peak RSS (ingest + full validation)</p></th>
+<th class="head"><p>spatial qps</p></th>
+<th class="head"><p>batched (5 k anchors)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>GENCODE v49</strong> (basic)</p></td>
+<td><p>GTF</p></td>
+<td><p>6,068,892</p></td>
+<td><p><strong>10 min 14 s</strong></p></td>
+<td><p>7 min 1 s</p></td>
+<td><p><strong>0.69×</strong></p></td>
+<td><p>53.57 GB</p></td>
+<td><p><strong>707</strong> ±0% (n=5)</p></td>
+<td><p>963 ms / 1.93 M desc</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>GENCODE v49</strong> (basic)</p></td>
+<td><p>GFF3</p></td>
+<td><p>6,066,054</p></td>
+<td><p><strong>11 min 8 s</strong></p></td>
+<td><p>9 min 59 s</p></td>
+<td><p><strong>0.90×</strong></p></td>
+<td><p>62.00 GB</p></td>
+<td><p><strong>705</strong> ±0% (n=5)</p></td>
+<td><p>1096 ms / 1.93 M desc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>RefSeq GRCh38.p14</strong></p></td>
+<td><p>GFF3</p></td>
+<td><p>4,932,571</p></td>
+<td><p><strong>7 min 2 s</strong></p></td>
+<td><p>6 min 34 s</p></td>
+<td><p><strong>0.93×</strong></p></td>
+<td><p>26.80 GB</p></td>
+<td><p><strong>540</strong> ±0% (n=5)</p></td>
+<td><p>588 ms / 999 k desc</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>CHESS 3.1.3</strong></p></td>
+<td><p>GFF3</p></td>
+<td><p>2,761,061</p></td>
+<td><p><strong>1 min 53 s</strong></p></td>
+<td><p>2 min 17 s</p></td>
+<td><p><strong>1.21×</strong></p></td>
+<td><p>3.38 GB</p></td>
+<td><p><strong>702</strong> ±0% (n=5)</p></td>
+<td><p>202 ms / 161 k desc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>MANE v1.5</strong> (Ensembl)</p></td>
+<td><p>GFF3</p></td>
+<td><p>524,834</p></td>
+<td><p><strong>40.0 s</strong></p></td>
+<td><p>45.7 s</p></td>
+<td><p><strong>1.14×</strong></p></td>
+<td><p>3.98 GB</p></td>
+<td><p><strong>840</strong> ±0% (n=5)</p></td>
+<td><p>206 ms / 156 k desc</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="line-block">
+<div class="line"><strong>Measured on</strong> AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34</div>
+<div class="line"><strong>Versions:</strong> Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14</div>
+<div class="line"><strong>Commit:</strong> <code class="docutils literal notranslate"><span class="pre">42bb900e328c</span></code> · <strong>Run:</strong> 2026-09-10T19:56:52Z</div>
+<div class="line"><em>Generated from benchmarks/results/06_mega.linux-x86_64.json by tools/gen_benchmark_tables.py. Do not edit by hand.</em></div>
+</div>
+<p>“Censored at” marks a legacy run killed at its safety valve without finishing;
+it supplies neither a completed wall nor a speedup. Method and fairness
+constraints: <a class="reference external" href="https://khchao.com/gffbase/content/methodology.html">Methodology</a>.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Single-call workload</p></th>
+<th class="head"><p>Versus legacy</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Spatial overlap (<code class="docutils literal notranslate"><span class="pre">db.region(...)</span></code>)</p></td>
+<td><p>substantially lower latency — gffbase has a spatial index, <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> has none</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">db.children(id,</span> <span class="pre">level=1)</span></code> indexed lookup</p></td>
+<td><p>comparable</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db.children_batched(ids,</span> <span class="pre">format=&quot;arrow&quot;)</span></code></p></td>
+<td><p>one query, no Python <code class="docutils literal notranslate"><span class="pre">Feature</span></code> objects — see below</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Your existing <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> script gets the ingest, spatial and attribute-query
+wins the moment you swap the import. To unlock the batched-extraction win, see
+the warning at the top of this page.</p>
+<hr class="docutils" />
+</section>
+<section id="deep-dive-the-olap-vs-oltp-tradeoff">
+<span id="migration-3-deep-dive-the-olap-vs-oltp-tradeoff"></span><h2>3. ⚠️ Deep-dive: the OLAP vs OLTP tradeoff<a class="headerlink" href="#deep-dive-the-olap-vs-oltp-tradeoff" title="Link to this heading">¶</a></h2>
+<p>DuckDB is an <strong>OLAP</strong> engine. It’s optimized for big set-based queries
+(JOINs, aggregations, scans of millions of rows). SQLite is an <strong>OLTP</strong>
+engine — optimized for tiny indexed point lookups against cache-warm
+pages. <strong>For tiny, repeated point queries against a cache-warm DB,
+SQLite (and therefore legacy gffutils) is faster.</strong></p>
+<p>The fix is the canonical PyArrow snippet at the top of this page. At the scale
+of tens of thousands of anchors the row-by-row gffbase loop is the slowest
+option available and the batched call is the fastest, by a wide margin in both
+directions — because the batched call issues one set-based query and never
+constructs a Python <code class="docutils literal notranslate"><span class="pre">Feature</span></code>. Current measurements:
+<a class="reference external" href="https://khchao.com/gffbase/content/performance.html">Performance</a>.</p>
+<section id="vectorized-methods-at-a-glance">
+<span id="migration-vectorized-methods-at-a-glance"></span><h3>Vectorized methods at a glance<a class="headerlink" href="#vectorized-methods-at-a-glance" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Vectorized method</p></th>
+<th class="head"><p>Replaces this loop</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db.children_batched(ids,</span> <span class="pre">level=…,</span> <span class="pre">featuretype=…,</span> <span class="pre">format='arrow')</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">x</span> <span class="pre">in</span> <span class="pre">ids:</span> <span class="pre">db.children(x,</span> <span class="pre">…)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">db.parents_batched(ids,</span> <span class="pre">…,</span> <span class="pre">format='arrow')</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">x</span> <span class="pre">in</span> <span class="pre">ids:</span> <span class="pre">db.parents(x,</span> <span class="pre">…)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">db.region_batched(regions,</span> <span class="pre">…,</span> <span class="pre">format='arrow')</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">r</span> <span class="pre">in</span> <span class="pre">regions:</span> <span class="pre">db.region(r,</span> <span class="pre">…)</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">format</span></code> accepts <code class="docutils literal notranslate"><span class="pre">&quot;arrow&quot;</span></code> (default — <code class="docutils literal notranslate"><span class="pre">pyarrow.Table</span></code>), <code class="docutils literal notranslate"><span class="pre">&quot;df&quot;</span></code>
+(<code class="docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code>), or <code class="docutils literal notranslate"><span class="pre">&quot;polars&quot;</span></code> (<code class="docutils literal notranslate"><span class="pre">polars.DataFrame</span></code>). All three
+share memory with DuckDB’s query buffers — no per-row Python
+materialization happens at any layer.</p>
+</section>
+<section id="when-you-don-t-need-to-migrate-the-pattern">
+<span id="migration-when-you-dont-need-to-migrate-the-pattern"></span><h3>When you don’t need to migrate the pattern<a class="headerlink" href="#when-you-don-t-need-to-migrate-the-pattern" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>One-off scripts that ask <code class="docutils literal notranslate"><span class="pre">db[gene_id]</span></code> or <code class="docutils literal notranslate"><span class="pre">db.children(gene)</span></code> for
+fewer than ~100 anchors.</p></li>
+<li><p>Small annotations (&lt; 100 k features) where SQL startup overhead is
+not visible.</p></li>
+</ul>
+<p>For everything else — ML feature extraction, BED12 export of every
+transcript, “for each peak in this 50 000-row BED file find every
+overlapping CDS” — switch to <code class="docutils literal notranslate"><span class="pre">*_batched</span></code>.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="sql-compat-views-for-raw-execute-users">
+<span id="migration-4-sql-compat-views-for-raw-execute-users"></span><h2>4. SQL-compat views (for raw <code class="docutils literal notranslate"><span class="pre">execute()</span></code> users)<a class="headerlink" href="#sql-compat-views-for-raw-execute-users" title="Link to this heading">¶</a></h2>
+<p>Legacy code that did <code class="docutils literal notranslate"><span class="pre">db.execute(&quot;SELECT</span> <span class="pre">*</span> <span class="pre">FROM</span> <span class="pre">features</span> <span class="pre">WHERE</span> <span class="pre">…&quot;)</span></code>
+hits the new DuckDB schema (<code class="docutils literal notranslate"><span class="pre">features</span></code>, <code class="docutils literal notranslate"><span class="pre">attributes</span></code>, <code class="docutils literal notranslate"><span class="pre">edges</span></code>,
+<code class="docutils literal notranslate"><span class="pre">closure</span></code>). Two compatibility views provide the legacy column shapes:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="c1">-- features_compat: legacy SQLite-style 12-column features table.</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">features_compat</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">seqid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'chr1'</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+
+<span class="c1">-- relations_compat: legacy parent/child/level table.</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="n">parent</span><span class="p">,</span><span class="w"> </span><span class="n">child</span><span class="p">,</span><span class="w"> </span><span class="k">level</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">relations_compat</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="k">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">attributes</span></code> column on <code class="docutils literal notranslate"><span class="pre">features_compat</span></code> is the <strong>raw col-9
+bytes</strong> (UTF-8), not legacy-style JSON. If your raw-SQL code parses
+JSON out of that column, switch to querying the normalized
+<code class="docutils literal notranslate"><span class="pre">attributes</span></code> table directly:</p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">value</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">attributes</span><span class="w"> </span><span class="n">a</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">feature_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="k">key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'gene_biotype'</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>This is also faster — <code class="docutils literal notranslate"><span class="pre">attributes_kv</span></code> indexes <code class="docutils literal notranslate"><span class="pre">(key,</span> <span class="pre">value)</span></code>, so
+attribute filters become indexed seeks.</p>
+<hr class="docutils" />
+</section>
+<section id="sqlite-export-the-safety-valve">
+<span id="migration-5-sqlite-export-the-safety-valve"></span><h2>5. SQLite export — the safety valve<a class="headerlink" href="#sqlite-export-the-safety-valve" title="Link to this heading">¶</a></h2>
+<p>If a downstream tool only knows how to read legacy
+<code class="docutils literal notranslate"><span class="pre">gffutils</span></code>-compatible SQLite files:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_sqlite</span>
+<span class="n">export_sqlite</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s2">"legacy_compatible.sqlite"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Produces a SQLite database with the original gffutils schema,
+populated UCSC <code class="docutils literal notranslate"><span class="pre">bin</span></code> column, and the closure flattened back into
+<code class="docutils literal notranslate"><span class="pre">relations(parent,</span> <span class="pre">child,</span> <span class="pre">level)</span></code>. The downstream tool can open this
+file with <code class="docutils literal notranslate"><span class="pre">gffutils.FeatureDB(&quot;legacy_compatible.sqlite&quot;)</span></code>.</p>
+<hr class="docutils" />
+</section>
+<section id="things-that-changed-small-list">
+<span id="migration-6-things-that-changed-small-list"></span><h2>6. Things that changed (small list)<a class="headerlink" href="#things-that-changed-small-list" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Storage backend</strong>: SQLite → DuckDB. Database file extension is
+<code class="docutils literal notranslate"><span class="pre">.duckdb</span></code> by convention. The legacy SQLite layout is reachable via
+<code class="docutils literal notranslate"><span class="pre">export_sqlite()</span></code> (above) or the compat views.</p></li>
+<li><p><strong>Disk size</strong>: GFFBase databases are 1.18× to 1.36× larger than legacy
+SQLite across the benchmark corpora – the price of materializing the
+transitive closure and the R-tree, which is what turns hierarchy and spatial
+queries into indexed lookups.
+Current measurements: <a class="reference external" href="https://khchao.com/gffbase/content/performance.html">Performance</a>.</p></li>
+<li><p><strong>Peak RSS</strong>: substantially higher – 3.4–62.0 GB against 111–194 MB across
+the same corpora. Read that number carefully: it is the peak of a process that
+ingests <strong>and then validates exhaustively</strong>, which is what the published runs
+do. Ingesting a whole-genome annotation and validating a 10,000-feature sample
+peaks at 6.4–10.2 GB (RefSeq 6.4–6.9, GENCODE GTF 8.5–9.2, GENCODE GFF3
+9.5–10.2); no run measures ingest with no validation at all. <code class="docutils literal notranslate"><span class="pre">validate_db</span></code>
+defaults to <code class="docutils literal notranslate"><span class="pre">sample=200</span></code>, so no default path pays the rest.
+DuckDB allocates a vectorized ingest buffer pool; cap it with
+<code class="docutils literal notranslate"><span class="pre">PRAGMA</span> <span class="pre">memory_limit='512MB'</span></code> if that matters more than wall time.</p></li>
+<li><p><strong>Hierarchy depth</strong>: GFFBase materializes the closure to depth 8 by
+default (vs depth 2 in legacy). Anything past 8 falls through to a
+dynamic recursive CTE — the dispatcher is automatic.</p></li>
+<li><p><strong>Attributes column shape</strong>: in raw SQL, the legacy single-cell
+JSON blob is replaced by a normalized
+<code class="docutils literal notranslate"><span class="pre">attributes(feature_id,</span> <span class="pre">key,</span> <span class="pre">value,</span> <span class="pre">idx,</span> <span class="pre">seg_idx,</span> <span class="pre">ord)</span></code> long-form table.
+Filtering by attribute is now an indexed query, not a full scan.</p></li>
+<li><p><strong>Duplicate IDs</strong>: NCBI RefSeq emits multiple GFF3 rows that share
+<code class="docutils literal notranslate"><span class="pre">ID=cds-NP_xxx</span></code>. Under the default <code class="docutils literal notranslate"><span class="pre">mode=&quot;compat&quot;</span></code> gffbase renames the
+repeats as <code class="docutils literal notranslate"><span class="pre">gffutils.merge_strategy=&quot;create_unique&quot;</span></code> would and records the
+remap in <code class="docutils literal notranslate"><span class="pre">duplicates</span></code>. Under <code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code> it instead <strong>fuses them into
+one discontinuous feature</strong> — see below.</p></li>
+</ul>
+<section id="behaviour-changes-that-can-change-your-results">
+<span id="migration-behaviour-changes-that-can-change-your-results"></span><h3>Behaviour changes that can change your results<a class="headerlink" href="#behaviour-changes-that-can-change-your-results" title="Link to this heading">¶</a></h3>
+<p>These are the ones worth reading before a production run. Each is small in
+isolation; each can change what your script computes.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">merge_all</span></code> <strong>now persists.</strong> It always documented that “the resulting
+records are added to the database”, and did not. It also returned every
+input feature rather than only genuine merges, and accepted
+<code class="docutils literal notranslate"><span class="pre">exclude_components</span></code> while ignoring it. All three are fixed, so a script
+that called <code class="docutils literal notranslate"><span class="pre">merge_all</span></code> expecting a read-only generator now <strong>writes to the
+database</strong> and gets back a shorter list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">merge_criteria.overlap_*_threshold</span></code> <strong>changed meaning.</strong> They were distance
+tests (<code class="docutils literal notranslate"><span class="pre">abs(acc.end</span> <span class="pre">-</span> <span class="pre">cur.start)</span> <span class="pre">&lt;=</span> <span class="pre">threshold</span></code>) and are now range tests, so
+a feature lying entirely inside the accumulator merges where it did not
+before. If you pass one of these to <code class="docutils literal notranslate"><span class="pre">merge</span></code> or <code class="docutils literal notranslate"><span class="pre">merge_all</span></code>, the set of
+features that merge has changed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_introns</span></code> <strong>computes per transcript.</strong> It treated
+<code class="docutils literal notranslate"><span class="pre">grandparent_featuretype=&quot;gene&quot;</span></code> as the direct anchor and pooled every
+isoform’s exons into one list, so for a multi-isoform gene the “introns”
+spanned transcript boundaries. On <code class="docutils literal notranslate"><span class="pre">FBgn0031208.gff</span></code> that was 1 where the
+oracle finds 3.</p></li>
+<li><p><strong>Splice sites are 2 bp</strong>, strand-aware (<code class="docutils literal notranslate"><span class="pre">five_prime_cis_splice_site</span></code> /
+<code class="docutils literal notranslate"><span class="pre">three_prime_cis_splice_site</span></code>), and carry the intron’s merged attributes.
+They were 1 bp, always typed <code class="docutils literal notranslate"><span class="pre">splice_site</span></code>, and attribute-less.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bed12</span></code> <strong>output changed</strong>: no trailing comma on <code class="docutils literal notranslate"><span class="pre">blockSizes</span></code>/<code class="docutils literal notranslate"><span class="pre">blockStarts</span></code>,
+<code class="docutils literal notranslate"><span class="pre">thin_featuretype</span></code> is honoured rather than ignored, and a feature with no
+CDS is now marked entirely <em>thick</em> rather than entirely thin.</p></li>
+<li><p><strong>Attribute values are percent-encoded on write.</strong> Reading
+<code class="docutils literal notranslate"><span class="pre">feature.attributes</span></code> and re-serializing used to drop the escaping, which
+could emit structurally invalid GFF3 when a value contained <code class="docutils literal notranslate"><span class="pre">;</span></code> or <code class="docutils literal notranslate"><span class="pre">,</span></code>. If
+you diff gffbase output against gffutils output you will now see them agree
+where they previously did not. Note that space and non-ASCII are
+deliberately <em>not</em> encoded, per the specification.</p></li>
+<li><p><strong>Raw SQL against</strong> <code class="docutils literal notranslate"><span class="pre">features</span></code> <strong>returns ENVELOPE coordinates</strong> for a
+discontinuous feature — <code class="docutils literal notranslate"><span class="pre">MIN(start)</span></code>, <code class="docutils literal notranslate"><span class="pre">MAX(end)</span></code> over its segments, not the
+coordinates of any one line. The <code class="docutils literal notranslate"><span class="pre">segments_all</span></code> view gives one row per
+physical input line, which is what a line-oriented consumer wants.</p></li>
+<li><p><strong>Coordinates can be NULL.</strong> A GFF row may carry <code class="docutils literal notranslate"><span class="pre">.</span></code> in columns 4 and 5, and
+gffbase preserves that rather than coercing to 0. Such features are not in
+coordinate space and are skipped by <code class="docutils literal notranslate"><span class="pre">region()</span></code> and the derived-feature
+methods.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type(f)</span> <span class="pre">is</span> <span class="pre">Feature</span></code> <strong>is no longer universally true.</strong> A fused feature is a
+<code class="docutils literal notranslate"><span class="pre">MultipartFeature</span></code>, which subclasses <code class="docutils literal notranslate"><span class="pre">Feature</span></code> and overrides none of the
+compatibility surface. <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> still holds.</p></li>
+<li><p><strong>Derived features carry a mode-dependent</strong> <code class="docutils literal notranslate"><span class="pre">source</span></code>. <code class="docutils literal notranslate"><span class="pre">gffutils_derived</span></code>
+under <code class="docutils literal notranslate"><span class="pre">mode=&quot;compat&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">gffbase_derived</span></code> under <code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code>. If you
+filter on that string, <code class="docutils literal notranslate"><span class="pre">db.derived_source</span></code> gives you the right one.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">order_by=&quot;score&quot;</span></code> <strong>now sorts numerically.</strong> Column 6 is stored as text,
+because GFF3 allows <code class="docutils literal notranslate"><span class="pre">.</span></code> there and the oracle stores it as text too. Sorting
+it as text ranked <code class="docutils literal notranslate"><span class="pre">10</span> <span class="pre">&lt;</span> <span class="pre">100</span> <span class="pre">&lt;</span> <span class="pre">1e3</span> <span class="pre">&lt;</span> <span class="pre">2.5</span> <span class="pre">&lt;</span> <span class="pre">9</span></code>, so “the highest-scoring
+features” came back wrong with nothing raised. gffbase applies
+<code class="docutils literal notranslate"><span class="pre">TRY_CAST(score</span> <span class="pre">AS</span> <span class="pre">DOUBLE)</span></code>; unscored features (<code class="docutils literal notranslate"><span class="pre">.</span></code>, or any non-numeric
+value) become NULL and sort last. <strong>gffutils has the same defect, so this is
+a deliberate divergence</strong> — a script that ranked by score against the oracle
+and got a plausible-looking answer will now get a different, correct one.</p></li>
+<li><p><strong>Query results have a total order.</strong> None of the sort columns is unique —
+features share a start, a featuretype, a score, and even <code class="docutils literal notranslate"><span class="pre">file_order</span></code>
+repeats, because GTF synthesis stamps a synthesized parent with the
+<code class="docutils literal notranslate"><span class="pre">MIN(file_order)</span></code> of its children. DuckDB sorts in parallel and does not
+preserve ties, so the same query over the same data could return tied rows in
+a different order run to run. Every ordered query now appends <code class="docutils literal notranslate"><span class="pre">id</span> <span class="pre">ASC</span></code> as a
+final tiebreak (ascending regardless of <code class="docutils literal notranslate"><span class="pre">reverse</span></code>, so <code class="docutils literal notranslate"><span class="pre">reverse=True</span></code>
+stays the exact reverse of the forward order). Results are reproducible;
+they are not necessarily in the order a previous run produced.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">order_by</span></code> <strong>accepts several keys, and</strong> <code class="docutils literal notranslate"><span class="pre">reverse</span></code> <strong>applies to all of them.</strong>
+A tuple or list, or a comma-separated string, now works — previously only a
+single name did: a tuple was interpolated as a Python repr, which DuckDB
+parses as a constant struct and so sorted by nothing at all, and a list
+raised <code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">unhashable</span> <span class="pre">type:</span> <span class="pre">'list'</span></code>. The whitelist also gained
+<code class="docutils literal notranslate"><span class="pre">id</span></code>, <code class="docutils literal notranslate"><span class="pre">file_order</span></code> and <code class="docutils literal notranslate"><span class="pre">length</span></code>. Note that gffutils appends the
+direction once, which in SQL reverses only the <em>last</em> key; gffbase applies it
+to every key, which is what a caller asking for descending order means. Since
+multi-key sorting did not work here at all before, there is no gffbase
+behaviour being broken.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">validation=&quot;ncbi&quot;</span></code> <strong>accepts an unquoted GTF attribute value.</strong> The GTF
+specification quotes values, but unquoted bare tokens are widespread in real
+files, and rejecting the line meant strict mode could not read annotation
+releases that every other tool accepts. A value is now accepted if it is
+properly double-quoted <em>or</em> is a bare token containing no whitespace, quote
+or semicolon; anything else — an unbalanced quote, an embedded unescaped
+quote, a value with spaces and no quotes — is still rejected. If you relied
+on <code class="docutils literal notranslate"><span class="pre">validation=&quot;ncbi&quot;</span></code> to reject unquoted GTF, it no longer does.</p></li>
+</ul>
+</section>
+<section id="command-line">
+<span id="migration-command-line"></span><h3>Command line<a class="headerlink" href="#command-line" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">gffutils-cli</span></code> becomes <code class="docutils literal notranslate"><span class="pre">gffbase</span></code>, with the same argument names. Seven of its
+commands work there; eleven work here. See <a class="reference external" href="https://khchao.com/gffbase/content/cli.html">the CLI reference</a> for
+the mapping, including the four upstream commands that raise on every
+invocation.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="migration-checklist">
+<span id="migration-7-migration-checklist"></span><h2>7. Migration checklist<a class="headerlink" href="#migration-checklist" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>☐ <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">gffbase</span></code></p></li>
+<li><p>☐ Replace <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">gffutils</span></code> with <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">gffbase</span> <span class="pre">as</span> <span class="pre">gffutils</span></code> (or
+use the new name directly).</p></li>
+<li><p>☐ Re-ingest your annotations (<code class="docutils literal notranslate"><span class="pre">create_db</span></code>) — old <code class="docutils literal notranslate"><span class="pre">.sqlite</span></code> files
+can still be read by legacy gffutils; they’re not GFFBase
+databases.</p></li>
+<li><p>☐ <strong>Audit your code for</strong> <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">x</span> <span class="pre">in</span> <span class="pre">ids:</span> <span class="pre">db.children(x,</span> <span class="pre">…)</span></code> <strong>loops
+and convert them to</strong> <code class="docutils literal notranslate"><span class="pre">db.children_batched(ids,</span> <span class="pre">format='arrow')</span></code><strong>.</strong>
+This is the only common change that requires user action.</p></li>
+<li><p>☐ If you have raw <code class="docutils literal notranslate"><span class="pre">db.execute(...)</span></code> SQL: use
+<code class="docutils literal notranslate"><span class="pre">features_compat</span></code> / <code class="docutils literal notranslate"><span class="pre">relations_compat</span></code> views, or move attribute
+filters onto the normalized <code class="docutils literal notranslate"><span class="pre">attributes</span></code> table.</p></li>
+<li><p>☐ Run your existing test suite. Everything else should be
+identical.</p></li>
+</ul>
+<p>If anything breaks, please open an issue at
+<a class="reference external" href="https://github.com/Kuanhao-Chao/gffbase/issues">https://github.com/Kuanhao-Chao/gffbase/issues</a> with a minimal
+reproducer.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="cookbooks.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Cookbooks</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="connections.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Connections &amp; concurrency</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a><ul>
+<li><a class="reference internal" href="#drop-in-compatibility-the-easy-part">1. Drop-in compatibility — the easy part</a><ul>
+<li><a class="reference internal" href="#the-one-addition-worth-making-straight-away-close-the-handle">The one addition worth making straight away: close the handle</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#what-you-gain-immediately-no-code-changes">2. What you gain immediately, no code changes</a></li>
+<li><a class="reference internal" href="#deep-dive-the-olap-vs-oltp-tradeoff">3. ⚠️ Deep-dive: the OLAP vs OLTP tradeoff</a><ul>
+<li><a class="reference internal" href="#vectorized-methods-at-a-glance">Vectorized methods at a glance</a></li>
+<li><a class="reference internal" href="#when-you-don-t-need-to-migrate-the-pattern">When you don’t need to migrate the pattern</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sql-compat-views-for-raw-execute-users">4. SQL-compat views (for raw <code class="docutils literal notranslate"><span class="pre">execute()</span></code> users)</a></li>
+<li><a class="reference internal" href="#sqlite-export-the-safety-valve">5. SQLite export — the safety valve</a></li>
+<li><a class="reference internal" href="#things-that-changed-small-list">6. Things that changed (small list)</a><ul>
+<li><a class="reference internal" href="#behaviour-changes-that-can-change-your-results">Behaviour changes that can change your results</a></li>
+<li><a class="reference internal" href="#command-line">Command line</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#migration-checklist">7. Migration checklist</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

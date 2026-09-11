@@ -1,0 +1,1157 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Analysis gallery" href="gallery.html"><link rel="prev" title="Compatibility &amp; strict modes" href="modes.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/content/usage_gallery.html">
+        <link rel="prefetch" href="../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Usage Gallery — every public method, copy-pasteable - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/docs/source/content/usage_gallery.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/edit/main/docs/source/content/usage_gallery.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="usage-gallery-every-public-method-copy-pasteable">
+<span id="usage-gallery-usage-gallery-every-public-method-copy-pasteable"></span><h1>Usage Gallery — every public method, copy-pasteable<a class="headerlink" href="#usage-gallery-every-public-method-copy-pasteable" title="Link to this heading">¶</a></h1>
+<p>This is the cheat sheet. Every snippet below is <strong>runnable as-is</strong>
+against any GFFBase database. The cookbook pages walk through specific
+biological corpora; this page covers the <strong>API surface in isolation</strong>
+so you can grep for the method name you need and lift the snippet.</p>
+<p>If you only read three sections, make them:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#usage-gallery-1-database-initialization"><span class="std std-ref">Database initialization</span></a></p></li>
+<li><p><a class="reference internal" href="#usage-gallery-5-vectorized-ml-api-the-ones-that-make-gffbase-fast"><span class="std std-ref">Vectorized ML API</span></a> — the zero-copy PyArrow path</p></li>
+<li><p><a class="reference internal" href="#usage-gallery-7-advanced-escape-hatches"><span class="std std-ref">Raw SQL escape hatch</span></a></p></li>
+</ul>
+<hr class="docutils" />
+<section id="database-initialization">
+<span id="usage-gallery-1-database-initialization"></span><h2>1. Database initialization<a class="headerlink" href="#database-initialization" title="Link to this heading">¶</a></h2>
+<section id="create-a-database-from-a-file-most-common">
+<span id="usage-gallery-11-create-a-database-from-a-file-most-common"></span><h3>1.1 Create a database from a file (most common)<a class="headerlink" href="#create-a-database-from-a-file-most-common" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span>
+
+<span class="c1"># GTF or GFF3, plain or gzipped — auto-detected from contents.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span>
+    <span class="s2">"annotation.gff3.gz"</span><span class="p">,</span>     <span class="c1"># input path</span>
+    <span class="s2">"annotation.duckdb"</span><span class="p">,</span>      <span class="c1"># output DB</span>
+    <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>               <span class="c1"># overwrite if it already exists</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">fmt</span><span class="p">)</span>                 <span class="c1"># 'gff3' or 'gtf'</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">count_features_of_type</span><span class="p">())</span>   <span class="c1"># total feature count</span>
+</pre></div>
+</div>
+</section>
+<section id="in-memory-database-no-disk-artifact">
+<span id="usage-gallery-12-in-memory-database-no-disk-artifact"></span><h3>1.2 In-memory database (no disk artifact)<a class="headerlink" href="#in-memory-database-no-disk-artifact" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span>
+
+<span class="c1"># Pass `:memory:` as the dbfn. The DB lives only for the lifetime</span>
+<span class="c1"># of the FeatureDB object — useful for small files in scripts.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"small_annotation.gff3"</span><span class="p">,</span> <span class="s2">":memory:"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="re-open-an-existing-database">
+<span id="usage-gallery-13-re-open-an-existing-database"></span><h3>1.3 Re-open an existing database<a class="headerlink" href="#re-open-an-existing-database" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureDB</span>
+
+<span class="c1"># Cheap: no re-ingest. Only the meta + index DDL is read at open.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">FeatureDB</span><span class="p">(</span><span class="s2">"annotation.duckdb"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">fmt</span><span class="p">)</span>                 <span class="c1"># 'gff3' / 'gtf' — the dialect it was built from</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">schema</span><span class="p">()[:</span><span class="mi">60</span><span class="p">])</span>       <span class="c1"># the SQL DDL, not the format</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">seqids</span><span class="p">())[:</span><span class="mi">5</span><span class="p">])</span>  <span class="c1"># first 5 chromosomes</span>
+</pre></div>
+</div>
+</section>
+<section id="ingest-from-a-string-instead-of-a-file">
+<span id="usage-gallery-14-ingest-from-a-string-instead-of-a-file"></span><h3>1.4 Ingest from a string instead of a file<a class="headerlink" href="#ingest-from-a-string-instead-of-a-file" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span>
+
+<span class="n">text</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"##gff-version 3</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"chr1</span><span class="se">\t</span><span class="s2">rs</span><span class="se">\t</span><span class="s2">gene</span><span class="se">\t</span><span class="s2">1</span><span class="se">\t</span><span class="s2">1000</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">+</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">ID=g1</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"chr1</span><span class="se">\t</span><span class="s2">rs</span><span class="se">\t</span><span class="s2">exon</span><span class="se">\t</span><span class="s2">100</span><span class="se">\t</span><span class="s2">200</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">+</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">ID=e1;Parent=g1</span><span class="se">\n</span><span class="s2">"</span>
+<span class="p">)</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="s2">":memory:"</span><span class="p">,</span> <span class="n">from_string</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="tune-ingest-with-max-depth-and-parallel-threads">
+<span id="usage-gallery-15-tune-ingest-with-max-depth-and-parallel-threads"></span><h3>1.5 Tune ingest with <code class="docutils literal notranslate"><span class="pre">max_depth</span></code> and parallel threads<a class="headerlink" href="#tune-ingest-with-max-depth-and-parallel-threads" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ingest</span><span class="p">,</span> <span class="n">FeatureDB</span>
+
+<span class="c1"># `max_depth` controls how deep the materialized closure goes.</span>
+<span class="c1"># Default is 8 — fine for GENCODE/Ensembl. Bump it if your hierarchy</span>
+<span class="c1"># is deeper (e.g. nested gene clusters, custom annotations).</span>
+<span class="n">con</span><span class="p">,</span> <span class="n">stats</span> <span class="o">=</span> <span class="n">ingest</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span>
+    <span class="s2">"deep_annotation.gff3"</span><span class="p">,</span>
+    <span class="n">dbfn</span><span class="o">=</span><span class="s2">"deep.duckdb"</span><span class="p">,</span>
+    <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>             <span class="c1"># default 8</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>       <span class="c1"># default 50k — bigger uses more RAM</span>
+<span class="p">)</span>
+<span class="n">con</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"closure rows: </span><span class="si">{</span><span class="n">stats</span><span class="o">.</span><span class="n">n_closure_rows</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Parallel ingest: DuckDB respects the `GFFBASE_THREADS` env var.</span>
+<span class="c1"># Set it BEFORE create_db() / ingest.from_file().</span>
+<span class="c1"># (`GFFUTILS2_THREADS` is still honoured as a deprecated alias, but the</span>
+<span class="c1"># new name wins when both are set.)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"GFFBASE_THREADS"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"8"</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">FeatureDB</span><span class="p">(</span><span class="s2">"deep.duckdb"</span><span class="p">)</span>
+<span class="n">db</span><span class="o">.</span><span class="n">set_pragmas</span><span class="p">({</span><span class="s2">"threads"</span><span class="p">:</span> <span class="mi">8</span><span class="p">})</span>       <span class="c1"># also tunable post-open</span>
+</pre></div>
+</div>
+</section>
+<section id="compat-vs-strict">
+<span id="usage-gallery-16-compat-vs-strict"></span><h3>1.6 <code class="docutils literal notranslate"><span class="pre">compat</span></code> vs <code class="docutils literal notranslate"><span class="pre">strict</span></code><a class="headerlink" href="#compat-vs-strict" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span><span class="p">,</span> <span class="n">GFFFormatError</span>
+
+<span class="c1"># The DEFAULT is mode="compat": it reads what gffutils reads, including the</span>
+<span class="c1"># specification violations real annotation files are full of.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"messy.gff3"</span><span class="p">,</span> <span class="s2">"messy.duckdb"</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># mode="strict" applies the full GFF3 specification and refuses.</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"messy.gff3"</span><span class="p">,</span> <span class="s2">"strict.duckdb"</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"strict"</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">GFFFormatError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"line </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">line_no</span><span class="si">}</span><span class="s2">: [</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strict</span></code> is also the only mode that fuses several lines sharing one <code class="docutils literal notranslate"><span class="pre">ID</span></code> into
+a single discontinuous feature — see <a class="reference internal" href="#usage-gallery-67-discontinuous-multipart-features"><span class="std std-ref">§6.7</span></a>.
+<code class="docutils literal notranslate"><span class="pre">on_multipart_conflict=</span></code> chooses between raising and splitting when those
+lines disagree on seqid, source, featuretype or strand.</p>
+<p>The two axes underneath (<code class="docutils literal notranslate"><span class="pre">validation=</span></code> selects the rule set, <code class="docutils literal notranslate"><span class="pre">on_error=</span></code>
+selects what a violation does) can be set independently; <code class="docutils literal notranslate"><span class="pre">mode=</span></code> is the
+shorthand for the two combinations that make sense together.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="standard-relational-queries">
+<span id="usage-gallery-2-standard-relational-queries"></span><h2>2. Standard relational queries<a class="headerlink" href="#standard-relational-queries" title="Link to this heading">¶</a></h2>
+<section id="children-walk-down-the-hierarchy">
+<span id="usage-gallery-21-children-walk-down-the-hierarchy"></span><h3>2.1 <code class="docutils literal notranslate"><span class="pre">children()</span></code> — walk down the hierarchy<a class="headerlink" href="#children-walk-down-the-hierarchy" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Direct children only (level=1):</span>
+<span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="s2">"ENSG00000139618"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">tx</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">tx</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span> <span class="n">tx</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">tx</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+
+<span class="c1"># All descendants (level=None):</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="s2">"ENSG00000139618"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Filter by featuretype:</span>
+<span class="n">exons</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="s2">"ENST00000380152"</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="parents-walk-up-the-hierarchy">
+<span id="usage-gallery-22-parents-walk-up-the-hierarchy"></span><h3>2.2 <code class="docutils literal notranslate"><span class="pre">parents()</span></code> — walk up the hierarchy<a class="headerlink" href="#parents-walk-up-the-hierarchy" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># All ancestors of an exon: its mRNA + the gene above it.</span>
+<span class="k">for</span> <span class="n">ancestor</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">parents</span><span class="p">(</span><span class="s2">"exon_id_42"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">ancestor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">ancestor</span><span class="o">.</span><span class="n">featuretype</span><span class="p">)</span>
+
+<span class="c1"># One level up only:</span>
+<span class="n">mrna</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">parents</span><span class="p">(</span><span class="s2">"exon_id_42"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="features-of-type-every-feature-of-a-kind">
+<span id="usage-gallery-23-features-of-type-every-feature-of-a-kind"></span><h3>2.3 <code class="docutils literal notranslate"><span class="pre">features_of_type()</span></code> — every feature of a kind<a class="headerlink" href="#features-of-type-every-feature-of-a-kind" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Stream every gene:</span>
+<span class="k">for</span> <span class="n">gene</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span><span class="s2">"gene"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+
+<span class="c1"># Multiple types at once:</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">([</span><span class="s2">"mRNA"</span><span class="p">,</span> <span class="s2">"lncRNA"</span><span class="p">,</span> <span class="s2">"miRNA"</span><span class="p">]):</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Region-clipped + ordered:</span>
+<span class="k">for</span> <span class="n">exon</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span>
+    <span class="s2">"exon"</span><span class="p">,</span>
+    <span class="n">limit</span><span class="o">=</span><span class="s2">"chr17:43044295-43125483"</span><span class="p">,</span>
+    <span class="n">order_by</span><span class="o">=</span><span class="s2">"start"</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+</section>
+<section id="random-access-by-id">
+<span id="usage-gallery-24-random-access-by-id"></span><h3>2.4 Random access by ID<a class="headerlink" href="#random-access-by-id" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Square-bracket lookup is the fastest single-feature access:</span>
+<span class="n">gene</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000139618"</span><span class="p">]</span>   <span class="c1"># raises FeatureNotFoundError on miss</span>
+
+<span class="c1"># Membership check:</span>
+<span class="k">if</span> <span class="s2">"ENSG00000139618"</span> <span class="ow">in</span> <span class="n">db</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Aggregate counts:</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">count_features_of_type</span><span class="p">())</span>          <span class="c1"># total</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">count_features_of_type</span><span class="p">(</span><span class="s2">"exon"</span><span class="p">))</span>    <span class="c1"># just exons</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">featuretypes</span><span class="p">()))</span>              <span class="c1"># distinct featuretype values</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+</section>
+<section id="spatial-queries">
+<span id="usage-gallery-3-spatial-queries"></span><h2>3. Spatial queries<a class="headerlink" href="#spatial-queries" title="Link to this heading">¶</a></h2>
+<section id="region-overlap-query">
+<span id="usage-gallery-31-region-overlap-query"></span><h3>3.1 <code class="docutils literal notranslate"><span class="pre">region()</span></code> — overlap query<a class="headerlink" href="#region-overlap-query" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># String form: "seqid:start-end"</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="s2">"chr17:43044295-43125483"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">end</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+<span class="c1"># Keyword form (equivalent):</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="n">seqid</span><span class="o">=</span><span class="s2">"chr17"</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">43_044_295</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">43_125_483</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Filter by featuretype during the spatial query:</span>
+<span class="k">for</span> <span class="n">exon</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span>
+    <span class="s2">"chr17:43044295-43125483"</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="c1"># Filter by strand:</span>
+<span class="n">plus_strand</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span>
+    <span class="n">seqid</span><span class="o">=</span><span class="s2">"chr1"</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1_000_000</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">2_000_000</span><span class="p">,</span>
+    <span class="n">strand</span><span class="o">=</span><span class="s2">"+"</span><span class="p">,</span>
+<span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="completely-within-true-strict-containment">
+<span id="usage-gallery-32-completely-withintrue-strict-containment"></span><h3>3.2 <code class="docutils literal notranslate"><span class="pre">completely_within=True</span></code> — strict containment<a class="headerlink" href="#completely-within-true-strict-containment" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default (overlap): any feature touching the region.</span>
+<span class="n">overlapping</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="s2">"chr1:100-200"</span><span class="p">))</span>
+
+<span class="c1"># Strict: only features whose [start, end] is fully inside [100, 200].</span>
+<span class="n">contained</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="s2">"chr1:100-200"</span><span class="p">,</span> <span class="n">completely_within</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="region-from-a-feature-object-re-use-coords">
+<span id="usage-gallery-33-region-from-a-feature-object-re-use-coords"></span><h3>3.3 Region from a Feature object (re-use coords)<a class="headerlink" href="#region-from-a-feature-object-re-use-coords" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gene</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000139618"</span><span class="p">]</span>
+<span class="c1"># Pull every feature that overlaps this gene's footprint:</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="n">gene</span><span class="p">):</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+</section>
+<section id="feature-object-fields-attributes-mutation-export">
+<span id="usage-gallery-4-feature-object-fields-attributes-mutation-export"></span><h2>4. Feature object — fields, attributes, mutation, export<a class="headerlink" href="#feature-object-fields-attributes-mutation-export" title="Link to this heading">¶</a></h2>
+<section id="standard-fields">
+<span id="usage-gallery-41-standard-fields"></span><h3>4.1 Standard fields<a class="headerlink" href="#standard-fields" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gene</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000139618"</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>   <span class="c1"># chr13 32315474 32400266</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">strand</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">score</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">chrom</span><span class="p">,</span> <span class="n">gene</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span>              <span class="c1"># aliases for seqid / end</span>
+</pre></div>
+</div>
+</section>
+<section id="dynamic-attributes-col-9">
+<span id="usage-gallery-42-dynamic-attributes-col-9"></span><h3>4.2 Dynamic attributes (col-9)<a class="headerlink" href="#dynamic-attributes-col-9" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># attributes is a multi-value mapping: each key maps to a list[str]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">attributes</span><span class="p">[</span><span class="s2">"gene_id"</span><span class="p">])</span>         <span class="c1"># ['ENSG00000139618']</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">attributes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"Note"</span><span class="p">,</span> <span class="p">[]))</span>    <span class="c1"># safe default</span>
+
+<span class="c1"># Multi-value example: NCBI Dbxref carries multiple cross-refs.</span>
+<span class="k">for</span> <span class="n">xref</span> <span class="ow">in</span> <span class="n">gene</span><span class="o">.</span><span class="n">attributes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"Dbxref"</span><span class="p">,</span> <span class="p">[]):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">xref</span><span class="p">)</span>
+
+<span class="c1"># Dict-style materialization (handy for JSON/CSV export):</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">attributes_dict</span><span class="p">())</span>
+<span class="c1"># {'ID': ['gene-...'], 'Name': ['BRCA2'], 'gene_biotype': ['protein_coding'], ...}</span>
+</pre></div>
+</div>
+</section>
+<section id="mutate-write-back">
+<span id="usage-gallery-43-mutate-write-back"></span><h3>4.3 Mutate + write back<a class="headerlink" href="#mutate-write-back" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Edit in place — attributes is a mutable mapping.</span>
+<span class="n">gene</span><span class="o">.</span><span class="n">attributes</span><span class="p">[</span><span class="s2">"custom_tag"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"my_pipeline:v1"</span><span class="p">]</span>
+<span class="n">gene</span><span class="o">.</span><span class="n">start</span> <span class="o">=</span> <span class="n">gene</span><span class="o">.</span><span class="n">start</span> <span class="o">-</span> <span class="mi">1000</span>   <span class="c1"># extend by 1 kb upstream</span>
+<span class="n">gene</span><span class="o">.</span><span class="n">score</span> <span class="o">=</span> <span class="s2">"0.95"</span>
+
+<span class="c1"># Persist the change back to the DB:</span>
+<span class="n">db</span><span class="o">.</span><span class="n">update</span><span class="p">([</span><span class="n">gene</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="export-to-a-gff-gtf-line">
+<span id="usage-gallery-44-export-to-a-gffgtf-line"></span><h3>4.4 Export to a GFF/GTF line<a class="headerlink" href="#export-to-a-gff-gtf-line" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># str(feature) emits a tab-separated GFF line, ready for I/O.</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">gene</span><span class="p">))</span>
+<span class="c1"># chr13  HAVANA  gene  32315474  32400266  .  +  .  ID=...</span>
+
+<span class="c1"># bytes / file-write friendly:</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">"out.gff3"</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fout</span><span class="p">:</span>
+    <span class="n">fout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">gene</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="sequence-extraction-fasta">
+<span id="usage-gallery-45-sequence-extraction-fasta"></span><h3>4.5 Sequence extraction (FASTA)<a class="headerlink" href="#sequence-extraction-fasta" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># pyfaidx-style mapping (fasta[seqid][start:end]) works:</span>
+<span class="n">fasta</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"chr1"</span><span class="p">:</span> <span class="s2">"AAAA"</span> <span class="o">+</span> <span class="s2">"ACGT"</span> <span class="o">*</span> <span class="mi">100_000</span><span class="p">}</span>
+<span class="n">seq</span> <span class="o">=</span> <span class="n">gene</span><span class="o">.</span><span class="n">sequence</span><span class="p">(</span><span class="n">fasta</span><span class="p">)</span>              <span class="c1"># forward</span>
+<span class="n">rev</span> <span class="o">=</span> <span class="n">gene</span><span class="o">.</span><span class="n">sequence</span><span class="p">(</span><span class="n">fasta</span><span class="p">,</span> <span class="n">use_strand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>   <span class="c1"># rev-comp on '-'</span>
+</pre></div>
+</div>
+</section>
+<section id="dict-shape-representation-for-downstream-tools">
+<span id="usage-gallery-46-dict-shape-representation-for-downstream-tools"></span><h3>4.6 Dict-shape representation (for downstream tools)<a class="headerlink" href="#dict-shape-representation-for-downstream-tools" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Construct your own dict if you want a JSON-friendly shape.</span>
+<span class="n">record</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"seqid"</span><span class="p">:</span> <span class="n">gene</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span>
+    <span class="s2">"start"</span><span class="p">:</span> <span class="n">gene</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="s2">"end"</span><span class="p">:</span> <span class="n">gene</span><span class="o">.</span><span class="n">end</span><span class="p">,</span>
+    <span class="s2">"strand"</span><span class="p">:</span> <span class="n">gene</span><span class="o">.</span><span class="n">strand</span><span class="p">,</span> <span class="s2">"featuretype"</span><span class="p">:</span> <span class="n">gene</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span>
+    <span class="s2">"attributes"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">attributes</span><span class="p">),</span>   <span class="c1"># {key: [values]}</span>
+<span class="p">}</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span><span class="p">;</span> <span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+</section>
+<section id="vectorized-ml-api-the-ones-that-make-gffbase-fast">
+<span id="usage-gallery-5-vectorized-ml-api-the-ones-that-make-gffbase-fast"></span><h2>5. Vectorized ML API — the ones that make GFFBase fast<a class="headerlink" href="#vectorized-ml-api-the-ones-that-make-gffbase-fast" title="Link to this heading">¶</a></h2>
+<p>The headline win. <strong>One</strong> SQL query per call, results land in a
+zero-copy <code class="docutils literal notranslate"><span class="pre">pyarrow.Table</span></code> (or <code class="docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code> / <code class="docutils literal notranslate"><span class="pre">polars.DataFrame</span></code>)
+without ever instantiating a Python <code class="docutils literal notranslate"><span class="pre">Feature</span></code> object.</p>
+<section id="children-batched-pyarrow">
+<span id="usage-gallery-51-children-batched-pyarrow"></span><h3>5.1 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → PyArrow<a class="headerlink" href="#children-batched-pyarrow" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Pull every exon for 50 000 transcripts in one call.</span>
+<span class="n">transcript_ids</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ENST00000380152"</span><span class="p">,</span> <span class="s2">"ENST00000544455"</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>   <span class="c1"># any size</span>
+
+<span class="n">table</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span>
+    <span class="n">transcript_ids</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">,</span>     <span class="c1"># default</span>
+<span class="p">)</span>
+<span class="c1"># Columns: anchor, descendant_id, seqid, source, featuretype,</span>
+<span class="c1">#          start, end, score, strand, frame, file_order, depth.</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">num_rows</span><span class="p">,</span> <span class="s2">"exon rows"</span><span class="p">)</span>
+
+<span class="c1"># Hand off to PyTorch / JAX without copying.</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="n">starts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"start"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="children-batched-pandas">
+<span id="usage-gallery-52-children-batched-pandas"></span><h3>5.2 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → pandas<a class="headerlink" href="#children-batched-pandas" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span>
+    <span class="n">transcript_ids</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">"df"</span><span class="p">,</span>        <span class="c1"># pandas.DataFrame</span>
+<span class="p">)</span>
+
+<span class="c1"># Group back to per-transcript exon counts via the `anchor` column —</span>
+<span class="c1"># no need to re-issue N queries:</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"anchor"</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="children-batched-polars">
+<span id="usage-gallery-53-children-batched-polars"></span><h3>5.3 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → polars<a class="headerlink" href="#children-batched-polars" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Polars is optional: `pip install polars`</span>
+<span class="n">plframe</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span>
+    <span class="n">transcript_ids</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">"polars"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">plframe</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="s2">"anchor"</span><span class="p">)</span><span class="o">.</span><span class="n">len</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="parents-batched-symmetric-upward-walk">
+<span id="usage-gallery-54-parents-batched-symmetric-upward-walk"></span><h3>5.4 <code class="docutils literal notranslate"><span class="pre">parents_batched()</span></code> — symmetric upward walk<a class="headerlink" href="#parents-batched-symmetric-upward-walk" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># For each exon id, get its mRNA + gene ancestors in one query.</span>
+<span class="n">exon_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+    <span class="s2">"SELECT id FROM features WHERE featuretype='exon' LIMIT 50000"</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()]</span>
+
+<span class="n">ancestors</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">parents_batched</span><span class="p">(</span><span class="n">exon_ids</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ancestors</span><span class="o">.</span><span class="n">column_names</span><span class="p">)</span>
+<span class="c1"># ['anchor', 'descendant_id', ...] — 'anchor' is the input id;</span>
+<span class="c1"># 'descendant_id' here is actually the ancestor (kept for column-</span>
+<span class="c1"># stability across the children/parents directions).</span>
+</pre></div>
+</div>
+</section>
+<section id="region-batched-bulk-spatial-overlap">
+<span id="usage-gallery-55-region-batched-bulk-spatial-overlap"></span><h3>5.5 <code class="docutils literal notranslate"><span class="pre">region_batched()</span></code> — bulk spatial overlap<a class="headerlink" href="#region-batched-bulk-spatial-overlap" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Common ML pattern: "for each ATAC-seq peak in this BED file,</span>
+<span class="c1"># find every overlapping CDS." One SQL query.</span>
+<span class="n">peaks</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">"chr1"</span><span class="p">,</span> <span class="mi">100_000</span><span class="p">,</span> <span class="mi">110_000</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"chr1"</span><span class="p">,</span> <span class="mi">200_000</span><span class="p">,</span> <span class="mi">210_000</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"chr2"</span><span class="p">,</span> <span class="mi">1_500_000</span><span class="p">,</span> <span class="mi">1_600_000</span><span class="p">),</span>
+    <span class="c1"># ... up to millions of regions</span>
+<span class="p">]</span>
+
+<span class="n">overlaps</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">region_batched</span><span class="p">(</span><span class="n">peaks</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"CDS"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">)</span>
+<span class="c1"># Columns: query_idx, query_seqid, query_start, query_end,</span>
+<span class="c1">#          id, seqid, source, featuretype, start, end, score,</span>
+<span class="c1">#          strand, frame, file_order.</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">overlaps</span><span class="o">.</span><span class="n">num_rows</span><span class="p">,</span> <span class="s2">"CDS overlaps across"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">peaks</span><span class="p">),</span> <span class="s2">"peaks"</span><span class="p">)</span>
+
+<span class="c1"># `query_idx` lets you rebuild per-peak hits without an N-query loop:</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
+<span class="n">hits_per_peak</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">overlaps</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"query_idx"</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="region-batched-completely-within-flag">
+<span id="usage-gallery-56-region-batched-completely-within-flag"></span><h3>5.6 <code class="docutils literal notranslate"><span class="pre">region_batched()</span></code> — <code class="docutils literal notranslate"><span class="pre">completely_within</span></code> flag<a class="headerlink" href="#region-batched-completely-within-flag" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">contained</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">region_batched</span><span class="p">(</span>
+    <span class="n">peaks</span><span class="p">,</span>
+    <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="n">completely_within</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>    <span class="c1"># only fully-contained features</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+</section>
+<section id="synthesis-convenience-methods">
+<span id="usage-gallery-6-synthesis-convenience-methods"></span><h2>6. Synthesis &amp; convenience methods<a class="headerlink" href="#synthesis-convenience-methods" title="Link to this heading">¶</a></h2>
+<section id="interfeatures-derive-intergenic-regions">
+<span id="usage-gallery-61-interfeatures-derive-intergenic-regions"></span><h3>6.1 <code class="docutils literal notranslate"><span class="pre">interfeatures()</span></code> — derive intergenic regions<a class="headerlink" href="#interfeatures-derive-intergenic-regions" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Yield "gap" features sitting between consecutive features.</span>
+<span class="n">genes</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span><span class="s2">"gene"</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span> <span class="n">g</span><span class="o">.</span><span class="n">start</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">gap</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">interfeatures</span><span class="p">(</span><span class="n">genes</span><span class="p">,</span> <span class="n">new_featuretype</span><span class="o">=</span><span class="s2">"intergenic"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">gap</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span> <span class="n">gap</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">gap</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="merge-merge-all-collapse-overlapping-features">
+<span id="usage-gallery-62-merge-merge-all-collapse-overlapping-features"></span><h3>6.2 <code class="docutils literal notranslate"><span class="pre">merge()</span></code> / <code class="docutils literal notranslate"><span class="pre">merge_all()</span></code> — collapse overlapping features<a class="headerlink" href="#merge-merge-all-collapse-overlapping-features" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">merge_criteria</span> <span class="k">as</span> <span class="n">mc</span>
+
+<span class="n">exons_chr1</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span><span class="s2">"exon"</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="s2">"chr1"</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">merged</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">exons_chr1</span><span class="p">,</span> <span class="n">merge_criteria</span><span class="o">=</span><span class="p">(</span><span class="n">mc</span><span class="o">.</span><span class="n">overlap_end_inclusive</span><span class="p">,)):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">merged</span><span class="o">.</span><span class="n">end</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">children</span><span class="p">))</span>
+
+<span class="c1"># Whole-DB sweep. NOTE: merge_all returns a LIST and WRITES the merged</span>
+<span class="c1"># features back to the database -- it always documented that it did, and as</span>
+<span class="c1"># of 0.2.0 it actually does. Only genuine merges are returned; a feature that</span>
+<span class="c1"># merged with nothing is left alone.</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">merge_all</span><span class="p">(</span><span class="n">featuretypes_groups</span><span class="o">=</span><span class="p">(</span><span class="s2">"exon"</span><span class="p">,))</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">merged</span><span class="p">)</span><span class="si">}</span><span class="s2"> merged features written back"</span><span class="p">)</span>
+
+<span class="c1"># The components stay, linked to the merged feature by a Parent attribute...</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">merge_all</span><span class="p">(</span><span class="n">featuretypes_groups</span><span class="o">=</span><span class="p">(</span><span class="s2">"exon"</span><span class="p">,),</span> <span class="n">exclude_components</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="c1"># ...or are deleted outright.</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">merge_all</span><span class="p">(</span><span class="n">featuretypes_groups</span><span class="o">=</span><span class="p">(</span><span class="s2">"exon"</span><span class="p">,),</span> <span class="n">exclude_components</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="create-introns-create-splice-sites">
+<span id="usage-gallery-63-create-introns-create-splice-sites"></span><h3>6.3 <code class="docutils literal notranslate"><span class="pre">create_introns()</span></code> / <code class="docutils literal notranslate"><span class="pre">create_splice_sites()</span></code><a class="headerlink" href="#create-introns-create-splice-sites" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Introns are computed PER TRANSCRIPT: with grandparent_featuretype="gene",</span>
+<span class="c1"># gffbase descends one level first, so a multi-isoform gene yields each</span>
+<span class="c1"># isoform's introns rather than gaps spanning transcript boundaries.</span>
+<span class="n">introns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">create_introns</span><span class="p">(</span><span class="n">exon_featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+                                 <span class="n">grandparent_featuretype</span><span class="o">=</span><span class="s2">"gene"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">introns</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> introns"</span><span class="p">)</span>
+
+<span class="c1"># Or anchor directly on the transcript.</span>
+<span class="n">introns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">create_introns</span><span class="p">(</span><span class="n">grandparent_featuretype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                 <span class="n">parent_featuretype</span><span class="o">=</span><span class="s2">"mRNA"</span><span class="p">))</span>
+
+<span class="c1"># Splice sites are 2 bp -- a dinucleotide -- and typed by their position in</span>
+<span class="c1"># the transcript: the left site of a minus-strand transcript is its 3' site.</span>
+<span class="n">sites</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">create_splice_sites</span><span class="p">(</span><span class="n">exon_featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">({</span><span class="n">s</span><span class="o">.</span><span class="n">featuretype</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sites</span><span class="p">})</span>
+<span class="c1"># {'five_prime_cis_splice_site', 'three_prime_cis_splice_site'}</span>
+</pre></div>
+</div>
+</section>
+<section id="bed12-ucsc-track-export">
+<span id="usage-gallery-64-bed12-ucsc-track-export"></span><h3>6.4 <code class="docutils literal notranslate"><span class="pre">bed12()</span></code> — UCSC track export<a class="headerlink" href="#bed12-ucsc-track-export" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Emit a BED12 line for each transcript.</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">"transcripts.bed"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fout</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span><span class="s2">"transcript"</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="s2">"chr1"</span><span class="p">):</span>
+        <span class="n">fout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">bed12</span><span class="p">(</span><span class="n">tx</span><span class="p">,</span> <span class="n">name_field</span><span class="o">=</span><span class="s2">"transcript_id"</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># `thick` is the translated span, taken from CDS children by default. Name the</span>
+<span class="c1"># UNtranslated parts instead with thin_featuretype; the two are mutually</span>
+<span class="c1"># exclusive and passing both raises.</span>
+<span class="n">line</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">bed12</span><span class="p">(</span><span class="n">tx</span><span class="p">,</span> <span class="n">thin_featuretype</span><span class="o">=</span><span class="p">[</span><span class="s2">"five_prime_UTR"</span><span class="p">,</span> <span class="s2">"three_prime_UTR"</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>No trailing comma is emitted on <code class="docutils literal notranslate"><span class="pre">blockSizes</span></code> / <code class="docutils literal notranslate"><span class="pre">blockStarts</span></code>, and a feature
+with no CDS children is marked entirely thick rather than entirely thin –
+both were wrong before 0.2.0 and both made every line differ from what
+gffutils writes.</p>
+</section>
+<section id="children-bp-total-length-of-nested-children">
+<span id="usage-gallery-65-children-bp-total-length-of-nested-children"></span><h3>6.5 <code class="docutils literal notranslate"><span class="pre">children_bp()</span></code> — total length of nested children<a class="headerlink" href="#children-bp-total-length-of-nested-children" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Total exonic basepairs in a gene.</span>
+<span class="n">gene</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000139618"</span><span class="p">]</span>
+<span class="n">total_bp</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_bp</span><span class="p">(</span><span class="n">gene</span><span class="p">,</span> <span class="n">child_featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">total_bp</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> bp of exonic sequence"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="iter-by-parent-childs-yield-each-parent-its-children">
+<span id="usage-gallery-66-iter-by-parent-childs-yield-each-parent-its-children"></span><h3>6.6 <code class="docutils literal notranslate"><span class="pre">iter_by_parent_childs()</span></code> — yield each parent + its children<a class="headerlink" href="#iter-by-parent-childs-yield-each-parent-its-children" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Stream gene + all-its-descendants groups in one pass.</span>
+<span class="k">for</span> <span class="n">gene</span><span class="p">,</span> <span class="o">*</span><span class="n">children</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">iter_by_parent_childs</span><span class="p">(</span><span class="n">featuretype</span><span class="o">=</span><span class="s2">"gene"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">gene</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">children</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> child features"</span><span class="p">)</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+<section id="discontinuous-multipart-features">
+<span id="usage-gallery-67-discontinuous-multipart-features"></span><h3>6.7 Discontinuous (multipart) features<a class="headerlink" href="#discontinuous-multipart-features" title="Link to this heading">¶</a></h3>
+<p>Several GFF3 lines may share one <code class="docutils literal notranslate"><span class="pre">ID</span></code> — a CDS interrupted by a frameshift, or
+NCBI RefSeq’s split CDS convention. Under <code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code> they are one logical
+feature.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"refseq.gff3"</span><span class="p">,</span> <span class="s2">"refseq.duckdb"</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"strict"</span><span class="p">)</span>
+
+<span class="n">cds</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="s2">"cds-NP_000001.1"</span><span class="p">]</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">cds</span><span class="p">)</span>                 <span class="c1"># envelope span, first start to last end</span>
+<span class="n">cds</span><span class="o">.</span><span class="n">covered_length</span>       <span class="c1"># the same, MINUS the gaps</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">cds</span><span class="o">.</span><span class="n">segments</span><span class="p">)</span>        <span class="c1"># the physical input lines</span>
+<span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">frame</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">cds</span><span class="o">.</span><span class="n">segments</span><span class="p">]</span>   <span class="c1"># per-segment phase, the reason this exists</span>
+
+<span class="n">cds</span><span class="o">.</span><span class="n">to_lines</span><span class="p">()</span>           <span class="c1"># every line back, byte for byte</span>
+</pre></div>
+</div>
+<p>An ordinary feature is its own sole segment, so <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">s</span> <span class="pre">in</span> <span class="pre">f.segments</span></code> works
+without asking whether the feature is discontinuous first.</p>
+<p>The batched APIs can emit one row per physical line instead of per feature:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">exons</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">,</span> <span class="n">explode_segments</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>That is offered on the tabular APIs only, deliberately: a <code class="docutils literal notranslate"><span class="pre">FeatureSegment</span></code>
+leaking out of <code class="docutils literal notranslate"><span class="pre">region()</span></code> or <code class="docutils literal notranslate"><span class="pre">children()</span></code> would confuse legacy consumers.</p>
+</section>
+<section id="validating-a-database">
+<span id="usage-gallery-68-validating-a-database"></span><h3>6.8 Validating a database<a class="headerlink" href="#validating-a-database" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">report</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>          <span class="c1"># fast structural invariants</span>
+<span class="n">report</span><span class="o">.</span><span class="n">ok</span>                       <span class="c1"># False if any ERROR-severity check failed</span>
+<span class="n">report</span><span class="o">.</span><span class="n">errors</span><span class="p">,</span> <span class="n">report</span><span class="o">.</span><span class="n">warnings</span>  <span class="c1"># separate: an error is a broken invariant,</span>
+                                <span class="c1"># a warning is legal but suspect</span>
+
+<span class="n">full</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="s2">"full"</span><span class="p">)</span>  <span class="c1"># adds recursive closure/content checks</span>
+</pre></div>
+</div>
+<p>Run automatically at the end of a strict-mode ingest, and available from the
+command line as <code class="docutils literal notranslate"><span class="pre">gffbase</span> <span class="pre">validate</span> <span class="pre">--strict</span></code>.</p>
+</section>
+<section id="upgrading-a-v1-database">
+<span id="usage-gallery-69-upgrading-a-v1-database"></span><h3>6.9 Upgrading a v1 database<a class="headerlink" href="#upgrading-a-v1-database" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase.migrate</span><span class="w"> </span><span class="kn">import</span> <span class="n">coalesce_multipart</span><span class="p">,</span> <span class="n">migrate_v1_to_v2</span>
+
+<span class="n">migrate_v1_to_v2</span><span class="p">(</span><span class="s2">"old.duckdb"</span><span class="p">)</span>     <span class="c1"># structural; changes no query result</span>
+<span class="n">coalesce_multipart</span><span class="p">(</span><span class="n">db</span><span class="p">)</span>             <span class="c1"># opt-in; DOES change results</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">FeatureDB(...,</span> <span class="pre">upgrade=&quot;auto&quot;)</span></code> runs the first of these for you when it opens
+a v1 database — which is only acceptable because it is structural.</p>
+</section>
+</section>
+<section id="advanced-escape-hatches">
+<span id="usage-gallery-7-advanced-escape-hatches"></span><h2>7. Advanced / escape hatches<a class="headerlink" href="#advanced-escape-hatches" title="Link to this heading">¶</a></h2>
+<section id="gffwriter-emit-new-annotation-files">
+<span id="usage-gallery-71-gffwriter-emit-new-annotation-files"></span><h3>7.1 <code class="docutils literal notranslate"><span class="pre">GFFWriter</span></code> — emit new annotation files<a class="headerlink" href="#gffwriter-emit-new-annotation-files" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">GFFWriter</span>
+
+<span class="k">with</span> <span class="n">GFFWriter</span><span class="p">(</span><span class="s2">"output.gff3"</span><span class="p">)</span> <span class="k">as</span> <span class="n">w</span><span class="p">:</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">write_rec</span><span class="p">(</span><span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000139618"</span><span class="p">])</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">write_recs</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">features_of_type</span><span class="p">(</span><span class="s2">"transcript"</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="s2">"chr13"</span><span class="p">))</span>
+
+    <span class="c1"># Convenience helpers for hierarchy-walking output:</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">write_gene_recs</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"ENSG00000139618"</span><span class="p">)</span>          <span class="c1"># gene + all descendants</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">write_mRNA_children</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"ENST00000380152"</span><span class="p">)</span>      <span class="c1"># mRNA + level-1 children</span>
+    <span class="n">w</span><span class="o">.</span><span class="n">write_exon_children</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"exon_id_42"</span><span class="p">)</span>           <span class="c1"># exon + level-1 children</span>
+</pre></div>
+</div>
+</section>
+<section id="iterate-a-raw-file-without-building-a-database">
+<span id="usage-gallery-72-iterate-a-raw-file-without-building-a-database"></span><h3>7.2 Iterate a raw file without building a database<a class="headerlink" href="#iterate-a-raw-file-without-building-a-database" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_gff</span><span class="p">,</span> <span class="n">GFFFormatError</span>
+
+<span class="c1"># Stream parser — never materializes a DB.</span>
+<span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">parse_gff</span><span class="p">(</span><span class="s2">"annotation.gff3"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">rec</span><span class="o">.</span><span class="n">seqid</span><span class="p">,</span> <span class="n">rec</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">rec</span><span class="o">.</span><span class="n">end</span><span class="p">,</span> <span class="n">rec</span><span class="o">.</span><span class="n">attributes_pairs</span><span class="p">)</span>
+
+<span class="c1"># Non-strict mode: malformed lines are surfaced as warnings, valid</span>
+<span class="c1"># records still flow.</span>
+<span class="n">it</span> <span class="o">=</span> <span class="n">parse_gff</span><span class="p">(</span><span class="s2">"messy.gff3"</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+    <span class="n">process</span><span class="p">(</span><span class="n">rec</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">it</span><span class="o">.</span><span class="n">warnings</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">w</span><span class="p">[</span><span class="s2">"line_no"</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="s2">"kind"</span><span class="p">],</span> <span class="n">w</span><span class="p">[</span><span class="s2">"message"</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="dataiterator-legacy-compatible-streaming-reader">
+<span id="usage-gallery-73-dataiterator-legacy-compatible-streaming-reader"></span><h3>7.3 <code class="docutils literal notranslate"><span class="pre">DataIterator</span></code> — legacy-compatible streaming reader<a class="headerlink" href="#dataiterator-legacy-compatible-streaming-reader" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataIterator</span>
+
+<span class="c1"># Read a whole file or a single string of GFF3 records.</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">DataIterator</span><span class="p">(</span><span class="s2">"annotation.gff3"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">attributes_dict</span><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">DataIterator</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">)</span>   <span class="c1"># discovers the legacy API verbatim</span>
+</pre></div>
+</div>
+</section>
+<section id="parse-bytes-drive-the-parser-from-in-memory-bytes">
+<span id="usage-gallery-74-parse-bytes-drive-the-parser-from-in-memory-bytes"></span><h3>7.4 <code class="docutils literal notranslate"><span class="pre">parse_bytes()</span></code> — drive the parser from in-memory bytes<a class="headerlink" href="#parse-bytes-drive-the-parser-from-in-memory-bytes" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_bytes</span>
+
+<span class="n">raw</span> <span class="o">=</span> <span class="p">(</span><span class="sa">b</span><span class="s2">"##gff-version 3</span><span class="se">\n</span><span class="s2">"</span>
+       <span class="sa">b</span><span class="s2">"chr1</span><span class="se">\t</span><span class="s2">rs</span><span class="se">\t</span><span class="s2">exon</span><span class="se">\t</span><span class="s2">1</span><span class="se">\t</span><span class="s2">100</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">+</span><span class="se">\t</span><span class="s2">.</span><span class="se">\t</span><span class="s2">ID=e1</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">parse_bytes</span><span class="p">(</span><span class="n">raw</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">rec</span><span class="o">.</span><span class="n">featuretype</span><span class="p">,</span> <span class="n">rec</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">rec</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="execute-raw-sql-escape-hatch">
+<span id="usage-gallery-75-execute-raw-sql-escape-hatch"></span><h3>7.5 <code class="docutils literal notranslate"><span class="pre">execute()</span></code> — raw SQL escape hatch<a class="headerlink" href="#execute-raw-sql-escape-hatch" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Drop into the underlying DuckDB connection for anything the API</span>
+<span class="c1"># doesn't expose. Returns the same cursor DuckDB-Python would.</span>
+<span class="n">rows</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"""</span>
+<span class="s2">    SELECT f.id, f.seqid, f.start, f."end"</span>
+<span class="s2">    FROM features f</span>
+<span class="s2">    JOIN attributes a ON a.feature_id = f.id</span>
+<span class="s2">    WHERE f.featuretype = 'gene'</span>
+<span class="s2">      AND a.key = 'gene_biotype'</span>
+<span class="s2">      AND a.value = 'protein_coding'</span>
+<span class="s2">    ORDER BY f.seqid, f.start</span>
+<span class="s2">"""</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> protein-coding genes"</span><span class="p">)</span>
+
+<span class="c1"># Back-compat: queries written for legacy gffutils' SQLite schema can</span>
+<span class="c1"># hit `features_compat` and `relations_compat` views verbatim.</span>
+<span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SELECT * FROM features_compat WHERE seqid = 'chr1' LIMIT 5"</span>
+<span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="analyze-set-pragmas-duckdb-tuning">
+<span id="usage-gallery-76-analyze-set-pragmas-duckdb-tuning"></span><h3>7.6 <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> + <code class="docutils literal notranslate"><span class="pre">set_pragmas()</span></code> — DuckDB tuning<a class="headerlink" href="#analyze-set-pragmas-duckdb-tuning" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># After heavy mutation (delete/update), run ANALYZE so the planner</span>
+<span class="c1"># picks the right join order. Idempotent — cheap to call.</span>
+<span class="n">db</span><span class="o">.</span><span class="n">analyze</span><span class="p">()</span>
+
+<span class="c1"># Set DuckDB pragmas. Anything DuckDB rejects is silently skipped</span>
+<span class="c1"># so legacy SQLite-style pragmas are safe to pass through.</span>
+<span class="n">db</span><span class="o">.</span><span class="n">set_pragmas</span><span class="p">({</span>
+    <span class="s2">"threads"</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="s2">"memory_limit"</span><span class="p">:</span> <span class="s2">"4GB"</span><span class="p">,</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="delete-update-add-relation">
+<span id="usage-gallery-77-delete-update-add-relation"></span><h3>7.7 <code class="docutils literal notranslate"><span class="pre">delete()</span></code> / <code class="docutils literal notranslate"><span class="pre">update()</span></code> / <code class="docutils literal notranslate"><span class="pre">add_relation()</span></code><a class="headerlink" href="#delete-update-add-relation" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Remove features. Accepts ids, Feature objects, or another FeatureDB.</span>
+<span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">([</span><span class="s2">"ENSG00000139618"</span><span class="p">])</span>
+<span class="n">db</span><span class="o">.</span><span class="n">delete</span><span class="p">([</span><span class="n">db</span><span class="p">[</span><span class="s2">"ENSG00000141510"</span><span class="p">]])</span>      <span class="c1"># by Feature</span>
+<span class="c1"># db.delete(other_feature_db)           # delete every id present in `other`</span>
+
+<span class="c1"># Insert new features.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
+<span class="n">new_exon</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span>
+    <span class="n">seqid</span><span class="o">=</span><span class="s2">"chr1"</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">"custom"</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">strand</span><span class="o">=</span><span class="s2">"+"</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"."</span><span class="p">,</span>
+    <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"ID"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"custom_exon_1"</span><span class="p">],</span> <span class="s2">"Parent"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"ENST00000000000"</span><span class="p">]},</span>
+<span class="p">)</span>
+<span class="n">db</span><span class="o">.</span><span class="n">update</span><span class="p">([</span><span class="n">new_exon</span><span class="p">])</span>
+
+<span class="c1"># Wire two existing features into a parent/child edge.</span>
+<span class="n">db</span><span class="o">.</span><span class="n">add_relation</span><span class="p">(</span><span class="s2">"ENSG00000139618"</span><span class="p">,</span> <span class="s2">"custom_exon_1"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="export-sqlite-produce-a-legacy-gffutils-readable-file">
+<span id="usage-gallery-78-export-sqlite-produce-a-legacy-gffutils-readable-file"></span><h3>7.8 <code class="docutils literal notranslate"><span class="pre">export_sqlite()</span></code> — produce a legacy-gffutils-readable file<a class="headerlink" href="#export-sqlite-produce-a-legacy-gffutils-readable-file" title="Link to this heading">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_sqlite</span>
+
+<span class="c1"># Materialize the GFFBase data into a SQLite file with the legacy</span>
+<span class="c1"># `features` / `relations` schema. Downstream tools that only know</span>
+<span class="c1"># how to read `gffutils.FeatureDB("annotation.sqlite")` work</span>
+<span class="c1"># unchanged.</span>
+<span class="n">out_path</span> <span class="o">=</span> <span class="n">export_sqlite</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s2">"annotation.sqlite"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
+
+<span class="c1"># Round-trip:</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gffutils</span>                         <span class="c1"># pip install gffutils</span>
+<span class="c1"># The export already contains SQLite ANALYZE statistics, so the legacy</span>
+<span class="c1"># reader opens it without the "database has not had ANALYZE" warning.</span>
+<span class="n">legacy</span> <span class="o">=</span> <span class="n">gffutils</span><span class="o">.</span><span class="n">FeatureDB</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">legacy</span><span class="o">.</span><span class="n">count_features_of_type</span><span class="p">())</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+</section>
+</section>
+<section id="putting-it-all-together-end-to-end-ml-pipeline">
+<span id="usage-gallery-8-putting-it-all-together-end-to-end-ml-pipeline"></span><h2>8. Putting it all together — end-to-end ML pipeline<a class="headerlink" href="#putting-it-all-together-end-to-end-ml-pipeline" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="c1"># 1. Ingest once.</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">create_db</span><span class="p">(</span>
+    <span class="s2">"gencode.v49.basic.annotation.gtf.gz"</span><span class="p">,</span>
+    <span class="s2">"gencode.duckdb"</span><span class="p">,</span>
+    <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># 2. Pick the transcripts you care about (any predicate).</span>
+<span class="n">target_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"""</span>
+<span class="s2">    SELECT f.id</span>
+<span class="s2">    FROM features f</span>
+<span class="s2">    JOIN attributes a ON a.feature_id = f.id</span>
+<span class="s2">    WHERE f.featuretype = 'transcript'</span>
+<span class="s2">      AND a.key = 'tag'</span>
+<span class="s2">      AND a.value = 'MANE_Select'</span>
+<span class="s2">"""</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">target_ids</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> MANE_Select transcripts"</span><span class="p">)</span>
+
+<span class="c1"># 3. ONE batched call → pyarrow.Table sharing memory with DuckDB.</span>
+<span class="n">exons</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">children_batched</span><span class="p">(</span>
+    <span class="n">target_ids</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"arrow"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># 4. Tensor handoff — zero copy.</span>
+<span class="n">starts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">exons</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"start"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span>
+<span class="n">ends</span>   <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">exons</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"end"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">starts</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">ends</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>That’s the full GFFBase API. For real-corpus walkthroughs, see the
+<a class="reference internal" href="cookbooks.html"><span class="doc">Cookbooks</span></a>. For numbers, see
+<a class="reference internal" href="performance.html"><span class="doc">Performance Comparison</span></a>.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="gallery.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Analysis gallery</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="modes.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Compatibility &amp; strict modes</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Usage Gallery — every public method, copy-pasteable</a><ul>
+<li><a class="reference internal" href="#database-initialization">1. Database initialization</a><ul>
+<li><a class="reference internal" href="#create-a-database-from-a-file-most-common">1.1 Create a database from a file (most common)</a></li>
+<li><a class="reference internal" href="#in-memory-database-no-disk-artifact">1.2 In-memory database (no disk artifact)</a></li>
+<li><a class="reference internal" href="#re-open-an-existing-database">1.3 Re-open an existing database</a></li>
+<li><a class="reference internal" href="#ingest-from-a-string-instead-of-a-file">1.4 Ingest from a string instead of a file</a></li>
+<li><a class="reference internal" href="#tune-ingest-with-max-depth-and-parallel-threads">1.5 Tune ingest with <code class="docutils literal notranslate"><span class="pre">max_depth</span></code> and parallel threads</a></li>
+<li><a class="reference internal" href="#compat-vs-strict">1.6 <code class="docutils literal notranslate"><span class="pre">compat</span></code> vs <code class="docutils literal notranslate"><span class="pre">strict</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#standard-relational-queries">2. Standard relational queries</a><ul>
+<li><a class="reference internal" href="#children-walk-down-the-hierarchy">2.1 <code class="docutils literal notranslate"><span class="pre">children()</span></code> — walk down the hierarchy</a></li>
+<li><a class="reference internal" href="#parents-walk-up-the-hierarchy">2.2 <code class="docutils literal notranslate"><span class="pre">parents()</span></code> — walk up the hierarchy</a></li>
+<li><a class="reference internal" href="#features-of-type-every-feature-of-a-kind">2.3 <code class="docutils literal notranslate"><span class="pre">features_of_type()</span></code> — every feature of a kind</a></li>
+<li><a class="reference internal" href="#random-access-by-id">2.4 Random access by ID</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#spatial-queries">3. Spatial queries</a><ul>
+<li><a class="reference internal" href="#region-overlap-query">3.1 <code class="docutils literal notranslate"><span class="pre">region()</span></code> — overlap query</a></li>
+<li><a class="reference internal" href="#completely-within-true-strict-containment">3.2 <code class="docutils literal notranslate"><span class="pre">completely_within=True</span></code> — strict containment</a></li>
+<li><a class="reference internal" href="#region-from-a-feature-object-re-use-coords">3.3 Region from a Feature object (re-use coords)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#feature-object-fields-attributes-mutation-export">4. Feature object — fields, attributes, mutation, export</a><ul>
+<li><a class="reference internal" href="#standard-fields">4.1 Standard fields</a></li>
+<li><a class="reference internal" href="#dynamic-attributes-col-9">4.2 Dynamic attributes (col-9)</a></li>
+<li><a class="reference internal" href="#mutate-write-back">4.3 Mutate + write back</a></li>
+<li><a class="reference internal" href="#export-to-a-gff-gtf-line">4.4 Export to a GFF/GTF line</a></li>
+<li><a class="reference internal" href="#sequence-extraction-fasta">4.5 Sequence extraction (FASTA)</a></li>
+<li><a class="reference internal" href="#dict-shape-representation-for-downstream-tools">4.6 Dict-shape representation (for downstream tools)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#vectorized-ml-api-the-ones-that-make-gffbase-fast">5. Vectorized ML API — the ones that make GFFBase fast</a><ul>
+<li><a class="reference internal" href="#children-batched-pyarrow">5.1 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → PyArrow</a></li>
+<li><a class="reference internal" href="#children-batched-pandas">5.2 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → pandas</a></li>
+<li><a class="reference internal" href="#children-batched-polars">5.3 <code class="docutils literal notranslate"><span class="pre">children_batched()</span></code> → polars</a></li>
+<li><a class="reference internal" href="#parents-batched-symmetric-upward-walk">5.4 <code class="docutils literal notranslate"><span class="pre">parents_batched()</span></code> — symmetric upward walk</a></li>
+<li><a class="reference internal" href="#region-batched-bulk-spatial-overlap">5.5 <code class="docutils literal notranslate"><span class="pre">region_batched()</span></code> — bulk spatial overlap</a></li>
+<li><a class="reference internal" href="#region-batched-completely-within-flag">5.6 <code class="docutils literal notranslate"><span class="pre">region_batched()</span></code> — <code class="docutils literal notranslate"><span class="pre">completely_within</span></code> flag</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#synthesis-convenience-methods">6. Synthesis &amp; convenience methods</a><ul>
+<li><a class="reference internal" href="#interfeatures-derive-intergenic-regions">6.1 <code class="docutils literal notranslate"><span class="pre">interfeatures()</span></code> — derive intergenic regions</a></li>
+<li><a class="reference internal" href="#merge-merge-all-collapse-overlapping-features">6.2 <code class="docutils literal notranslate"><span class="pre">merge()</span></code> / <code class="docutils literal notranslate"><span class="pre">merge_all()</span></code> — collapse overlapping features</a></li>
+<li><a class="reference internal" href="#create-introns-create-splice-sites">6.3 <code class="docutils literal notranslate"><span class="pre">create_introns()</span></code> / <code class="docutils literal notranslate"><span class="pre">create_splice_sites()</span></code></a></li>
+<li><a class="reference internal" href="#bed12-ucsc-track-export">6.4 <code class="docutils literal notranslate"><span class="pre">bed12()</span></code> — UCSC track export</a></li>
+<li><a class="reference internal" href="#children-bp-total-length-of-nested-children">6.5 <code class="docutils literal notranslate"><span class="pre">children_bp()</span></code> — total length of nested children</a></li>
+<li><a class="reference internal" href="#iter-by-parent-childs-yield-each-parent-its-children">6.6 <code class="docutils literal notranslate"><span class="pre">iter_by_parent_childs()</span></code> — yield each parent + its children</a></li>
+<li><a class="reference internal" href="#discontinuous-multipart-features">6.7 Discontinuous (multipart) features</a></li>
+<li><a class="reference internal" href="#validating-a-database">6.8 Validating a database</a></li>
+<li><a class="reference internal" href="#upgrading-a-v1-database">6.9 Upgrading a v1 database</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#advanced-escape-hatches">7. Advanced / escape hatches</a><ul>
+<li><a class="reference internal" href="#gffwriter-emit-new-annotation-files">7.1 <code class="docutils literal notranslate"><span class="pre">GFFWriter</span></code> — emit new annotation files</a></li>
+<li><a class="reference internal" href="#iterate-a-raw-file-without-building-a-database">7.2 Iterate a raw file without building a database</a></li>
+<li><a class="reference internal" href="#dataiterator-legacy-compatible-streaming-reader">7.3 <code class="docutils literal notranslate"><span class="pre">DataIterator</span></code> — legacy-compatible streaming reader</a></li>
+<li><a class="reference internal" href="#parse-bytes-drive-the-parser-from-in-memory-bytes">7.4 <code class="docutils literal notranslate"><span class="pre">parse_bytes()</span></code> — drive the parser from in-memory bytes</a></li>
+<li><a class="reference internal" href="#execute-raw-sql-escape-hatch">7.5 <code class="docutils literal notranslate"><span class="pre">execute()</span></code> — raw SQL escape hatch</a></li>
+<li><a class="reference internal" href="#analyze-set-pragmas-duckdb-tuning">7.6 <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> + <code class="docutils literal notranslate"><span class="pre">set_pragmas()</span></code> — DuckDB tuning</a></li>
+<li><a class="reference internal" href="#delete-update-add-relation">7.7 <code class="docutils literal notranslate"><span class="pre">delete()</span></code> / <code class="docutils literal notranslate"><span class="pre">update()</span></code> / <code class="docutils literal notranslate"><span class="pre">add_relation()</span></code></a></li>
+<li><a class="reference internal" href="#export-sqlite-produce-a-legacy-gffutils-readable-file">7.8 <code class="docutils literal notranslate"><span class="pre">export_sqlite()</span></code> — produce a legacy-gffutils-readable file</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#putting-it-all-together-end-to-end-ml-pipeline">8. Putting it all together — end-to-end ML pipeline</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

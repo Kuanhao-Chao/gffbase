@@ -1,0 +1,827 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Installation" href="content/installation.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/index.html">
+        <link rel="prefetch" href="_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="#"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="content/cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="content/advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/docs/source/index.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/edit/main/docs/source/index.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="gffbase">
+<span id="main"></span><h1>GFFBase<a class="headerlink" href="#gffbase" title="Link to this heading">¶</a></h1>
+<p><strong>A genomic-annotation engine built for whole-genome scale: a Rust GFF3/GTF
+parser, DuckDB columnar storage, and a zero-copy PyArrow interface — with the</strong>
+<code class="docutils literal notranslate"><span class="pre">gffutils</span></code> <strong>API preserved, so most code migrates by changing one import.</strong></p>
+<p>GFFBase reads GFF3 and GTF at whole-genome scale and answers the questions a
+genomics pipeline actually asks — spatial queries over intervals, hierarchy
+walks from gene to transcript to exon, and bulk extraction into Arrow, pandas
+or polars without a Python loop in the middle. The storage engine is DuckDB,
+so a database is one portable file and every query is columnar.</p>
+<a class="reference external image-reference" href="https://pypi.org/project/gffbase/"><img alt="PyPI" src="https://img.shields.io/pypi/v/gffbase.svg" />
+</a>
+<a class="reference external image-reference" href="https://pypi.org/project/gffbase/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/gffbase.svg" />
+</a>
+<a class="reference external image-reference" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" />
+</a>
+<hr class="docutils" />
+<section id="what-you-can-do-with-gffbase">
+<h2>What you can do with GFFBase<a class="headerlink" href="#what-you-can-do-with-gffbase" title="Link to this heading">¶</a></h2>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-2 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+🧬 Query intervals at genome scale</div>
+<p class="sd-card-text">Ask for a region and get the features that overlap it, from an R-tree
+index built during ingest.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/usage_gallery.html#usage-gallery-3-spatial-queries"><span class="std std-ref">3. Spatial queries</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+🌳 Walk the annotation hierarchy</div>
+<p class="sd-card-text"><code class="docutils literal notranslate"><span class="pre">children</span></code>, <code class="docutils literal notranslate"><span class="pre">parents</span></code> and the batched forms, backed by a transitive
+closure so depth costs nothing at query time.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/usage_gallery.html#usage-gallery-2-standard-relational-queries"><span class="std std-ref">2. Standard relational queries</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+🔄 Migrate from gffutils</div>
+<p class="sd-card-text">The legacy API is preserved surface-for-surface. Most scripts move by
+changing one import.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/migration.html"><span class="doc">Migrating from gffutils to gffbase</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+⚡ Extract in bulk, without a Python loop</div>
+<p class="sd-card-text"><code class="docutils literal notranslate"><span class="pre">children_batched(format=&quot;arrow&quot;)</span></code> returns one Arrow table for
+thousands of anchors.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/usage_gallery.html#usage-gallery-5-vectorized-ml-api-the-ones-that-make-gffbase-fast"><span class="std std-ref">5. Vectorized ML API — the ones that make GFFBase fast</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+📊 Read the measured numbers</div>
+<p class="sd-card-text">Head-to-head benchmarks on the canonical human annotations, with the
+machine, versions and commit of each run recorded.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/performance.html"><span class="doc">Performance</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+🧰 Work from the command line</div>
+<p class="sd-card-text">Build, inspect, validate and migrate a database without writing
+Python.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="content/cli.html"><span class="doc">Command line</span></a></div>
+</div>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="measured-performance">
+<h2>Measured performance<a class="headerlink" href="#measured-performance" title="Link to this heading">¶</a></h2>
+<p>Every figure below is generated from the committed benchmark artifact, never
+typed in. See <a class="reference internal" href="content/performance.html"><span class="doc">Performance</span></a> for the full sweep and
+<a class="reference internal" href="content/methodology.html"><span class="doc">Benchmark methodology</span></a> for how it was run.</p>
+<p><strong>Read the ingest column as a draw.</strong> gffbase spans 1.21× to 0.69× against
+<code class="docutils literal notranslate"><span class="pre">gffutils</span></code>: ahead where per-feature overhead dominates, behind on the
+attribute-dense whole-genome files. Both engines are attribute-bound and
+effectively serial. The durable advantages — batched extraction, spatial
+indexing, SQL over the whole corpus — are elsewhere. <code class="docutils literal notranslate"><span class="pre">peak</span> <span class="pre">RSS</span></code> is ingest plus
+exhaustive validation, not what the default path costs.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+<col style="width: 11.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Corpus</p></th>
+<th class="head"><p>Format</p></th>
+<th class="head"><p>Lines</p></th>
+<th class="head"><p>gffbase ingest</p></th>
+<th class="head"><p>legacy ingest</p></th>
+<th class="head"><p>speedup</p></th>
+<th class="head"><p>peak RSS (ingest + full validation)</p></th>
+<th class="head"><p>spatial qps</p></th>
+<th class="head"><p>batched (5 k anchors)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>GENCODE v49</strong> (basic)</p></td>
+<td><p>GTF</p></td>
+<td><p>6,068,892</p></td>
+<td><p><strong>10 min 14 s</strong></p></td>
+<td><p>7 min 1 s</p></td>
+<td><p><strong>0.69×</strong></p></td>
+<td><p>53.57 GB</p></td>
+<td><p><strong>707</strong> ±0% (n=5)</p></td>
+<td><p>963 ms / 1.93 M desc</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>GENCODE v49</strong> (basic)</p></td>
+<td><p>GFF3</p></td>
+<td><p>6,066,054</p></td>
+<td><p><strong>11 min 8 s</strong></p></td>
+<td><p>9 min 59 s</p></td>
+<td><p><strong>0.90×</strong></p></td>
+<td><p>62.00 GB</p></td>
+<td><p><strong>705</strong> ±0% (n=5)</p></td>
+<td><p>1096 ms / 1.93 M desc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>RefSeq GRCh38.p14</strong></p></td>
+<td><p>GFF3</p></td>
+<td><p>4,932,571</p></td>
+<td><p><strong>7 min 2 s</strong></p></td>
+<td><p>6 min 34 s</p></td>
+<td><p><strong>0.93×</strong></p></td>
+<td><p>26.80 GB</p></td>
+<td><p><strong>540</strong> ±0% (n=5)</p></td>
+<td><p>588 ms / 999 k desc</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>CHESS 3.1.3</strong></p></td>
+<td><p>GFF3</p></td>
+<td><p>2,761,061</p></td>
+<td><p><strong>1 min 53 s</strong></p></td>
+<td><p>2 min 17 s</p></td>
+<td><p><strong>1.21×</strong></p></td>
+<td><p>3.38 GB</p></td>
+<td><p><strong>702</strong> ±0% (n=5)</p></td>
+<td><p>202 ms / 161 k desc</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>MANE v1.5</strong> (Ensembl)</p></td>
+<td><p>GFF3</p></td>
+<td><p>524,834</p></td>
+<td><p><strong>40.0 s</strong></p></td>
+<td><p>45.7 s</p></td>
+<td><p><strong>1.14×</strong></p></td>
+<td><p>3.98 GB</p></td>
+<td><p><strong>840</strong> ±0% (n=5)</p></td>
+<td><p>206 ms / 156 k desc</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<hr class="docutils" />
+<section id="install">
+<h2>Install<a class="headerlink" href="#install" title="Link to this heading">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>gffbase
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This site documents gffbase 0.2.0, released 2026-09-11. Upgrading from 0.1.0
+fixes two SQL injection vulnerabilities; see the
+<a class="reference internal" href="content/advisory_sql_injection.html"><span class="doc">security advisory</span></a>.</p>
+</div>
+</section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">gffbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_db</span>
+
+<span class="k">with</span> <span class="n">create_db</span><span class="p">(</span><span class="s2">"gencode.v49.annotation.gtf.gz"</span><span class="p">,</span> <span class="s2">"gencode.duckdb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">tx</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">children</span><span class="p">(</span><span class="s2">"ENSG00000139618"</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"transcript"</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">tx</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">tx</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">tx</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">region</span><span class="p">(</span><span class="s2">"chr17:43044295-43125483"</span><span class="p">,</span> <span class="n">featuretype</span><span class="o">=</span><span class="s2">"exon"</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">feature</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="content/installation.html"><span class="doc">Installation</span></a> for the supported platforms, and
+<a class="reference internal" href="content/quickstart.html"><span class="doc">Quickstart</span></a> for a worked example that runs end to end.</p>
+<hr class="docutils" />
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/installation.html#optional-extras">Optional extras</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/installation.html#verifying-the-install">Verifying the install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/installation.html#installing-from-source">Installing from source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/installation.html#supported-versions">Supported versions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/quickstart.html">Quickstart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#build-a-database">1. Build a database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#fetch-a-feature-by-id">2. Fetch a feature by ID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#walk-the-hierarchy">3. Walk the hierarchy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#query-by-position">4. Query by position</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#the-one-that-matters-at-scale">5. The one that matters at scale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/quickstart.html#where-to-go-next">Where to go next</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/modes.html">Compatibility &amp; strict modes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#the-two-axes-underneath">The two axes underneath</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#why-compat-is-the-default">Why <code class="docutils literal notranslate"><span class="pre">compat</span></code> is the default</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#discontinuous-features-the-case-that-actually-matters">Discontinuous features: the case that actually matters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#conflicting-gtf-parent-identifiers">Conflicting GTF parent identifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#what-the-parser-enforces">What the parser enforces</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/modes.html#how-the-mode-is-recorded">How the mode is recorded</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#database-initialization">1. Database initialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#standard-relational-queries">2. Standard relational queries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#spatial-queries">3. Spatial queries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#feature-object-fields-attributes-mutation-export">4. Feature object — fields, attributes, mutation, export</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#vectorized-ml-api-the-ones-that-make-gffbase-fast">5. Vectorized ML API — the ones that make GFFBase fast</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#synthesis-convenience-methods">6. Synthesis &amp; convenience methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#advanced-escape-hatches">7. Advanced / escape hatches</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/usage_gallery.html#putting-it-all-together-end-to-end-ml-pipeline">8. Putting it all together — end-to-end ML pipeline</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/gallery.html">Analysis gallery</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#extract-splice-sites">Extract splice sites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#pick-the-longest-isoform-per-gene">Pick the longest isoform per gene</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#exon-count-distribution">Exon-count distribution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#coding-fraction-per-transcript">Coding fraction per transcript</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#hand-the-whole-annotation-to-pandas">Hand the whole annotation to pandas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#what-is-in-an-unfamiliar-annotation">What is in an unfamiliar annotation?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/gallery.html#where-to-go-next">Where to go next</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/cli.html">Command line</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#compatibility-with-gffutils-cli">Compatibility with <code class="docutils literal notranslate"><span class="pre">gffutils-cli</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#building-a-database">Building a database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#querying">Querying</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#rewriting-files">Rewriting files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#gffbase-only-commands">gffbase-only commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/cli.html#exit-statuses">Exit statuses</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/connections.html">Connections &amp; concurrency</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/connections.html#close-what-you-open">Close what you open</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/connections.html#reading-from-many-processes">Reading from many processes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/connections.html#one-handle-one-thread">One handle, one thread</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/connections.html#in-memory-databases">In-memory databases</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#drop-in-compatibility-the-easy-part">1. Drop-in compatibility — the easy part</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#what-you-gain-immediately-no-code-changes">2. What you gain immediately, no code changes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#deep-dive-the-olap-vs-oltp-tradeoff">3. ⚠️ Deep-dive: the OLAP vs OLTP tradeoff</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#sql-compat-views-for-raw-execute-users">4. SQL-compat views (for raw <code class="docutils literal notranslate"><span class="pre">execute()</span></code> users)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#sqlite-export-the-safety-valve">5. SQLite export — the safety valve</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#things-that-changed-small-list">6. Things that changed (small list)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/migration.html#migration-checklist">7. Migration checklist</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/cookbooks.html">Cookbooks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/cookbooks.html#conventions">Conventions</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/performance.html">Performance</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/performance.html#the-five-corpus-run">The five-corpus run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/performance.html#controlled-gtf-inference-and-synthesis">Controlled GTF inference and synthesis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/performance.html#bulk-extraction-for-ml">Bulk extraction for ML</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/performance.html#the-trade-offs">The trade-offs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/performance.html#reproducing-this">Reproducing this</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/methodology.html">Benchmark methodology</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#reproducing-a-run">Reproducing a run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#what-is-measured">What is measured</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#corpora">Corpora</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#fairness">Fairness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#what-is-not-comparable">What is <em>not</em> comparable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#capped-runs-and-why-there-are-no-extrapolated-numbers">Capped runs, and why there are no extrapolated numbers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#uncertainty">Uncertainty</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#what-the-ingest-numbers-do-and-do-not-say">What the ingest numbers do and do not say</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#publishing-a-run">Publishing a run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#provenance">Provenance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/methodology.html#disk">Disk</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/datasets.html">Datasets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/datasets.html#at-a-glance">At a glance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/datasets.html#what-each-one-is-for">What each one is for</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/datasets.html#sources">Sources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/datasets.html#test-fixtures">Test fixtures</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/architecture.html">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/architecture.html#end-to-end-data-flow">End-to-end data flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/architecture.html#layer-responsibilities">Layer responsibilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/architecture.html#correctness-boundaries">Correctness boundaries</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#why">1. Why</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#two-orthogonal-axes-one-user-facing-switch">2. Two orthogonal axes, one user-facing switch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#schema-v2">3. Schema v2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#the-multipart-predicate">4. The multipart predicate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#python-model">5. Python model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#query-shapes">6. Query shapes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#ingest-order">7. Ingest order</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#migration">8. Migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#legacy-sqlite-export">9. Legacy SQLite export</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#post-ingest-invariants">10. Post-ingest invariants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#implementation-order-and-risk">11. Implementation order and risk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/schema_v2.html#open-questions-all-resolved">12. Open questions — all resolved</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#the-database">The database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#building-a-database">Building a database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#features">Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#parsing">Parsing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#reading-and-writing">Reading and writing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#merge-criteria">Merge criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#module-gffbase.validate">Validation and migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#module-gffbase.exceptions">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/api.html#compatibility-modules">Compatibility modules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/faq.html">Frequently asked questions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#is-gffbase-really-a-drop-in-replacement-for-gffutils">Is gffbase really a drop-in replacement for gffutils?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#what-is-the-one-thing-that-will-surprise-me">What is the one thing that will surprise me?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#why-does-my-ingest-fail-with-duplicateiderror">Why does my ingest fail with <code class="docutils literal notranslate"><span class="pre">DuplicateIDError</span></code>?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#do-i-need-to-close-the-database">Do I need to close the database?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#can-several-processes-read-one-database-at-once">Can several processes read one database at once?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#how-do-i-get-a-dataframe-out-of-it">How do I get a dataframe out of it?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#how-do-i-get-every-exon-for-thousands-of-transcripts">How do I get every exon for thousands of transcripts?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#why-is-my-database-bigger-than-the-sqlite-one">Why is my database bigger than the SQLite one?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#native-available-says-false-does-that-matter"><code class="docutils literal notranslate"><span class="pre">native_available()</span></code> says False. Does that matter?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#do-i-need-bedtools-or-pybedtools">Do I need <code class="docutils literal notranslate"><span class="pre">bedtools</span></code> or <code class="docutils literal notranslate"><span class="pre">pybedtools</span></code>?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#can-i-still-use-my-old-gffutils-database">Can I still use my old gffutils database?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#what-about-a-database-made-by-gffbase-0-1-x">What about a database made by gffbase 0.1.x?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#how-do-i-know-my-database-is-sound">How do I know my database is sound?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#which-python-versions-are-supported">Which Python versions are supported?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/faq.html#how-do-i-cite-it">How do I cite it?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/troubleshooting.html#ingest">Ingest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/troubleshooting.html#querying">Querying</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/troubleshooting.html#databases-and-files">Databases and files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/troubleshooting.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/troubleshooting.html#compatibility">Compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/citation.html">Citation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/citation.html#bibtex">BibTeX</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/citation.html#please-also-cite-what-gffbase-is-built-on">Please also cite what gffbase is built on</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/citation.html#and-cite-the-annotation-you-used">And cite the annotation you used</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/license.html">License</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/license.html#what-each-component-is-under">What each component is under</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/license.html#in-short">In short</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/contact.html">Contact</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/contact.html#bugs-questions-and-feature-requests">Bugs, questions and feature requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contact.html#security">Security</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contact.html#author">Author</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contact.html#contributing">Contributing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contact.html#other-tools">Other tools</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="content/testing.html">Testing and release gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/testing.html#test-tiers">Test tiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/testing.html#parser-and-property-testing">Parser and property testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/testing.html#database-oracles">Database oracles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/testing.html#installation-modes">Installation modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/testing.html#ci-and-release-acceptance">CI and release acceptance</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/roadmap.html">Roadmap</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/roadmap.html#priority-1-memory-and-trust">Priority 1: memory and trust</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/roadmap.html#priority-2-set-based-workflows">Priority 2: set-based workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/roadmap.html#priority-3-input-and-observability">Priority 3: input and observability</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/changelog.html">Changelog</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/changelog.html#changelog-020">0.2.0 — 2026-09-11</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/changelog.html#changelog-010-2026-05-07">0.1.0 — 2026-05-07</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/contributing.html">Contributing to GFFBase</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#quick-links">1. Quick links</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#prerequisites">2. Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#development-setup">3. Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#running-the-test-suite">4. Running the test suite</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#the-pull-request-process">5. The pull-request process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#architecture-pointers-for-new-contributors">6. Architecture pointers for new contributors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#things-we-will-not-accept">7. Things we will <em>not</em> accept</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/contributing.html#questions">8. Questions?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/security.html">Security Policy</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/security.html#supported-versions">Supported versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/security.html#reporting-a-vulnerability">Reporting a vulnerability</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/security.html#scope">Scope</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/security.html#a-note-on-featuredb-execute">A note on <code class="docutils literal notranslate"><span class="pre">FeatureDB.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="content/advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#affected-versions">Affected versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#severity">Severity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#affected-api">Affected API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#details-1-order-by">Details — 1. <code class="docutils literal notranslate"><span class="pre">order_by</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#details-2-set-pragmas">Details — 2. <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#impact">Impact</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#fix">Fix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#mitigation-without-upgrading">Mitigation without upgrading</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#credit">Credit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="content/advisory_sql_injection.html#disclosure">Disclosure</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="content/installation.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Installation</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">GFFBase</a><ul>
+<li><a class="reference internal" href="#what-you-can-do-with-gffbase">What you can do with GFFBase</a></li>
+<li><a class="reference internal" href="#measured-performance">Measured performance</a></li>
+<li><a class="reference internal" href="#install">Install</a></li>
+<li><a class="reference internal" href="#quick-start">Quick start</a><ul>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>
