@@ -164,9 +164,10 @@ its safety valve the cell would read “censored at”, which is cap evidence on
 never a wall time or a speedup.
 
 **`peak RSS` is ingest plus exhaustive validation**, not the cost of ingest and
-not what you pay: `validate_db` defaults to `sample=200`, the CLI never
-overrides it, and the same corpora at `validation_sample=10000` peak at
-8.6–9.2 GB rather than tens of GB.
+not what you pay: `validate_db` defaults to `sample=200` and the CLI never
+overrides it. The same five corpora measured at `validation_sample=10000` peak
+at 1.3–10.2 GB instead of 3.3–62.2 GB — GENCODE GFF3 alone falls from 62.2 GB
+to 9.5–10.2 GB.
 
 **The GTF row is the inference-disabled arm**, which is the configuration least
 favourable to gffbase. GENCODE v49's GTF already contains gene and transcript
