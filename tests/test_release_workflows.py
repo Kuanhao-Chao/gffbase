@@ -246,6 +246,60 @@ def test_manual_release_input_is_a_typed_opt_in_and_policy_precedes_qualificatio
     assert publish_job["if"] == "needs.policy.outputs.publish == 'true'"
 
 
+def _third_party_top_level_imports(path: Path) -> set[str]:
+    """Distribution-level modules a script imports unconditionally at load time.
+
+    Conditional imports (inside `try:`) are excluded: those are fallbacks the
+    script survives without. Everything else must be importable before the
+    first line of `main()` runs.
+    """
+    import ast
+    import sys
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            names.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            names.add(node.module.split(".")[0])
+    return {n for n in names if n != "__future__" and n not in sys.stdlib_module_names}
+
+
+@pytest.mark.parametrize("filename", ["release.yml", "testpypi-release.yml"])
+def test_the_policy_job_installs_what_the_policy_script_imports(filename: str):
+    """The policy job runs on a bare `setup-python` runner, not the dev env.
+
+    `release_policy.py` imports `packaging`, which a fresh runner does not
+    have, and neither publisher installed it -- so the policy step died with
+    `ModuleNotFoundError` on every run and nothing downstream could publish.
+    Every local check passed because the dev environment happens to carry
+    `packaging`. Found by a build-only rehearsal dispatch before the rc tag was
+    pushed; had the tag gone first, the candidate number would have been spent
+    on it.
+
+    Derived from the script rather than listing `packaging`, so a new
+    third-party import there fails this test instead of the next release.
+    """
+    required = _third_party_top_level_imports(REPO_ROOT / "tools" / "release_policy.py")
+    assert required, "expected release_policy.py to import at least one third-party module"
+
+    steps = _workflow(filename)["jobs"]["policy"]["steps"]
+    runs = [step.get("run", "") for step in steps]
+    policy_index = next(i for i, run in enumerate(runs) if "python tools/release_policy.py" in run)
+    installed_before = "\n".join(runs[:policy_index])
+
+    missing = [
+        name
+        for name in sorted(required)
+        if not re.search(rf"pip install\b[^\n]*['\"]?{re.escape(name)}==[0-9]", installed_before)
+    ]
+    assert not missing, (
+        f"{filename}: the policy job runs tools/release_policy.py without first "
+        f"installing {missing} with an exact pin"
+    )
+
+
 @pytest.mark.parametrize("filename", ["release.yml", "testpypi-release.yml"])
 def test_thin_publisher_callers_never_build_package_artifacts(filename: str):
     text = (REPO_ROOT / ".github" / "workflows" / filename).read_text(encoding="utf-8")
