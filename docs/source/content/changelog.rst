@@ -333,13 +333,18 @@ everything from scratch.
   with the measured spread stated so a single figure is worth what it is worth.
 
 - **Ingest is attribute-bound and essentially serial, and the docs now say so.**
-  Cost tracks attributes rather than features -- about 160,000 attributes per
-  second whatever the corpus -- so GENCODE at 16-18 attributes per feature
-  ingests at half the *feature* rate of CHESS at 2.6. A 25-job sweep over five
+  Cost tracks attributes rather than features: across the three
+  attribute-dense corpora, at 12.8 to 17.9 attributes per feature, gffbase holds
+  157,000 to 168,000 attributes per second over a sixteen-fold range of corpus
+  size. The rate then falls with the attribute density -- 130,600 on RefSeq at
+  11.2, 62,400 on CHESS at 2.6 -- which is an attribute-bound cost with a fixed
+  per-feature floor showing through, and is why gffbase wins on CHESS and not on
+  GENCODE. A 25-job sweep over five
   corpora at 1, 2, 4, 8 and 10 threads shows raising DuckDB threads buys between
   1.05x and 1.25x: ten times the cores, at most a quarter more throughput. The
   GENCODE GTF result is not a GTF defect -- gffbase moves 157k attributes/s
-  there, between its MANE (168k) and GFF3 (162k) figures -- it is that the
+  there, its own third-fastest of the five and within 7% of its best, just under
+  GENCODE GFF3 at 162k and MANE at 168k -- it is that the
   comparator's ``no-infer`` GTF path is a plain bulk insert, its fastest case
   anywhere at 229k/s. Recorded in the methodology, with parallel ingest on the
   roadmap.

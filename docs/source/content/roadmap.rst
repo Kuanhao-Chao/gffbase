@@ -20,9 +20,10 @@ Priority 1: memory and trust
 - **Parallel ingest.** Ingest is essentially serial today: measured across five
   corpora, raising DuckDB threads from 1 to 10 buys between 1.05x and 1.25x, so
   the ``threads`` setting cannot make ingest much faster whatever it is set to.
-  The cost is attribute-bound -- roughly 160,000 attributes per second,
-  regardless of corpus -- which is why a GENCODE annotation at 16-18 attributes
-  per feature ingests at half the feature rate of one at 2.6. Acceptance: the
+  The cost is attribute-bound: 157,000 to 168,000 attributes per second on the
+  three corpora dense enough for attributes to dominate, falling to 62,400 on
+  CHESS at 2.6 attributes per feature, where the per-feature floor is what is
+  left to pay. Acceptance: the
   thread sweep in the benchmark harness shows the ingest scaling with cores, and
   the correctness signature is unchanged.
 
