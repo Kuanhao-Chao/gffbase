@@ -1090,6 +1090,17 @@ everything from scratch.
     raw central-directory names, was right all along. And a POSIX path from the
     Linux-only campaign spec was checked with the host `Path`, which calls
     `/staged/...` relative on Windows.
+  * **The artifact stage, reached only once qualification was green, failed
+    three more ways.** The sdist job passed `--locked` to `maturin sdist`,
+    which compiles nothing and rejects the flag outright. The wheel-install
+    check ran `tools/release_artifacts.py` on Python 3.10 with no TOML reader
+    (`tomllib` is 3.11+, and `tomli` was never installed), failing every 3.10
+    cell on every platform. And it installed the wheel into the runner's own
+    interpreter before `pip check`, so the check also judged the runner
+    image's preinstalled tools -- on the Windows 3.12 image, pipx requires
+    `packaging>=26` against the job's `packaging==25.0` pin. Each is fixed and
+    tested; the install now happens in a fresh venv, as the sdist check
+    already did.
 - Both release workflows claimed `abi3-py39` covering "CPython 3.9-3.13"; the
   wheels are `abi3-py310` covering 3.10–3.14.
 - **`gffbase migrate --coalesce` crashed on every invocation.** The command
