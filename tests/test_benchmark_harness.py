@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import stat
 import struct
@@ -648,8 +649,31 @@ def _write_test_candidate_wheel(
         for member, content in native_members:
             archive.writestr(member, content)
         for member, content in extra_members:
-            archive.writestr(member, content)
+            # Assigned after construction: `ZipInfo(name)` rewrites `os.sep` to
+            # `/` on Windows, which would launder a hostile backslash member.
+            info = zipfile.ZipInfo()
+            info.filename = member
+            archive.writestr(info, content)
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_the_wheel_fixture_keeps_a_backslash_member_on_any_host(tmp_path, monkeypatch):
+    """`zipfile.ZipInfo` rewrites `os.sep` to `/` in member names on Windows.
+
+    So the fixture meant to smuggle `gffbase\\windows.txt` into a wheel wrote a
+    perfectly portable `gffbase/windows.txt` there, the validator correctly let
+    it through, and the rejection test failed on a later, unrelated check. A
+    hostile wheel built anywhere can carry a backslash; the fixture has to be
+    able to build one everywhere. `os.sep` is patched to emulate Windows.
+    """
+    monkeypatch.setattr(os, "sep", "\\")
+    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    _write_test_candidate_wheel(wheel, extra_members=(("gffbase\\windows.txt", b"x"),))
+    # `orig_filename`: zipfile applies the same rewrite when *reading* the
+    # central directory, so `namelist()` would hide the stored backslash too.
+    # The validator parses raw names itself and is unaffected.
+    with zipfile.ZipFile(wheel) as archive:
+        assert "gffbase\\windows.txt" in [info.orig_filename for info in archive.infolist()]
 
 
 def _installed_candidate_identity(*, native_sha256):
@@ -2271,6 +2295,31 @@ def test_renderer_reads_schema_v3_nested_python_provenance_version():
     assert "Python 3.13.5" in tables.render_provenance(payload)
 
 
+def test_provenance_names_its_source_with_forward_slashes(monkeypatch):
+    """On Windows the footer read `benchmarks\\results\\06_mega...json`.
+
+    `relative_to(ROOT)` stringifies with the host separator, so every page
+    carrying the provenance block -- README.md, MIGRATION.md, performance.rst,
+    migration.rst -- differed from the committed text and the table check
+    failed on every Windows cell. Rendered here with Windows path semantics so
+    the test fails on any platform, not only the one that shows it.
+    """
+    from pathlib import PureWindowsPath
+
+    from tools import gen_benchmark_tables as tables
+
+    root = PureWindowsPath("C:/work/gffbase")
+    monkeypatch.setattr(tables, "ROOT", root)
+    monkeypatch.setattr(
+        tables,
+        "published_measurements_path",
+        lambda: root / "benchmarks" / "results" / "06_mega.linux-x86_64.json",
+    )
+    footer = tables.render_provenance(_publishable_payload())
+    assert "`benchmarks/results/06_mega.linux-x86_64.json`" in footer
+    assert "\\" not in footer
+
+
 def test_renderer_reads_actual_schema_v2_top_level_python_version():
     from tools import gen_benchmark_tables as tables
 
@@ -2487,6 +2536,10 @@ def _common():
     return common
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX file modes; the campaign scan that needs 0600 is Linux-only",
+)
 def test_the_result_lock_is_private(tmp_path: Path) -> None:
     """0600, because the campaign's scratch scan enforces that on every file it
     allows -- and `open("a+")` yields 0644 under the usual umask, which is what
@@ -2512,6 +2565,21 @@ def test_the_lock_file_survives_the_write(tmp_path: Path) -> None:
     assert (tmp_path / "06_mega.json.lock").exists()
 
 
+def test_the_result_lock_works_where_there_is_no_fchmod(tmp_path, monkeypatch) -> None:
+    """`_result_lock` already falls back when `fcntl` is missing, for Windows,
+    but called `os.fchmod` unconditionally -- which Windows lacks before 3.13 --
+    so `write_results` crashed there before the fallback could apply.
+    """
+    monkeypatch.delattr(os, "fchmod", raising=False)
+    target = tmp_path / "06_mega.json"
+    with _common()._result_lock(target):
+        pass
+    assert (tmp_path / "06_mega.json.lock").exists()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="flock is POSIX; Windows takes the no-lock fallback"
+)
 def test_the_lock_still_excludes_a_second_holder(tmp_path: Path) -> None:
     """Whatever else changes, this is the property the file exists for."""
     import fcntl
