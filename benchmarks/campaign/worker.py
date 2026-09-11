@@ -1463,11 +1463,16 @@ def observe_process(
     pid: int,
     *,
     proc_root: os.PathLike[str] | str = "/proc",
-    pgid_provider: Callable[[int], int] = os.getpgid,
+    pgid_provider: Callable[[int], int] | None = None,
 ) -> ProcessIdentity | None:
     """Observe a stable Linux process identity, returning ``None`` if it vanished."""
 
     process_pid = _positive_int(pid, "observed process pid", maximum=_MAX_PID)
+    # Resolved here, not as the default: a default is evaluated when the module
+    # is imported, and Windows has no `os.getpgid`, so importing this Linux-only
+    # module took down every test module that reached it, even to skip.
+    if pgid_provider is None:
+        pgid_provider = os.getpgid
     if not callable(pgid_provider):
         raise model.CampaignError("process-group provider must be callable")
     root = safe_io.lexical_absolute(proc_root, "proc root")
@@ -1714,7 +1719,7 @@ def execute_child(
     process_observer: Callable[[int], ProcessIdentity | None] = observe_process,
     child_started: Callable[[ProcessIdentity], None],
     signal_registrar: Callable[[int, Any], Any] = signal_module.signal,
-    killpg: Callable[[int, int], None] = os.killpg,
+    killpg: Callable[[int, int], None] | None = None,
     log_opener: Callable[[Path], Any] = _open_private_log,
     now_provider: Callable[[], str] = _utc_now,
     termination_grace_seconds: float = 15.0,
@@ -1738,6 +1743,8 @@ def execute_child(
         raise model.CampaignError("child process providers must be callable")
     if not callable(child_started) or not callable(signal_registrar):
         raise model.CampaignError("child lifecycle callbacks must be callable")
+    if killpg is None:  # see observe_process: resolved at call time, not import
+        killpg = os.killpg
     if not callable(killpg) or not callable(log_opener) or not callable(now_provider):
         raise model.CampaignError("child lifecycle I/O providers must be callable")
     if (

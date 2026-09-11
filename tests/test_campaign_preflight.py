@@ -14,6 +14,9 @@ import pytest
 
 from benchmarks import cluster_campaign as facade
 from benchmarks.campaign import model, preflight, safe_io
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 
 def _inputs(root: Path) -> dict[str, dict[str, object]]:

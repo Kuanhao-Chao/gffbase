@@ -11,7 +11,10 @@ import pytest
 
 from benchmarks import cluster_campaign as campaign
 from benchmarks.campaign import results
+from tests._platform import LINUX_ONLY_CAMPAIGN
 from tests.test_cluster_campaign import _make_campaign, _worker_result
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 
 @pytest.fixture(scope="module")

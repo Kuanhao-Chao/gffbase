@@ -13,6 +13,9 @@ import pytest
 
 from benchmarks import cluster_campaign as campaign
 from tests import test_cluster_campaign as fixtures
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 
 def _write_tiny_gzip(path: Path, payload: bytes) -> None:

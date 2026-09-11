@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 import os
 import stat
+import time
 from pathlib import Path
 
 import pytest
 
 from benchmarks.campaign import safe_io
 from benchmarks.campaign.model import CampaignError
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 
 def _owner() -> dict[str, object]:
@@ -658,6 +662,117 @@ def test_atomic_replace_rolls_back_a_target_swapped_inside_atomic_exchange(
     assert safe_io.strict_json_load(path) == foreign
     assert safe_io.strict_json_load(displaced) == old
     assert len(_retired_entries(tmp_path)) == 1
+
+
+def _advance_ctime(descriptor: int, name: str) -> None:
+    """Move an entry's ctime forward without touching its bytes, mtime or inode.
+
+    This is what ext4, tmpfs and btrfs do to an inode as a side effect of
+    renaming it -- POSIX permits either behaviour, and XFS does not do it. A
+    same-value utime changes nothing but ctime. Inode timestamps come from a
+    coarse clock, so retry until ctime has provably moved; the caller relies on
+    the change having happened.
+    """
+    before = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+    for _ in range(200):
+        os.utime(
+            name,
+            ns=(before.st_atime_ns, before.st_mtime_ns),
+            dir_fd=descriptor,
+            follow_symlinks=False,
+        )
+        after = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if after.st_ctime_ns != before.st_ctime_ns:
+            assert (after.st_ino, after.st_size, after.st_mtime_ns) == (
+                before.st_ino,
+                before.st_size,
+                before.st_mtime_ns,
+            )
+            return
+        time.sleep(0.005)
+    raise AssertionError(f"could not advance ctime on {name}")
+
+
+def _ctime_advancing_exchange(real_exchange):  # type: ignore[no-untyped-def]
+    """Wrap the real RENAME_EXCHANGE with ext4's side effect on both inodes."""
+
+    def exchange(
+        source_descriptor: int,
+        source_name: str,
+        destination_descriptor: int,
+        destination_name: str,
+    ) -> None:
+        real_exchange(source_descriptor, source_name, destination_descriptor, destination_name)
+        _advance_ctime(source_descriptor, source_name)
+        _advance_ctime(destination_descriptor, destination_name)
+
+    return exchange
+
+
+def test_atomic_replace_accepts_a_rename_that_advances_ctime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On ext4 no existing file could ever be replaced.
+
+    The exchange path compared the displaced inode against its pre-exchange
+    stat including `st_ctime_ns`. ext4 advances an inode's ctime when it is
+    renamed, so the comparison always failed, the code concluded a concurrent
+    writer had swapped the target, rolled back, and then could not prove the
+    rollback either -- because the rollback was a rename too. Every GitHub
+    Ubuntu runner is ext4. Local runs passed only because this host is XFS,
+    which leaves ctime alone. `_rename_noreplace_bound_at` already excluded
+    ctime across its own rename, with a comment saying why; the exchange path
+    never followed it.
+    """
+    path = tmp_path / "status.json"
+    safe_io.atomic_create_json(path, {"schema_version": "status-v1", "state": "old"})
+    monkeypatch.setattr(
+        safe_io, "_rename_exchange_at", _ctime_advancing_exchange(safe_io._rename_exchange_at)
+    )
+
+    new = {"schema_version": "status-v1", "state": "new"}
+    safe_io.atomic_write_json_durable(path, new)
+
+    assert safe_io.strict_json_load(path) == new
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith(".gffbase-tmp")) == []
+
+
+def test_ctime_advancing_exchange_still_rolls_back_a_real_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tolerating a ctime change must not blind the check to a replaced inode.
+
+    The rollback is itself an exchange, so on ext4 it advances ctime again; the
+    restoration proof must still hold, and the foreign file must be left in
+    place with the original displaced beside it.
+    """
+    path = tmp_path / "status.json"
+    displaced = tmp_path / "displaced-status.json"
+    old = {"schema_version": "status-v1", "state": "old"}
+    foreign = {"schema_version": "status-v1", "state": "foreign"}
+    safe_io.atomic_create_json(path, old)
+    ctime_exchange = _ctime_advancing_exchange(safe_io._rename_exchange_at)
+    swapped = False
+
+    def swap_inside_exchange(
+        source_descriptor: int,
+        source_name: str,
+        destination_descriptor: int,
+        destination_name: str,
+    ) -> None:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            path.rename(displaced)
+            safe_io.atomic_create_json(path, foreign)
+        ctime_exchange(source_descriptor, source_name, destination_descriptor, destination_name)
+
+    monkeypatch.setattr(safe_io, "_rename_exchange_at", swap_inside_exchange)
+    with pytest.raises(CampaignError, match="replacement target changed at atomic commit"):
+        safe_io.atomic_write_json_durable(path, {"schema_version": "status-v1", "state": "new"})
+
+    assert safe_io.strict_json_load(path) == foreign
+    assert safe_io.strict_json_load(displaced) == old
 
 
 def test_atomic_replace_rolls_back_an_unsafe_target_swapped_inside_exchange(

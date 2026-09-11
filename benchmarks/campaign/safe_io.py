@@ -88,6 +88,12 @@ _IDENTITY_KEYS = {
     "boot_id",
 }
 _STABLE_FILE_FIELDS = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+# What still binds an entry across a rename *this process performed*. POSIX
+# lets rename advance the moved inode's ctime; ext4, tmpfs and btrfs do, XFS
+# does not. So ctime cannot be evidence of someone else's change when our own
+# rename sits between the two stats -- compare the inode, bytes, mtime, type and
+# link count instead, and use the post-rename stat as the next version fence.
+_RENAME_STABLE_FIELDS = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_mode", "st_nlink")
 LOCK_ROOT_NAME = ".gffbase-locks"
 RETIRE_ROOT_NAME = ".gffbase-retired"
 _RENAME_NOREPLACE = 1
@@ -561,11 +567,10 @@ def _rename_noreplace_bound_at(
     )
     moved = _lstat_at(destination_descriptor, destination_name)
     # A successful rename may advance ctime even though it preserves the inode
-    # and bytes.  Bind the inode plus every other stable/type/link field, then
-    # use the post-rename stat as the publication version fence.
-    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_mode", "st_nlink")
+    # and bytes: bind across it with `_RENAME_STABLE_FIELDS`, then use the
+    # post-rename stat as the publication version fence.
     if moved is not None and not any(
-        getattr(moved, field) != getattr(expected, field) for field in fields
+        getattr(moved, field) != getattr(expected, field) for field in _RENAME_STABLE_FIELDS
     ):
         return _require_unique_regular(moved, label, allowed_modes=allowed_modes)
 
@@ -1055,6 +1060,7 @@ def _require_entry_identity(
     *,
     compare_version: bool = False,
     allowed_modes: frozenset[int] = _PRIVATE_JSON_MODES,
+    version_fields: tuple[str, ...] = _STABLE_FILE_FIELDS,
 ) -> os.stat_result:
     current = _require_unique_regular(
         _lstat_at(parent_descriptor, name),
@@ -1067,9 +1073,7 @@ def _require_entry_identity(
     if (current.st_dev, current.st_ino) != expected_identity:
         raise CampaignError(f"{label} identity changed")
     if compare_version and isinstance(expected, os.stat_result):
-        if any(
-            getattr(current, field) != getattr(expected, field) for field in _STABLE_FILE_FIELDS
-        ):
+        if any(getattr(current, field) != getattr(expected, field) for field in version_fields):
             raise CampaignError(f"{label} changed")
     return current
 
@@ -1471,7 +1475,8 @@ def _atomic_write_json_durable_under_lock(
                     allowed_modes=accepted_modes,
                 )
                 displaced = _lstat_at(parent_descriptor, temporary)
-                displaced_fields = (*_STABLE_FILE_FIELDS, "st_mode", "st_nlink")
+                # Both comparisons below span one of our own exchanges.
+                displaced_fields = _RENAME_STABLE_FIELDS
                 if displaced is None or any(
                     getattr(displaced, field) != getattr(existing, field)
                     for field in displaced_fields
@@ -1502,6 +1507,7 @@ def _atomic_write_json_durable_under_lock(
                         f"rolled-back replacement temporary for {target}",
                         compare_version=True,
                         allowed_modes=accepted_modes,
+                        version_fields=_RENAME_STABLE_FIELDS,
                     )
                     _assert_parent_identity(parent, parent_descriptor, parent_identity)
                     raise CampaignError(f"replacement target changed at atomic commit: {target}")
@@ -1512,7 +1518,7 @@ def _atomic_write_json_durable_under_lock(
                 )
                 if any(
                     getattr(published_after_exchange, field) != getattr(written, field)
-                    for field in _STABLE_FILE_FIELDS
+                    for field in _RENAME_STABLE_FIELDS
                 ):
                     raise CampaignError(f"replacement target changed during exchange: {target}")
                 _unlink_if_identity(
