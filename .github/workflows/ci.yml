@@ -305,7 +305,8 @@ jobs:
       - run: python -m build --sdist
       - name: Verify sdist contains Rust + Python sources
         run: |
-          tarball=$(ls dist/*.tar.gz | head -1)
+          tarballs=(dist/*.tar.gz)
+          tarball=${tarballs[0]}
           echo "Inspecting $tarball"
           tar -tzf "$tarball" | tee /tmp/sdist.list
           # These needles are the ones that were actually missing, not a
