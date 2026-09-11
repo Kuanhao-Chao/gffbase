@@ -127,8 +127,10 @@ on it. Had a comparator been killed at its safety valve the cell would read
    The ``peak RSS`` column is the peak of a process that ingests **and then
    validates exhaustively** (``validation_sample="all"``), which is why it
    reaches tens of GB. It is not the cost of ingest, and it is not what a user
-   pays: ``validate_db`` defaults to ``sample=200``, the CLI never overrides
-   it, and the same corpora at ``validation_sample=10000`` peak at 8.6–9.2 GB.
+   pays: ``validate_db`` defaults to ``sample=200`` and the CLI never overrides
+   it. Measured at ``validation_sample=10000``, the same five corpora peak at
+   1.3-10.2 GB instead of 3.3-62.2 GB -- GENCODE GFF3 alone falls from 62.2 GB
+   to 9.5-10.2 GB.
 
 ----
 
