@@ -1027,6 +1027,18 @@ everything from scratch.
   now gate every builder on a `verify` job that builds the tagged commit,
   asserts the native extension is present, runs the tests, and refuses if the
   tag does not match `gffbase.__version__`.
+- **Neither release workflow could publish anything.** Both run
+  `tools/release_policy.py` as their first job, on a bare `setup-python`
+  runner, and the script imports `packaging` -- which a fresh runner does not
+  have and neither workflow installed. The policy step died with
+  `ModuleNotFoundError` on every run, skipping qualification, artifacts and
+  publish behind it. Every local check passed because the development
+  environment carries `packaging`. Found by a build-only rehearsal dispatch
+  from the release branch, before the candidate tag was pushed; tagging first
+  would have spent `v0.2.0rc1` on it, since a pushed tag is never moved. Both
+  policy jobs now install `packaging==26.2`, and a test derives the
+  requirement from the script's own top-level imports, so a new third-party
+  import there fails the suite rather than the next release.
 - Both release workflows claimed `abi3-py39` covering "CPython 3.9-3.13"; the
   wheels are `abi3-py310` covering 3.10–3.14.
 - **`gffbase migrate --coalesce` crashed on every invocation.** The command
