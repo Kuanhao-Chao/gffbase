@@ -13,6 +13,9 @@ from pathlib import Path
 import pytest
 
 from benchmarks.campaign import model, safe_io, worker
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 
 def _job_matrix() -> list[model.JobSpec]:

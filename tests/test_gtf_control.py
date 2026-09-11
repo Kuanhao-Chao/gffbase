@@ -17,6 +17,9 @@ from benchmarks.prepare_gtf_control import (
     build_parent_stripped_gtf,
     validate_parent_stripped_gtf,
 )
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
 
 SOURCE_TEXT = (
     "##gff-version 3\r\n"
