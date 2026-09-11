@@ -23,6 +23,26 @@ from benchmarks.campaign import preflight as campaign_preflight
 from benchmarks.common import FULL_VALIDATION_IDS, benchmark_env, sha256_file
 from benchmarks.corpora import BY_KEY
 from benchmarks.prepare_gtf_control import build_parent_stripped_gtf
+from tests._platform import LINUX_ONLY_CAMPAIGN
+
+pytestmark = LINUX_ONLY_CAMPAIGN
+
+
+@pytest.fixture(autouse=True)
+def _restore_process_umask():
+    """`cmd_worker` sets `WORKER_UMASK`, as the worker subprocess should.
+
+    Two tests here call it in-process, and umask is process-global, so the
+    private mask outlived them and every later test created directories
+    `0700` -- `test_campaign_safe_io`'s setgid test failed whenever it ran
+    after this module. Default collection order happened to run it first.
+    """
+    previous = os.umask(0o022)
+    os.umask(previous)
+    try:
+        yield
+    finally:
+        os.umask(previous)
 
 
 def _signature(seed: str = "a") -> dict:
