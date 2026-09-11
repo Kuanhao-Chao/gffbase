@@ -346,6 +346,76 @@ def test_rust_toolchain_steps_install_what_their_job_runs(filename: str):
                     )
 
 
+#: Options `maturin sdist` accepts (maturin 1.14). It compiles nothing, so the
+#: build-only flags -- `--release`, `--locked`, `--target` -- are rejected.
+_MATURIN_SDIST_OPTIONS = frozenset({"--out", "-o", "--manifest-path", "-m", "--verbose", "-v"})
+
+
+def test_the_sdist_step_passes_only_options_maturin_sdist_accepts():
+    """`maturin sdist --locked` exits 2 with "unexpected argument".
+
+    The sdist job copied the wheel builds' `--release --locked` minus
+    `--release`, and nothing ran it until the first artifact build after a
+    fully green qualification -- which it then failed, blocking publication.
+    The lock file is shipped verbatim in the sdist; `--locked` means nothing
+    to a command that resolves no dependencies.
+    """
+    steps = [
+        step
+        for job in _workflow("release-artifacts.yml")["jobs"].values()
+        for step in job.get("steps") or []
+        if "PyO3/maturin-action" in step.get("uses", "")
+        and (step.get("with") or {}).get("command") == "sdist"
+    ]
+    assert steps, "expected the release artifacts workflow to build an sdist"
+    for step in steps:
+        flags = {arg for arg in step["with"].get("args", "").split() if arg.startswith("-")}
+        assert flags <= _MATURIN_SDIST_OPTIONS, (
+            f"`maturin sdist` rejects {sorted(flags - _MATURIN_SDIST_OPTIONS)}"
+        )
+
+
+def test_release_artifacts_py_gets_a_toml_reader_on_python_3_10():
+    """`tools/release_artifacts.py` imports `tomllib`, falling back to `tomli`.
+
+    `tomllib` is 3.11+, and the install job ran the script on 3.10 with only
+    `packaging` installed -- so every Python 3.10 wheel-install check failed
+    with both imports missing, on every platform, after the wheels themselves
+    had built. Any job that may run the script below 3.11 must install `tomli`.
+    """
+    for job_name, job in _workflow("release-artifacts.yml")["jobs"].items():
+        runs = _commands(job)
+        if "tools/release_artifacts.py" not in runs:
+            continue
+        declared = [
+            str((step.get("with") or {}).get("python-version", ""))
+            for step in job.get("steps") or []
+            if "actions/setup-python" in step.get("uses", "")
+        ]
+        matrix = ((job.get("strategy") or {}).get("matrix") or {}).get("python-version") or []
+        versions = [v for v in declared if "$" not in v] + [str(v) for v in matrix]
+        if any(tuple(int(x) for x in v.split(".")[:2]) < (3, 11) for v in versions):
+            assert "tomli" in runs, f"release-artifacts.yml:{job_name} runs on 3.10 without tomli"
+
+
+@pytest.mark.parametrize("job_name", ["wheel-smoke", "sdist-smoke"])
+def test_clean_install_checks_run_in_a_fresh_virtualenv(job_name: str):
+    """A clean-install check has to run in a clean environment.
+
+    `wheel-smoke` installed the wheel into the runner's global interpreter and
+    ran `pip check` over everything there -- including what the runner image
+    preinstalls. On the Windows Python 3.12 image that is pipx, which requires
+    `packaging>=26` against the `packaging==25.0` pin the job had just
+    installed, so the check failed on a conflict gffbase has nothing to do
+    with. `sdist-smoke` already used a venv; now both do.
+    """
+    runs = _commands(_workflow("release-artifacts.yml")["jobs"][job_name])
+    assert "-m venv" in runs, f"{job_name} does not create a virtualenv"
+    assert "python -m pip check" not in runs, (
+        f"{job_name} runs `pip check` against the runner's global interpreter"
+    )
+
+
 def test_the_package_gate_builds_a_wheel_pypi_would_accept():
     """`python -m build` drives maturin's PEP 517 backend, which tags a host
     build `linux_x86_64` -- a tag PyPI rejects and `release_artifacts.py
