@@ -74,6 +74,23 @@ same five published rows, and the parts a release depends on are exactly the
 five this section requires. Record which of the two produced the numbers being
 published; do not present one as the other.
 
+.. warning::
+
+   **The campaign will not start under a campaign root on setgid storage.**
+   ``preflight`` creates each run directory with ``os.mkdir(mode=0o700)`` and
+   then requires the result to be exactly mode ``0700``. On a parent directory
+   carrying the setgid bit -- the normal arrangement for group-shared cluster
+   storage -- the kernel returns ``02700``, and the run aborts with *new run
+   directory is not a private mode-0700 directory*. ``02700`` is exactly as
+   private as ``0700``: setgid on a directory governs group inheritance and
+   grants no access, which is why ``safe_io``'s ancestor allowlist already
+   accepts it. The two checks disagree, and ``preflight`` is the stricter one.
+
+   Until they are reconciled, point ``--campaign-root`` at a directory whose
+   parent is not setgid (``chmod g-s`` on the parent, or a path under ``/tmp``).
+   This does not affect the five-corpus canonical run, which does not go through
+   ``preflight``.
+
 .. _release_checklist--4-preparebut-do-not-publishthe-release-metadata:
 
 4. Prepare—but do not publish—the release metadata
