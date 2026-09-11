@@ -223,13 +223,60 @@ Two properties of the ingest measurement bound how much weight a single figure
 carries, and both were measured rather than assumed.
 
 **Ingest is attribute-bound, and essentially serial.** Cost tracks the number of
-attributes, not the number of features: gffbase moves roughly 160,000 attributes
-per second across every corpus, so a GENCODE annotation at 16-18 attributes per
-feature ingests at about half the *feature* rate of CHESS at 2.6. Raising the
-DuckDB thread count barely helps. From the 25-job thread sweep of one cluster
-campaign run, over five corpora at 1, 2, 4, 8 and 10 threads -- all twenty-five
-figures from that single run, since thread scaling is only meaningful within
-one:
+attributes far better than the number of features. Dividing each corpus's
+attribute values by its published ingest wall:
+
+.. list-table::
+   :header-rows: 1
+
+   * - corpus
+     - attribute values
+     - per feature
+     - gffbase attr/s
+     - legacy attr/s
+   * - MANE v1.5
+     - 6,711,851
+     - 12.8
+     - 167,700
+     - 146,900
+   * - GENCODE v49 (GFF3)
+     - 108,289,882
+     - 17.9
+     - 162,000
+     - 180,900
+   * - GENCODE v49 (GTF)
+     - 96,291,901
+     - 15.9
+     - 156,800
+     - 228,800
+   * - RefSeq GRCh38.p14
+     - 55,104,379
+     - 11.2
+     - 130,600
+     - 139,900
+   * - CHESS 3.1.3
+     - 7,063,651
+     - 2.6
+     - 62,400
+     - 51,600
+
+Across the three attribute-dense corpora -- 12.8 to 17.9 attributes per feature
+-- gffbase holds 157,000 to 168,000 attributes per second, a seven percent band
+over a sixteen-fold range of corpus size. The rate falls off as attributes per
+feature falls, to 130,600 on RefSeq and 62,400 on CHESS, which is what an
+attribute-bound cost with a fixed per-feature floor looks like: where there are
+few attributes to move, the per-feature work is what is left to pay. That is
+also why gffbase wins on CHESS and not on GENCODE.
+
+Attribute values are counted from the corpus files themselves -- semicolon
+fields in column nine, with comma-separated GFF3 values expanded, which
+reproduces the per-feature ratios above -- rather than from either database, so
+the figure does not depend on how either engine chose to store them.
+
+Raising the DuckDB thread count barely helps. From the 25-job thread sweep of
+one cluster campaign run, over five corpora at 1, 2, 4, 8 and 10 threads -- all
+twenty-five figures from that single run, since thread scaling is only
+meaningful within one:
 
 .. list-table::
    :header-rows: 1

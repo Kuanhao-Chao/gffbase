@@ -172,8 +172,9 @@ to 9.5–10.2 GB.
 **The GTF row is the inference-disabled arm**, which is the configuration least
 favourable to gffbase. GENCODE v49's GTF already contains gene and transcript
 rows, so this is the arm where `gffutils` does no synthesis at all and its
-ingest becomes a plain bulk insert — 229 k attributes/s, its fastest anywhere,
-against gffbase's entirely ordinary 157 k. The cluster campaign reports default
+ingest becomes a plain bulk insert — 229 k attributes/s, its fastest result on
+any corpus, against gffbase's entirely ordinary 157 k, which is gffbase's own
+third-fastest and within 7 % of its best. The cluster campaign reports default
 inference, inference-disabled real data, and parent-stripped synthesis as three
 independent arms; only the second is published here.
 

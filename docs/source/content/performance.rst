@@ -150,9 +150,10 @@ has nothing to do with either engine's storage.
 recommended real-data configuration, and the one that is least favourable to
 gffbase. On that arm ``gffutils`` reaches 229,000 attributes per second, its
 fastest result on any corpus, because its GTF path becomes a plain bulk insert
-with no synthesis; gffbase is at 157,000, squarely between its own MANE
-(168,000) and GFF3 (162,000) figures. The 0.69× is the comparator running
-unusually fast, not gffbase running unusually slow.
+with no synthesis; gffbase is at 157,000, which is its third-fastest result of
+the five and within 7% of its best — just under GENCODE GFF3 at 162,000 and
+MANE at 167,700, and well clear of RefSeq at 130,600. The 0.69× is the
+comparator running unusually fast, not gffbase running unusually slow.
 
 The 36-job cluster campaign reports three separate arms over these bytes, and
 they are not mixed:
