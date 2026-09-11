@@ -262,16 +262,35 @@ single-threaded, so the published comparison is largely one serial ingest
 against another, and neither engine's figure should be read as a parallel
 result.
 
-**A single ingest timing carries real uncertainty, and it is asymmetric.**
-Repeating the same corpus with a byte-identical binary on ten pinned physical
-cores of an otherwise idle machine, CHESS ranged 93.9 s to 113.1 s across runs
--- a 20 percent spread -- while ``gffutils`` on the same corpus spanned 134.2 s
-to 137.0 s, 2 percent. gffbase runs ten DuckDB threads over tens of gigabytes
-and the comparator is single-threaded on under 200 MB, so the parallel,
-allocation-heavy path is far more sensitive to machine state. Hyperthreading,
-temporary-directory placement and machine load were each ruled out as the
-cause. Larger corpora are steadier: GENCODE GTF reproduced within 2 percent
-across repeated runs.
+**Ingest uncertainty is asymmetric, and it falls with corpus size.** Repeating
+the same corpus with a byte-identical binary on ten pinned physical cores of an
+otherwise idle machine:
+
+.. list-table::
+   :header-rows: 1
+
+   * - corpus
+     - repeated gffbase ingest
+     - spread
+   * - CHESS 3.1.3
+     - 93.9 s – 113.1 s
+     - 20%
+   * - RefSeq GRCh38.p14
+     - 419.5 s – 424.8 s
+     - 1.3%
+   * - GENCODE v49 (GTF)
+     - 606.1 s – 622.2 s
+     - 2.7%
+
+The large corpora are reproducible to within a few percent; the small, fast one
+is not, because fixed startup and page-cache effects are a large fraction of a
+ninety-second run. ``gffutils`` on CHESS spanned 134.2 s to 137.0 s over the
+same period -- 2 percent -- so the sensitivity is specific to the parallel,
+allocation-heavy engine rather than to the machine. Hyperthreading,
+temporary-directory placement and machine load were each ruled out as the cause.
+
+Read the published ratios accordingly: the whole-genome figures are solid, and
+the CHESS ratio is the one carrying real uncertainty.
 
 The harness measures each ingest once, while the query phases run five times and
 report their spread. Closing that asymmetry is future work; until it is closed, a
