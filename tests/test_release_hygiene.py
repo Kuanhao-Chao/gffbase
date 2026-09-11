@@ -347,6 +347,11 @@ def test_every_in_repo_path_named_in_prose_or_source_actually_exists():
             # claim that it is present in a fresh clone.
             if path.startswith("benchmarks/out/"):
                 continue
+            # Same for `docs/build/`: `make -C docs html` writes it and it is
+            # gitignored. This passed on every machine that had built the docs
+            # once and failed on the first clean CI checkout.
+            if path.startswith("docs/build/"):
+                continue
             if not (REPO_ROOT / path).exists():
                 missing.append(f"{source.relative_to(REPO_ROOT)} -> {path}")
 

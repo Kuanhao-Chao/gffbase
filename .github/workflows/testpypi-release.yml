@@ -55,7 +55,7 @@ jobs:
       # ModuleNotFoundError on every run and nothing could publish.
       # tests/test_release_workflows.py derives the list from the script.
       - name: Install the policy helper's dependency
-        run: python -m pip install 'packaging==26.2'
+        run: python -m pip install 'packaging==25.0'
       - name: Evaluate release policy
         id: decide
         # See the note in release.yml: an expression inside `run:` is spliced

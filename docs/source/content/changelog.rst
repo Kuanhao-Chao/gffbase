@@ -1100,9 +1100,48 @@ Fixed
   environment carries ``packaging``. Found by a build-only rehearsal dispatch
   from the release branch, before the candidate tag was pushed; tagging first
   would have spent ``v0.2.0rc1`` on it, since a pushed tag is never moved. Both
-  policy jobs now install ``packaging==26.2``, and a test derives the
+  policy jobs now install ``packaging==25.0``, and a test derives the
   requirement from the script's own top-level imports, so a new third-party
   import there fails the suite rather than the next release.
+
+- **The release qualification had never run, and failed on every platform.**
+  A build-only rehearsal of the TestPyPI publisher -- dispatched from the
+  release branch with publishing off, before any tag -- ran the full
+  qualification matrix for the first time. The library's own tests passed on
+  Linux, macOS and Windows; every failure was harness, workflow or test
+  environment, and every one had passed locally:
+
+  * **No existing file could be replaced on ext4.** The campaign's atomic
+    replace compared the displaced inode against its pre-exchange ``stat``
+    *including* ``st_ctime_ns``. ext4, tmpfs and btrfs advance an inode's ctime
+    when they rename it; XFS -- this project's cluster -- does not. So on every
+    GitHub Ubuntu runner the comparison failed, the code concluded a concurrent
+    writer had swapped the target, rolled back, and then could not prove the
+    rollback either, because the rollback was a rename too. The bound no-replace
+    rename in the same file already excluded ctime across its own rename, with a
+    comment saying why; the exchange path now follows the same rule
+    (``_RENAME_STABLE_FIELDS``). Tests simulate ext4's behaviour on any
+    filesystem, and a genuine swap inside the exchange is still rolled back.
+  * **Importing the campaign package crashed on Windows.** ``os.getpgid`` and
+    ``os.killpg`` were default argument values, evaluated at import, and Windows
+    has neither -- so 12 test modules failed at collection, pytest aborted, and
+    no test ran at all. They now resolve at call time.
+  * **The Linux-only harness's tests ran on macOS**, where the code correctly
+    refuses to run (renameat2, ``/proc`` boot and mount identity, process groups):
+    115 failures and 44 errors. They are now skipped off Linux with that reason.
+  * ``rustfmt`` was never installed: ``with: { components: clippy, rustfmt }`` is a
+    YAML flow mapping, so the comma ended the entry and ``rustfmt`` became a stray
+    input. Now block style, and a test rejects unknown toolchain inputs.
+  * The package gate built a ``linux_x86_64`` wheel, which PyPI rejects and the
+    inspector refuses. It now builds with ``--compatibility pypi``.
+  * Two jobs list their test dependencies by hand and predated ``psutil`` joining
+    the ``[test]`` extra; a test now holds every hand-written list to the extra.
+  * ``actionlint`` in CI runs ``shellcheck`` over every script and flagged an
+    ``ls``-into-variable; locally shellcheck was absent, so that layer had never
+    run. A hygiene test needed the gitignored ``docs/build/`` to exist, which it
+    does on any machine that has built the docs once and nowhere else.
+  * A latent one found on the way: two tests call the worker entry point
+    in-process, and its private umask leaked into every later test.
 
 - Both release workflows claimed ``abi3-py39`` covering "CPython 3.9-3.13"; the
   wheels are ``abi3-py310`` covering 3.10–3.14.

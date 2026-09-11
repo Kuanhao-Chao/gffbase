@@ -85,7 +85,7 @@ jobs:
           python -m pip install \
             'duckdb>=1.4.1' 'pyarrow>=18.1' \
             'pytest>=7' 'pytest-cov>=4' 'hypothesis==6.165.5' \
-            'packaging>=24' 'pyyaml>=6'
+            'packaging>=24' 'pyyaml>=6' 'psutil>=5'
           PYTHONPATH=python python -c "import gffbase; assert not gffbase.native_available()"
       - name: Full default suite on the source fallback
         run: |
@@ -115,7 +115,7 @@ jobs:
           python -m pip install 'maturin==1.14.1' \
             'duckdb==1.4.1' 'pyarrow==18.1.0' \
             'pytest>=7' 'pytest-cov>=4' 'hypothesis==6.165.5' \
-            'packaging>=24' 'pyyaml>=6' 'tomli>=2'
+            'packaging>=24' 'pyyaml>=6' 'psutil>=5' 'tomli>=2'
           python -m pip install -e . --no-deps
           python -m pip check
       - name: Assert the floor environment and spatial route
@@ -281,6 +281,10 @@ jobs:
       - name: Resolve the artifact directory
         run: echo "ARTIFACT_DIR=${RUNNER_TEMP}/gffbase-qualified-dist" >> "$GITHUB_ENV"
       - name: Build each local qualification archive once
+        # A PEP 517 build of a maturin project tags a host wheel `linux_x86_64`,
+        # which PyPI rejects and the inspector below therefore refuses.
+        env:
+          MATURIN_PEP517_ARGS: --compatibility pypi
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'build==1.3.0' 'packaging==25.0'
@@ -357,8 +361,12 @@ jobs:
           ruff check python/gffbase tests benchmarks tools
           ruff format --check python/gffbase tests benchmarks tools
           mypy
+      # Block style, not `{ components: clippy, rustfmt }`: in a flow mapping
+      # the comma ends the entry, rustfmt becomes a stray input, and `cargo fmt`
+      # finds no rustfmt installed.
       - uses: dtolnay/rust-toolchain@c18ebc01c713fe144ce50311473bf5c1b15b8e08 # 1.83
-        with: { components: clippy, rustfmt }
+        with:
+          components: clippy, rustfmt
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
 

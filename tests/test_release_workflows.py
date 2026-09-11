@@ -312,6 +312,97 @@ def _commands(job: dict) -> str:
     return "\n".join(step.get("run", "") for step in job.get("steps", []))
 
 
+_RUST_TOOLCHAIN_INPUTS = frozenset({"toolchain", "target", "targets", "components"})
+_WORKFLOW_FILES = sorted(p.name for p in (REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+
+
+@pytest.mark.parametrize("filename", _WORKFLOW_FILES)
+def test_rust_toolchain_steps_install_what_their_job_runs(filename: str):
+    """`with: { components: clippy, rustfmt }` installed clippy and not rustfmt.
+
+    In a YAML flow mapping the comma separates *entries*, so that line is
+    `components: clippy` plus a stray key `rustfmt`. The action warned about
+    the unexpected input and moved on; `cargo fmt` then failed with
+    "'cargo-fmt' is not installed for the toolchain". `ci.yml` wrote the same
+    list in block style, where it is one value, which is why only the release
+    qualification broke.
+    """
+    for job_name, job in (_workflow(filename).get("jobs") or {}).items():
+        runs = _commands(job)
+        for step in job.get("steps") or []:
+            if "dtolnay/rust-toolchain" not in step.get("uses", ""):
+                continue
+            inputs = step.get("with") or {}
+            unexpected = sorted(set(inputs) - _RUST_TOOLCHAIN_INPUTS)
+            assert not unexpected, (
+                f"{filename}:{job_name}: rust-toolchain ignores inputs {unexpected} -- "
+                "a flow mapping splits `components: a, b` at the comma"
+            )
+            components = {c.strip() for c in inputs.get("components", "").split(",") if c.strip()}
+            for command, component in (("cargo fmt", "rustfmt"), ("cargo clippy", "clippy")):
+                if command in runs:
+                    assert component in components, (
+                        f"{filename}:{job_name} runs `{command}` without installing {component}"
+                    )
+
+
+def test_the_package_gate_builds_a_wheel_pypi_would_accept():
+    """`python -m build` drives maturin's PEP 517 backend, which tags a host
+    build `linux_x86_64` -- a tag PyPI rejects and `release_artifacts.py
+    inspect` therefore refuses. The gate failed on its own build step.
+    """
+    steps = _workflow("qualification.yml")["jobs"]["package"]["steps"]
+    build = next(step for step in steps if "python -m build" in step.get("run", ""))
+    assert "--compatibility pypi" in (build.get("env") or {}).get("MATURIN_PEP517_ARGS", "")
+
+
+def _test_extra() -> list:
+    from packaging.requirements import Requirement
+
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    with (REPO_ROOT / "pyproject.toml").open("rb") as stream:
+        extra = tomllib.load(stream)["project"]["optional-dependencies"]["test"]
+    return [Requirement(line) for line in extra]
+
+
+def test_hand_written_test_environments_cover_the_test_extra():
+    """Two qualification jobs list their test dependencies by hand instead of
+    installing `.[test]` -- one must not build gffbase, the other pins exact
+    floors -- and both lists predate `psutil` joining the extra. 41 tests per
+    job died on `ModuleNotFoundError: No module named 'psutil'`.
+    """
+    jobs = _workflow("qualification.yml")["jobs"]
+    checked = 0
+    for job_name, job in jobs.items():
+        steps = job.get("steps") or []
+        runs = _commands(job)
+        if "pip install" not in runs or "'pytest" not in runs:
+            continue
+        python = next(
+            (
+                (step.get("with") or {}).get("python-version", "")
+                for step in steps
+                if "actions/setup-python" in step.get("uses", "")
+            ),
+            "",
+        )
+        for requirement in _test_extra():
+            if requirement.marker is not None and python and "$" not in python:
+                if not requirement.marker.evaluate({"python_version": python}):
+                    continue
+            assert re.search(
+                rf"['\"]{re.escape(requirement.name)}(\[|[<>=!~]|['\"])", runs, re.IGNORECASE
+            ), (
+                f"qualification.yml:{job_name} hand-lists test dependencies without {requirement.name}"
+            )
+        checked += 1
+    assert checked >= 2, "expected the fallback and minimum-deps jobs to be checked"
+
+
 def test_reusable_qualification_has_the_literal_supported_compatibility_matrix():
     workflow = _workflow("qualification.yml")
     assert workflow["permissions"] == {"contents": "read"}
