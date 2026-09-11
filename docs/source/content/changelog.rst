@@ -1142,6 +1142,20 @@ Fixed
     does on any machine that has built the docs once and nowhere else.
   * A latent one found on the way: two tests call the worker entry point
     in-process, and its private umask leaked into every later test.
+  * **Windows, once it could import the harness, showed five more.** Git for
+    Windows checks text files out with CRLF, which rewrote the byte-pinned
+    measurement file and failed its SHA-256 pin -- ``.gitattributes`` now marks
+    ``benchmarks/results/*.json`` binary, and a test holds that rule. The table
+    generator named its source with ``relative_to(ROOT)``, so the provenance
+    footer read ``benchmarks\results\...`` on Windows and four pages
+    "drifted"; it now renders ``as_posix()``. The result lock already fell back
+    when ``fcntl`` was missing but called ``os.fchmod`` unconditionally, so it
+    crashed first; it is now guarded the same way. A test fixture built a
+    "hostile" wheel member with a backslash through ``zipfile``, which rewrites
+    ``os.sep`` to ``/`` on Windows and laundered it -- the validator, which parses
+    raw central-directory names, was right all along. And a POSIX path from the
+    Linux-only campaign spec was checked with the host ``Path``, which calls
+    ``/staged/...`` relative on Windows.
 
 - Both release workflows claimed ``abi3-py39`` covering "CPython 3.9-3.13"; the
   wheels are ``abi3-py310`` covering 3.10–3.14.

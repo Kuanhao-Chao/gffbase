@@ -299,6 +299,33 @@ def test_referenced_community_health_files_exist():
         assert (REPO_ROOT / name).is_file(), f"{name} is referenced but missing"
 
 
+def test_byte_pinned_measurement_artifacts_are_never_eol_converted():
+    """Git for Windows checks text files out with CRLF by default.
+
+    That rewrote 285 line endings in the historical measurement file, changed
+    its SHA-256 from the pinned `d215d19f...` to `ac6e3077...`, and failed the
+    immutability test on every Windows cell. `.gitattributes` marks the
+    results `-text`; this keeps the rule from being dropped.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
+        pytest.skip("needs a git checkout")
+    results = sorted((REPO_ROOT / "benchmarks" / "results").glob("*.json"))
+    assert results, "no measurement artifacts found"
+    for path in results:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        out = subprocess.run(
+            ["git", "check-attr", "text", "--", rel],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert out == f"{rel}: text: unset", f"{rel} may be EOL-converted on checkout: {out!r}"
+
+
 def test_every_in_repo_path_named_in_prose_or_source_actually_exists():
     """A repo-relative path cited as a pointer must resolve.
 

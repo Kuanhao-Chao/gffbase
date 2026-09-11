@@ -2828,7 +2828,10 @@ def _result_lock(path: Path):
     # left behind -- see `worker.py`'s allowlist and the note there.
     descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     with os.fdopen(descriptor, "a+") as handle:
-        os.fchmod(handle.fileno(), 0o600)
+        # Guarded like `fcntl` below: Windows has no `os.fchmod` before 3.13,
+        # and its POSIX mode bits mean nothing there anyway.
+        if hasattr(os, "fchmod"):
+            os.fchmod(handle.fileno(), 0o600)
         try:
             import fcntl
 

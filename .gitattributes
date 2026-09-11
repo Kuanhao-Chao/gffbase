@@ -1,0 +1,6 @@
+# Measurement artifacts are byte-pinned: the historical macOS run is held to a
+# SHA-256 in three places, and the published Linux run is evidence. Git for
+# Windows checks text files out with CRLF by default, which rewrote 285 line
+# endings, changed the digest, and failed the immutability test on every
+# Windows cell. Never convert them.
+benchmarks/results/*.json -text

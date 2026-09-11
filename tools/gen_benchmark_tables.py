@@ -410,7 +410,7 @@ def render_provenance(data: dict) -> str:
         f"{line1}  \n"
         f"**Versions:** Python {python_version or '?'} · {versions}  \n"
         f"**Commit:** `{commit}`{dirty} · **Run:** {stamp}  \n"
-        f"*Generated from `{published_measurements_path().relative_to(ROOT)}` by "
+        f"*Generated from `{published_measurements_path().relative_to(ROOT).as_posix()}` by "
         f"`tools/gen_benchmark_tables.py`. Do not edit by hand.*"
     )
 

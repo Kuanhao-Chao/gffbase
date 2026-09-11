@@ -9,7 +9,7 @@ import copy
 import dataclasses
 import hashlib
 import math
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -482,5 +482,7 @@ def test_the_candidate_wheel_is_passed_as_a_usable_path(tmp_path: Path) -> None:
     assert env["GFFBASE_BENCH_WHEEL"] != wheel["name"], (
         "a bare filename resolves against the worker's cwd, not the wheel"
     )
-    assert Path(env["GFFBASE_BENCH_WHEEL"]).is_absolute()
+    # POSIX by contract: the campaign spec is Linux-only. The host `Path` on
+    # Windows calls `/staged/...` relative, because it has no drive letter.
+    assert PurePosixPath(env["GFFBASE_BENCH_WHEEL"]).is_absolute()
     assert env["GFFBASE_BENCH_WHEEL_SHA256"] == wheel["sha256"]
