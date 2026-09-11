@@ -71,9 +71,13 @@ Ingest used a lot of memory
 
 Two different costs get confused here, so take them apart.
 
-**Ingest itself** peaks at roughly 7–10 GB on a whole-genome annotation, against
-111–194 MB for ``gffutils``. DuckDB allocates a vectorized buffer pool; cap it
-with ``PRAGMA memory_limit='512MB'`` if that matters more than wall time.
+**Ingest with a sampled validation pass** peaks at 6.4–10.2 GB on the three
+whole-genome annotations — RefSeq 6.4–6.9, GENCODE GTF 8.5–9.2, GENCODE GFF3
+9.5–10.2, measured at ``validation_sample=10000`` — against 111–194 MB for
+``gffutils``, which only ingests. Nothing here measures ingest with no
+validation at all, so read these as the cost of the whole default-shaped
+operation. DuckDB allocates a vectorized buffer pool; cap it with ``PRAGMA
+memory_limit='512MB'`` if that matters more than wall time.
 
 **Exhaustive validation** is what makes the published figures large: the numbers
 in the performance tables span 3.4–62.0 GB because those runs call
