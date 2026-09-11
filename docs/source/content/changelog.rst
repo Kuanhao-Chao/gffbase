@@ -8,10 +8,13 @@ All notable changes to GFFBase are documented here.
 The format follows `Keep a Changelog <https://keepachangelog.com/en/1.1.0/>`__, and
 this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.html>`__.
 
-.. _changelog--020rc1-unreleased:
+.. _changelog--020:
 
-`0.2.0rc1 <https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0rc1>`__ — Unreleased
-----------------------------------------------------------------------------------------------
+`0.2.0 <https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0>`__ — 2026-09-11
+----------------------------------------------------------------------------------------
+
+0.2.0rc1 was published to TestPyPI as the release rehearsal of this same
+content; it was never on PyPI.
 
 Genuine ``gffutils`` 0.14 API and CLI parity, first-class support for
 discontinuous (multipart) GFF3 features, a ``compat``/``strict`` mode axis,
@@ -118,7 +121,8 @@ Security
 
   An audit of every remaining f-string SQL site found no third instance.
 
-  See the :doc:`SQL injection advisory <advisory_sql_injection>` for both write-ups and mitigations
+  Published as `GHSA-5f5g-g3v5-prrg <https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg>`__ (High, CVSS 8.1). See the
+  :doc:`SQL injection advisory <advisory_sql_injection>` for both write-ups and mitigations
   for anyone who cannot upgrade.
 
 - The thread-count environment variable is now ``GFFBASE_THREADS``.
@@ -1553,10 +1557,9 @@ attribute escaping now survives materialization.)
 Notes
 ~~~~~
 
-Version 0.1.0 remains the only published release while 0.2.0 completes its
-hardening and release-evidence gates. Its metadata advertises Python 3.9
-support that the artifact cannot deliver; users who cannot install the 0.2.0
-candidate from source should apply the mitigations in the security advisory.
+0.1.0's metadata advertises Python 3.9 support that the artifact cannot
+deliver. Users who cannot move to 0.2.0 yet should apply the mitigations in
+the security advisory.
 
 ----
 

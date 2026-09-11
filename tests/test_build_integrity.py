@@ -34,11 +34,14 @@ def test_loaded_native_extension_matches_python_package():
 
 
 def test_public_candidate_version_is_pep440_normalized():
-    assert gffbase.__version__ == "0.2.0rc1"
+    assert gffbase.__version__ == "0.2.0"
 
 
-@pytest.mark.parametrize("native_version", ["0.1.0", "0.2.0", None])
+@pytest.mark.parametrize("native_version", ["0.1.0", "0.2.0rc1", None])
 def test_native_version_guard_rejects_mixed_build(native_version):
+    # A mismatch fixture that equals the current version tests nothing: the
+    # 0.2.0 bump turned the old `"0.2.0"` case into a match.
+    assert native_version != gffbase.__version__
     fake_native = SimpleNamespace(
         __version__=native_version,
         __file__="/tmp/stale/gffbase/_native.abi3.so",

@@ -56,10 +56,9 @@ migrate by changing one import line.
 pip install gffbase
 ```
 
-> **Release status:** PyPI currently provides 0.1.0. This branch documents the
-> unreleased 0.2.0rc1 candidate; verify `gffbase.__version__` and use an exact
-> reviewed commit for candidate testing. The release checklist will add the
-> final date and publication instructions only when 0.2.0 is authorized.
+> **0.2.0 is the current release** (2026-09-11). It fixes two SQL injection
+> vulnerabilities in 0.1.0 — see the [security advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg) —
+> and includes breaking changes, listed in the changelog.
 
 Universal `abi3-py310` wheels — single binary per arch covers CPython
 3.10 → 3.14. No Rust toolchain required at install time.
@@ -379,7 +378,7 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.2.0rc1},
+  version = {0.2.0},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```

@@ -1,6 +1,6 @@
 [package]
 name = "gffbase-core"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 edition = "2021"
 # Minimum supported rustc. This is the toolchain the `lint` CI job compiles
 # the whole crate with (`cargo clippy --locked --all-targets`), so the claim is

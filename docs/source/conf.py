@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.abspath("../../python"))
 project = "GFFBase"
 copyright = "2026, Kuan-Hao Chao"
 author = "Kuan-Hao Chao"
-release = "0.2.0rc1"
-version = "0.2.0rc1"
+release = "0.2.0"
+version = "0.2.0"
 
 extensions = [
     # Generated API reference -- see the module docstring for why this differs
