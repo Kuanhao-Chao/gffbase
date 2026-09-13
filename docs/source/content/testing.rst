@@ -110,3 +110,28 @@ its output or failure.
 Large-corpus and cluster benchmark runs are release evidence rather than normal
 PR jobs. A tag-ready candidate requires their recorded input hashes, successful
 full validation, matching correctness signatures, and a clean tracked tree.
+
+.. _testing--three-checks-most-suites-do-not-have:
+
+Three checks most suites do not have
+------------------------------------
+
+**Differential parity against a pinned oracle.** The parity tier compares
+gffbase against a git-pinned ``gffutils`` build rather than against recorded
+expectations. Every deliberate difference is declared in a register, and the
+suite fails both on an undeclared gap and on a declaration that has gone stale,
+so the compatibility claim cannot drift in either direction.
+
+**The documentation's own code runs.** Every runnable snippet in ``docs/``,
+``README.md`` and ``MIGRATION.md`` is extracted and executed against the
+vendored fixtures, so a documented example cannot rot unnoticed. Skipping is
+opt-out and must state a reason, and the number of exemptions is a ratchet that
+may fall but never rise -- which keeps "just skip it" from becoming the easy fix
+for a failing example.
+
+**Release invariants.** Version agreement across every file that states a
+version, packaging manifests resolving to real files, workflow YAML that GitHub
+will actually load, documentation links that resolve to pages which exist, and
+every published benchmark table matching the committed measurements it claims to
+come from. These run in the ordinary suite, not only at release time, because a
+release-day failure is the most expensive place to learn about them.

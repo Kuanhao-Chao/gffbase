@@ -476,7 +476,7 @@ def test_internal_unlisted_and_transitive_import_failures_are_not_skipped(
 #: before/after fragments. A runnable one would be a working exploit sitting in
 #: the documentation. They were outside the docs tree, and therefore outside
 #: this count, only while the advisory was not published on the site.
-MAX_SKIPPED = 68
+MAX_SKIPPED = 66
 
 
 def test_the_skip_list_does_not_grow():
