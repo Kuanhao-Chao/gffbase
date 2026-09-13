@@ -1,0 +1,1101 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/_modules/gffbase/validate.html">
+        <link rel="prefetch" href="../../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>gffbase.validate - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../content/cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../content/cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../content/testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../content/advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for gffbase.validate</h1><div class="highlight"><pre>
+<span></span><span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Author: Kuan-Hao Chao &lt;kuanhao.chao@gmail.com&gt;</span>
+<span class="c1"># Copyright 2026 Kuan-Hao Chao</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the "License");</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1">#     http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an "AS IS" BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="sd">"""Post-ingest invariants.</span>
+
+<span class="sd">Schema v2 spreads one logical feature across two tables, and the interesting</span>
+<span class="sd">failure mode is not a crash -- it is a database that answers every query</span>
+<span class="sd">plausibly and wrongly. The worst case is INV-5: if a fused feature's envelope</span>
+<span class="sd">is narrower than its segments, `region()` silently stops returning it. Nothing</span>
+<span class="sd">raises, no count looks odd, and the feature is simply gone from results.</span>
+
+<span class="sd">So these run automatically at the end of a strict-mode ingest, and can be run</span>
+<span class="sd">by hand at any time. Every check is a single set-based query returning a count</span>
+<span class="sd">plus a few examples, so validating a GENCODE-scale database is a handful of</span>
+<span class="sd">aggregate scans rather than a row-by-row walk.</span>
+
+<span class="sd">Severity is not decoration. An `error` means the database will give wrong</span>
+<span class="sd">answers; a `warning` means something is unusual but defensible in real data --</span>
+<span class="sd">abutting segments, for instance, occur in files people actually ship.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">duckdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Error</span> <span class="k">as</span> <span class="n">DuckDBError</span>
+
+<span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"gffbase.validate"</span><span class="p">)</span>
+
+<span class="n">ERROR</span> <span class="o">=</span> <span class="s2">"error"</span>
+<span class="n">WARNING</span> <span class="o">=</span> <span class="s2">"warning"</span>
+
+<span class="c1">#: `full` additionally re-parses stored attribute blobs, which is the only</span>
+<span class="c1">#: check that scales with feature count rather than with table count.</span>
+<span class="n">LEVELS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"fast"</span><span class="p">,</span> <span class="s2">"full"</span><span class="p">)</span>
+
+<span class="c1">#: How many offending rows to carry back with a violation. Enough to debug</span>
+<span class="c1">#: from, few enough that a database with a million broken rows does not</span>
+<span class="c1">#: produce a million-line report.</span>
+<span class="n">_EXAMPLE_LIMIT</span> <span class="o">=</span> <span class="mi">5</span>
+
+
+<div class="viewcode-block" id="Violation">
+<a class="viewcode-back" href="../../content/api.html#gffbase.validate.Violation">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Violation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One invariant that did not hold."""</span>
+
+    <span class="n">invariant</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">severity</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">count</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">detail</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">examples</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">head</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">invariant</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">detail</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="si">}</span><span class="s2"> row(s)]"</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">head</span>
+        <span class="k">return</span> <span class="n">head</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">  e.g. "</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">       "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ValidationReport">
+<a class="viewcode-back" href="../../content/api.html#gffbase.validate.ValidationReport">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What validation found. Falsy when anything failed at `error` severity."""</span>
+
+    <span class="n">level</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">checked</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="c1">#: Machine-stable invariant identifiers corresponding to ``checked``.</span>
+    <span class="n">checked_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">violations</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Violation</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="c1">#: Checks skipped because the database predates the structure they test.</span>
+    <span class="n">skipped</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="c1">#: INV-12 candidates with a stored, non-synthetic attribute blob.</span>
+    <span class="n">attribute_eligible</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: INV-12 candidates actually re-parsed after applying ``sample``.</span>
+    <span class="n">attribute_checked</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">errors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Violation</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">violations</span> <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">severity</span> <span class="o">==</span> <span class="n">ERROR</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">warnings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Violation</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">violations</span> <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">severity</span> <span class="o">==</span> <span class="n">WARNING</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ok</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True when nothing failed at `error` severity. Warnings do not count:</span>
+<span class="sd">        they flag data that is unusual, not a database that answers wrongly."""</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">errors</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ok</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">violations</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">"validate(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">level</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">checked</span><span class="p">)</span><span class="si">}</span><span class="s2"> invariants held"</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"validate(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">level</span><span class="si">}</span><span class="s2">): "</span> <span class="o">+</span> <span class="s2">"; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">violations</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ValidationReport.raise_for_status">
+<a class="viewcode-back" href="../../content/api.html#gffbase.validate.ValidationReport.raise_for_status">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">raise_for_status</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise if any invariant failed at `error` severity."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">errors</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ValidationError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">errors</span><span class="p">)</span><span class="si">}</span><span class="s2"> invariant(s) violated:</span><span class="se">\n</span><span class="s2">"</span>
+                <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">errors</span><span class="p">)</span>
+            <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ValidationError">
+<a class="viewcode-back" href="../../content/api.html#gffbase.validate.ValidationError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationError</span><span class="p">(</span><span class="ne">AssertionError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A database violates an invariant that makes its answers wrong.</span>
+
+<span class="sd">    `AssertionError` rather than `ValueError`: this is never bad input from the</span>
+<span class="sd">    caller, it is gffbase having produced or been handed a database whose</span>
+<span class="sd">    internal structure contradicts itself.</span>
+<span class="sd">    """</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># The checks</span>
+<span class="c1">#</span>
+<span class="c1"># Each returns (count, examples) from ONE query. The registry below pairs them</span>
+<span class="c1"># with their number, name and severity so `validate_db` is a loop rather than a</span>
+<span class="c1"># list of hand-written calls that can drift out of sync with the report.</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_count</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">sql</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Run an offender-listing query; return how many and a few examples."""</span>
+    <span class="n">offender_sql</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">";"</span><span class="p">)</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">params</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">"SELECT COUNT(*) FROM (</span><span class="si">{</span><span class="n">offender_sql</span><span class="si">}</span><span class="s2">) offenders"</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">examples</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">offender_sql</span><span class="si">}</span><span class="s2"> LIMIT </span><span class="si">{</span><span class="n">_EXAMPLE_LIMIT</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv1_unique_ids</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s2">"SELECT id, COUNT(*) FROM features GROUP BY id HAVING COUNT(*) &gt; 1"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv2_no_orphan_segments</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+        <span class="s2">"SELECT s.feature_id, s.seg_idx FROM segments s "</span>
+        <span class="s2">"WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = s.feature_id)"</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv3_n_segments_matches</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT f.id, f.n_segments, COALESCE(s.n, 0)</span>
+<span class="sd">        FROM features f</span>
+<span class="sd">        LEFT JOIN (SELECT feature_id, COUNT(*) AS n FROM segments GROUP BY feature_id) s</span>
+<span class="sd">               ON s.feature_id = f.id</span>
+<span class="sd">        WHERE f.n_segments &lt;&gt; COALESCE(s.n, 1)</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv4_seg_idx_dense</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT feature_id, lo, hi, n FROM (</span>
+<span class="sd">            SELECT feature_id, MIN(seg_idx) AS lo, MAX(seg_idx) AS hi,</span>
+<span class="sd">                   COUNT(*) AS n, COUNT(DISTINCT seg_idx) AS d</span>
+<span class="sd">            FROM segments GROUP BY feature_id</span>
+<span class="sd">        ) WHERE lo &lt;&gt; 0 OR hi &lt;&gt; n - 1 OR d &lt;&gt; n</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv5_envelope_exact</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The critical one.</span>
+
+<span class="sd">    A too-narrow envelope removes the feature from `region()` without any</span>
+<span class="sd">    error; a too-wide one is only masked by the segment recheck. Either way the</span>
+<span class="sd">    database answers plausibly and wrongly, which is exactly the class of</span>
+<span class="sd">    failure a validator exists for.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT f.id, f.start, f."end", s.mn, s.mx</span>
+<span class="sd">        FROM features f</span>
+<span class="sd">        JOIN (SELECT feature_id, MIN(start) AS mn, MAX("end") AS mx</span>
+<span class="sd">              FROM segments GROUP BY feature_id) s ON s.feature_id = f.id</span>
+<span class="sd">        WHERE f.start IS DISTINCT FROM s.mn OR f."end" IS DISTINCT FROM s.mx</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv6_edges_resolve</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Edge endpoints that name no feature.</span>
+
+<span class="sd">    A WARNING, not an error, and calibrated against the oracle rather than</span>
+<span class="sd">    against the specification: `mouse_extra_comma.gff3` has `Parent=a,` which</span>
+<span class="sd">    yields an empty parent id, and gffutils writes that relation too --</span>
+<span class="sd">    `('', 'e1', 1)` -- so refusing it would be a divergence, not a repair. Real</span>
+<span class="sd">    files also reference parents that live in another file entirely.</span>
+
+<span class="sd">    It is still worth reporting: a dangling endpoint means `parents()` and</span>
+<span class="sd">    `children()` will name something `db[...]` cannot fetch.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT parent, child, which FROM (</span>
+<span class="sd">            SELECT parent, child, 'parent' AS which FROM edges</span>
+<span class="sd">            WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = edges.parent)</span>
+<span class="sd">            UNION ALL</span>
+<span class="sd">            SELECT parent, child, 'child' AS which FROM edges</span>
+<span class="sd">            WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = edges.child)</span>
+<span class="sd">        )</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv7_segments_consistent</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Segments must not overlap each other.</span>
+
+<span class="sd">    A warning, not an error: abutting and even overlapping segments turn up in</span>
+<span class="sd">    real annotation files, and refusing to load them would be worse than</span>
+<span class="sd">    reporting them. The logical columns cannot diverge -- the ingest predicate</span>
+<span class="sd">    enforces that before anything is written -- so only the coordinates are</span>
+<span class="sd">    checked here.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT a.feature_id, a.seg_idx, b.seg_idx</span>
+<span class="sd">        FROM segments a JOIN segments b</span>
+<span class="sd">          ON a.feature_id = b.feature_id AND a.seg_idx &lt; b.seg_idx</span>
+<span class="sd">        WHERE a.start IS NOT NULL AND a."end" IS NOT NULL</span>
+<span class="sd">          AND b.start IS NOT NULL AND b."end" IS NOT NULL</span>
+<span class="sd">          AND a.start &lt;= b."end" AND b.start &lt;= a."end"</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv8_bbox_matches</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""`bbox` must agree with the coordinates it was built from.</span>
+
+<span class="sd">    A stale bbox is the R-tree equivalent of a wrong envelope: the B-tree path</span>
+<span class="sd">    keeps answering correctly while the R-tree path quietly disagrees, so the</span>
+<span class="sd">    two paths return different features for the same query.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT id, start, "end" FROM features</span>
+<span class="sd">        WHERE (start IS NULL OR "end" IS NULL) &lt;&gt; (bbox IS NULL)</span>
+<span class="sd">           OR (bbox IS NOT NULL AND (</span>
+<span class="sd">                   -- LEAST/GREATEST, not start/end: `ST_MakeEnvelope`</span>
+<span class="sd">                   -- normalizes its corners, so a row with `end &lt; start` --</span>
+<span class="sd">                   -- which compat mode accepts, and which `sanitize_gff_file`</span>
+<span class="sd">                   -- exists to repair -- gets a correctly-ordered envelope.</span>
+<span class="sd">                   -- Comparing against the raw columns flagged those as</span>
+<span class="sd">                   -- corrupt when the bbox was right.</span>
+<span class="sd">                   ST_XMin(bbox) &lt;&gt; LEAST(start, "end")</span>
+<span class="sd">                OR ST_XMax(bbox) &lt;&gt; GREATEST(start, "end")</span>
+<span class="sd">                OR ST_YMin(bbox) &lt;&gt; seqid_y))</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv9_seqid_map_complete</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT f.seqid, f.seqid_y, m.seqid_y</span>
+<span class="sd">        FROM (SELECT DISTINCT seqid, seqid_y FROM features WHERE seqid_y IS NOT NULL) f</span>
+<span class="sd">        LEFT JOIN seqid_map m ON m.seqid = f.seqid</span>
+<span class="sd">        WHERE m.seqid IS NULL OR m.seqid_y &lt;&gt; f.seqid_y</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv10_attribute_dedup_consistent</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A segment marked as repeating segment 0's column 9 must have no</span>
+<span class="sd">    attribute rows of its own, and one marked as differing must have some.</span>
+
+<span class="sd">    Get this backwards and attributes silently vanish for the segments that</span>
+<span class="sd">    actually carried different ones.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT s.feature_id, s.seg_idx, s.attrs_same_as_seg0, COALESCE(a.n, 0)</span>
+<span class="sd">        FROM segments s</span>
+<span class="sd">        LEFT JOIN (SELECT feature_id, seg_idx, COUNT(*) AS n</span>
+<span class="sd">                   FROM attributes GROUP BY feature_id, seg_idx) a</span>
+<span class="sd">               ON a.feature_id = s.feature_id AND a.seg_idx = s.seg_idx</span>
+<span class="sd">        WHERE s.seg_idx &gt; 0</span>
+<span class="sd">          AND ((s.attrs_same_as_seg0 AND COALESCE(a.n, 0) &gt; 0)</span>
+<span class="sd">            OR (NOT s.attrs_same_as_seg0 AND COALESCE(a.n, 0) = 0))</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv11_closure_sound</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Cheap closure sanity plus exact depth-one edge/cache agreement."""</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        WITH expected AS (</span>
+<span class="sd">            SELECT DISTINCT parent AS ancestor, child AS descendant FROM edges</span>
+<span class="sd">        ),</span>
+<span class="sd">        actual AS (</span>
+<span class="sd">            SELECT ancestor, descendant FROM closure WHERE depth = 1</span>
+<span class="sd">        ),</span>
+<span class="sd">        missing AS (</span>
+<span class="sd">            SELECT * FROM expected EXCEPT SELECT * FROM actual</span>
+<span class="sd">        ),</span>
+<span class="sd">        extra AS (</span>
+<span class="sd">            SELECT * FROM actual EXCEPT SELECT * FROM expected</span>
+<span class="sd">        ),</span>
+<span class="sd">        duplicate AS (</span>
+<span class="sd">            SELECT ancestor, descendant, depth</span>
+<span class="sd">            FROM closure</span>
+<span class="sd">            GROUP BY ancestor, descendant, depth</span>
+<span class="sd">            HAVING COUNT(*) &gt; 1</span>
+<span class="sd">        ),</span>
+<span class="sd">        nonpositive AS (</span>
+<span class="sd">            SELECT ancestor, descendant, depth</span>
+<span class="sd">            FROM closure</span>
+<span class="sd">            WHERE depth &lt;= 0</span>
+<span class="sd">        )</span>
+<span class="sd">        SELECT ancestor, descendant, 1 AS depth, 'missing closure row' AS reason FROM missing</span>
+<span class="sd">        UNION ALL</span>
+<span class="sd">        SELECT ancestor, descendant, 1 AS depth, 'extra depth-one closure row' FROM extra</span>
+<span class="sd">        UNION ALL</span>
+<span class="sd">        SELECT ancestor, descendant, depth, 'duplicate closure row' FROM duplicate</span>
+<span class="sd">        UNION ALL</span>
+<span class="sd">        SELECT ancestor, descendant, depth, 'non-positive closure depth' FROM nonpositive</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv11_exact_closure</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The stored closure must equal a fresh traversal of ``edges``.</span>
+
+<span class="sd">    Checking only that stored depth-1 rows have an edge misses the more</span>
+<span class="sd">    dangerous direction: a deleted depth-1 row, a missing transitive row, or a</span>
+<span class="sd">    fabricated deeper row all leave plausible but wrong hierarchy answers.</span>
+<span class="sd">    Recomputing with the same depth budget and path-local cycle guard as ingest</span>
+<span class="sd">    catches missing, extra and wrong-depth rows without mutating the database.</span>
+<span class="sd">    """</span>
+    <span class="n">depth_row</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">_has_table</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s2">"meta"</span><span class="p">):</span>
+        <span class="n">depth_row</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SELECT value FROM meta WHERE key = 'max_depth'"</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">depth_row</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">max_depth</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">depth_row</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Pre-metadata/v1 databases cannot tell us the configured ceiling.</span>
+        <span class="c1"># Recompute at least direct edges and as far as their stored cache did,</span>
+        <span class="c1"># avoiding claims about depths the database may never have promised.</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SELECT MAX(depth) FROM closure WHERE depth &gt; 0"</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="n">max_depth</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">if</span> <span class="n">row</span> <span class="ow">and</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span>
+
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        WITH RECURSIVE walk(ancestor, descendant, depth) AS (</span>
+<span class="sd">            SELECT DISTINCT parent, child, 1 FROM edges</span>
+<span class="sd">            UNION</span>
+<span class="sd">            SELECT w.ancestor, e.child, w.depth + 1</span>
+<span class="sd">            FROM walk w</span>
+<span class="sd">            JOIN edges e ON e.parent = w.descendant</span>
+<span class="sd">            WHERE w.depth &lt; ? AND w.ancestor &lt;&gt; e.child</span>
+<span class="sd">        ),</span>
+<span class="sd">        expected AS (</span>
+<span class="sd">            SELECT ancestor, descendant, MIN(depth) AS depth</span>
+<span class="sd">            FROM walk GROUP BY ancestor, descendant</span>
+<span class="sd">        ),</span>
+<span class="sd">        actual AS (</span>
+<span class="sd">            SELECT ancestor, descendant, depth FROM closure</span>
+<span class="sd">        ),</span>
+<span class="sd">        missing AS (</span>
+<span class="sd">            SELECT * FROM expected EXCEPT SELECT * FROM actual</span>
+<span class="sd">        ),</span>
+<span class="sd">        extra AS (</span>
+<span class="sd">            SELECT * FROM actual EXCEPT SELECT * FROM expected</span>
+<span class="sd">        ),</span>
+<span class="sd">        duplicate AS (</span>
+<span class="sd">            SELECT ancestor, descendant, depth</span>
+<span class="sd">            FROM closure</span>
+<span class="sd">            GROUP BY ancestor, descendant, depth</span>
+<span class="sd">            HAVING COUNT(*) &gt; 1</span>
+<span class="sd">        )</span>
+<span class="sd">        SELECT ancestor, descendant, depth, 'missing closure row' AS reason</span>
+<span class="sd">        FROM missing</span>
+<span class="sd">        UNION ALL</span>
+<span class="sd">        SELECT ancestor, descendant, depth, 'extra or wrong-depth closure row'</span>
+<span class="sd">        FROM extra</span>
+<span class="sd">        UNION ALL</span>
+<span class="sd">        SELECT ancestor, descendant, depth, 'duplicate closure row'</span>
+<span class="sd">        FROM duplicate</span>
+<span class="sd">        """</span><span class="p">,</span>
+        <span class="p">[</span><span class="n">max_depth</span><span class="p">],</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv11b_no_self_ancestry</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A feature that is its own ancestor.</span>
+
+<span class="sd">    A WARNING, because it is reachable from ordinary input and matches the</span>
+<span class="sd">    oracle: a line saying `ID=a;Parent=a` produces exactly this, and gffutils</span>
+<span class="sd">    writes the same relation. Deeper cycles no longer reach the closure at all</span>
+<span class="sd">    -- the walk refuses to visit a node twice on one path -- so what survives</span>
+<span class="sd">    here is the single self-edge the file literally asserts.</span>
+
+<span class="sd">    Still reported: `children(x)` naming `x` is a surprise worth knowing about,</span>
+<span class="sd">    and it is always a sign of a malformed file.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span> <span class="s2">"SELECT ancestor, descendant, depth FROM closure WHERE ancestor = descendant"</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv13_conflicts_resolve</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Every recorded id resolution must point at a feature that exists, and</span>
+<span class="sd">    `id_origin` must take a value the code actually produces.</span>
+
+<span class="sd">    The design phrased this as `id_origin='create_unique'`, which the</span>
+<span class="sd">    implemented vocabulary ('attribute' / 'autoincrement') does not use; this</span>
+<span class="sd">    checks the property that vocabulary supports.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT which, value FROM (</span>
+<span class="sd">            SELECT 'id_conflicts.resolved_id' AS which, resolved_id AS value</span>
+<span class="sd">            FROM id_conflicts</span>
+<span class="sd">            WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = id_conflicts.resolved_id)</span>
+<span class="sd">            UNION ALL</span>
+<span class="sd">            SELECT 'duplicates.new_id', new_id FROM duplicates</span>
+<span class="sd">            WHERE NOT EXISTS (SELECT 1 FROM features f WHERE f.id = duplicates.new_id)</span>
+<span class="sd">            UNION ALL</span>
+<span class="sd">            SELECT 'features.id_origin', id_origin FROM features</span>
+<span class="sd">            WHERE id_origin NOT IN ('attribute', 'autoincrement')</span>
+<span class="sd">        )</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv14_file_order_is_first_segment</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A feature's `file_order` must be its first line's, or ordering by it</span>
+<span class="sd">    puts a discontinuous feature somewhere its first line never was."""</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT f.id, f.file_order, s.mn</span>
+<span class="sd">        FROM features f</span>
+<span class="sd">        JOIN (SELECT feature_id, MIN(file_order) AS mn FROM segments GROUP BY feature_id) s</span>
+<span class="sd">             ON s.feature_id = f.id</span>
+<span class="sd">        WHERE f.file_order IS DISTINCT FROM s.mn</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv15_no_orphan_attributes</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Every normalized attribute row belongs to a logical feature."""</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT a.feature_id, a.key, a.value</span>
+<span class="sd">        FROM attributes a</span>
+<span class="sd">        LEFT JOIN features f ON f.id = a.feature_id</span>
+<span class="sd">        WHERE f.id IS NULL</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv15a_attribute_segments_resolve</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Segment-qualified attributes point at an existing physical segment."""</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT a.feature_id, a.key, a.value, a.seg_idx</span>
+<span class="sd">        FROM attributes a</span>
+<span class="sd">        JOIN features f ON f.id = a.feature_id</span>
+<span class="sd">        WHERE a.seg_idx &lt; 0</span>
+<span class="sd">           OR (f.n_segments = 1 AND a.seg_idx &lt;&gt; 0)</span>
+<span class="sd">           OR (f.n_segments &gt; 1 AND NOT EXISTS (</span>
+<span class="sd">                  SELECT 1 FROM segments s</span>
+<span class="sd">                  WHERE s.feature_id = a.feature_id AND s.seg_idx = a.seg_idx</span>
+<span class="sd">              ))</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv16_gtf_hierarchy_coherent</span><span class="p">(</span><span class="n">con</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""GTF edges share a locus; inferred parents additionally enclose children."""</span>
+    <span class="k">return</span> <span class="n">_count</span><span class="p">(</span>
+        <span class="n">con</span><span class="p">,</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        SELECT p.id, c.id, p.seqid, c.seqid, p.strand, c.strand,</span>
+<span class="sd">               p.start, p."end", c.start, c."end",</span>
+<span class="sd">               CASE</span>
+<span class="sd">                 WHEN NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')</span>
+<span class="sd">                        OR (p.featuretype = 'transcript'</span>
+<span class="sd">                            AND c.featuretype NOT IN ('gene', 'transcript')))</span>
+<span class="sd">                   THEN 'disallowed GTF edge types'</span>
+<span class="sd">                 WHEN p.seqid IS DISTINCT FROM c.seqid THEN 'different seqid'</span>
+<span class="sd">                 WHEN p.strand IS DISTINCT FROM c.strand THEN 'different strand'</span>
+<span class="sd">                 ELSE 'parent does not enclose child'</span>
+<span class="sd">               END AS reason</span>
+<span class="sd">        FROM edges e</span>
+<span class="sd">        JOIN features p ON p.id = e.parent</span>
+<span class="sd">        JOIN features c ON c.id = e.child</span>
+<span class="sd">        WHERE (((SELECT value FROM meta WHERE key = 'fmt') = 'gtf'</span>
+<span class="sd">                AND (NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')</span>
+<span class="sd">                       OR (p.featuretype = 'transcript'</span>
+<span class="sd">                           AND c.featuretype NOT IN ('gene', 'transcript')))</span>
+<span class="sd">                  OR p.seqid IS DISTINCT FROM c.seqid</span>
+<span class="sd">                  OR p.strand IS DISTINCT FROM c.strand))</span>
+<span class="sd">            OR (p.is_synthetic = TRUE</span>
+<span class="sd">                AND (p.start IS NULL OR p."end" IS NULL</span>
+<span class="sd">                  OR c.start IS NULL OR c."end" IS NULL</span>
+<span class="sd">                  OR p.start &gt; c.start OR p."end" &lt; c."end")))</span>
+<span class="sd">        """</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1">#: (number, name, severity, function, requires_segments)</span>
+<span class="n">_CHECKS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="s2">"INV-1"</span><span class="p">,</span> <span class="s2">"unique_ids"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv1_unique_ids</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-2"</span><span class="p">,</span> <span class="s2">"no_orphan_segments"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv2_no_orphan_segments</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-3"</span><span class="p">,</span> <span class="s2">"n_segments_matches"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv3_n_segments_matches</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-4"</span><span class="p">,</span> <span class="s2">"seg_idx_dense"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv4_seg_idx_dense</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-5"</span><span class="p">,</span> <span class="s2">"envelope_exact"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv5_envelope_exact</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-6"</span><span class="p">,</span> <span class="s2">"edges_resolve"</span><span class="p">,</span> <span class="n">WARNING</span><span class="p">,</span> <span class="n">_inv6_edges_resolve</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-7"</span><span class="p">,</span> <span class="s2">"segments_do_not_overlap"</span><span class="p">,</span> <span class="n">WARNING</span><span class="p">,</span> <span class="n">_inv7_segments_consistent</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-8"</span><span class="p">,</span> <span class="s2">"bbox_matches"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv8_bbox_matches</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-9"</span><span class="p">,</span> <span class="s2">"seqid_map_complete"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv9_seqid_map_complete</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-10"</span><span class="p">,</span> <span class="s2">"attribute_dedup_consistent"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv10_attribute_dedup_consistent</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-11"</span><span class="p">,</span> <span class="s2">"closure_sound"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv11_closure_sound</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-11b"</span><span class="p">,</span> <span class="s2">"closure_self_ancestry"</span><span class="p">,</span> <span class="n">WARNING</span><span class="p">,</span> <span class="n">_inv11b_no_self_ancestry</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-13"</span><span class="p">,</span> <span class="s2">"conflicts_resolve"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv13_conflicts_resolve</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-14"</span><span class="p">,</span> <span class="s2">"file_order_is_first_segment"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv14_file_order_is_first_segment</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"INV-15"</span><span class="p">,</span> <span class="s2">"no_orphan_attributes"</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">_inv15_no_orphan_attributes</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+    <span class="p">(</span>
+        <span class="s2">"INV-15a"</span><span class="p">,</span>
+        <span class="s2">"attribute_segments_resolve"</span><span class="p">,</span>
+        <span class="n">ERROR</span><span class="p">,</span>
+        <span class="n">_inv15a_attribute_segments_resolve</span><span class="p">,</span>
+        <span class="kc">True</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="p">(</span>
+        <span class="s2">"INV-16"</span><span class="p">,</span>
+        <span class="s2">"gtf_hierarchy_coherent"</span><span class="p">,</span>
+        <span class="n">ERROR</span><span class="p">,</span>
+        <span class="n">_inv16_gtf_hierarchy_coherent</span><span class="p">,</span>
+        <span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">_DETAILS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"unique_ids"</span><span class="p">:</span> <span class="s2">"duplicate feature id"</span><span class="p">,</span>
+    <span class="s2">"no_orphan_segments"</span><span class="p">:</span> <span class="s2">"segment rows whose feature no longer exists"</span><span class="p">,</span>
+    <span class="s2">"n_segments_matches"</span><span class="p">:</span> <span class="s2">"n_segments disagrees with the stored segment count"</span><span class="p">,</span>
+    <span class="s2">"seg_idx_dense"</span><span class="p">:</span> <span class="s2">"seg_idx is not a dense 0..n-1 sequence"</span><span class="p">,</span>
+    <span class="s2">"envelope_exact"</span><span class="p">:</span> <span class="s2">"feature coordinates are not MIN/MAX over its segments"</span><span class="p">,</span>
+    <span class="s2">"edges_resolve"</span><span class="p">:</span> <span class="s2">"edge endpoint does not resolve to a feature"</span><span class="p">,</span>
+    <span class="s2">"segments_do_not_overlap"</span><span class="p">:</span> <span class="s2">"segments of one feature overlap each other"</span><span class="p">,</span>
+    <span class="s2">"bbox_matches"</span><span class="p">:</span> <span class="s2">"bbox disagrees with the coordinates it was built from"</span><span class="p">,</span>
+    <span class="s2">"seqid_map_complete"</span><span class="p">:</span> <span class="s2">"seqid missing from seqid_map, or its band disagrees"</span><span class="p">,</span>
+    <span class="s2">"attribute_dedup_consistent"</span><span class="p">:</span> <span class="s2">"attribute rows disagree with attrs_same_as_seg0"</span><span class="p">,</span>
+    <span class="s2">"closure_sound"</span><span class="p">:</span> <span class="s2">"closure is mis-depthed or disagrees with edges"</span><span class="p">,</span>
+    <span class="s2">"closure_exact"</span><span class="p">:</span> <span class="s2">"recursive closure is not exactly the traversal of edges"</span><span class="p">,</span>
+    <span class="s2">"closure_self_ancestry"</span><span class="p">:</span> <span class="s2">"a feature is its own ancestor"</span><span class="p">,</span>
+    <span class="s2">"conflicts_resolve"</span><span class="p">:</span> <span class="s2">"recorded id resolution points at a missing feature"</span><span class="p">,</span>
+    <span class="s2">"file_order_is_first_segment"</span><span class="p">:</span> <span class="s2">"file_order is not the first segment's"</span><span class="p">,</span>
+    <span class="s2">"no_orphan_attributes"</span><span class="p">:</span> <span class="s2">"attribute rows whose feature no longer exists"</span><span class="p">,</span>
+    <span class="s2">"attribute_segments_resolve"</span><span class="p">:</span> <span class="s2">"attribute rows whose physical segment no longer exists"</span><span class="p">,</span>
+    <span class="s2">"gtf_hierarchy_coherent"</span><span class="p">:</span> <span class="p">(</span>
+        <span class="s2">"GTF parent and child disagree on locus/strand, or a synthetic parent "</span>
+        <span class="s2">"does not enclose its child"</span>
+    <span class="p">),</span>
+    <span class="s2">"attributes_reparse"</span><span class="p">:</span> <span class="s2">"re-parsing attributes_blob does not reproduce the attributes rows"</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_inv12_attributes_reparse</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""`full` only: re-parse stored blobs and compare with the attribute rows.</span>
+
+<span class="sd">    This is the check that catches escaping bugs -- a parser that drops a</span>
+<span class="sd">    percent-encoded character writes attribute rows that no longer match the</span>
+<span class="sd">    bytes they came from, and every other invariant here would still hold.</span>
+
+<span class="sd">    Sampled rather than exhaustive: it is the one check that costs per feature.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">gffbase.feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">_LazyAttributes</span>
+
+    <span class="n">predicate</span> <span class="o">=</span> <span class="s2">"attributes_blob IS NOT NULL AND is_synthetic = FALSE"</span>
+    <span class="n">eligible_sql</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"SELECT id, file_order FROM features WHERE </span><span class="si">{</span><span class="n">predicate</span><span class="si">}</span><span class="s2"> ORDER BY file_order"</span>
+    <span class="n">eligible</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="sa">f</span><span class="s2">"SELECT COUNT(*) FROM features WHERE </span><span class="si">{</span><span class="n">predicate</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">limit</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">" LIMIT ?"</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"WITH eligible AS ("</span>
+        <span class="o">+</span> <span class="n">eligible_sql</span>
+        <span class="o">+</span> <span class="n">limit</span>
+        <span class="o">+</span> <span class="s2">") SELECT e.id, sa.seg_idx, CAST(sa.attributes_blob AS BLOB), a.key, a.value "</span>
+        <span class="s2">"FROM eligible e JOIN segments_all sa ON sa.feature_id = e.id "</span>
+        <span class="s2">"LEFT JOIN segments sm ON sm.feature_id = sa.feature_id AND sm.seg_idx = sa.seg_idx "</span>
+        <span class="s2">"LEFT JOIN attributes a ON a.feature_id = sa.feature_id AND a.seg_idx = "</span>
+        <span class="s2">"CASE WHEN sm.seg_idx &gt; 0 AND sm.attrs_same_as_seg0 THEN 0 ELSE sa.seg_idx END "</span>
+        <span class="s2">"ORDER BY e.file_order, sa.seg_idx, a.key, a.idx"</span>
+    <span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span> <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">sample</span><span class="p">])</span>
+    <span class="n">offenders</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">checked</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">current_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">current_seg_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">current_blob</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">last_counted_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stored</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_current</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">current_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">assert</span> <span class="n">current_blob</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="c1"># A key with an EMPTY value list -- `pseudo`, `ID=`, `Complete` -- is</span>
+        <span class="c1"># not representable as a `(key, value)` row, so the long-form table</span>
+        <span class="c1"># correctly holds nothing for it while the parsed mapping still shows</span>
+        <span class="c1"># the key. That difference is the schema's, not a parser bug, so it is</span>
+        <span class="c1"># normalized away here; without this, four upstream fixtures reported</span>
+        <span class="c1"># a violation for behaviour that is exactly right.</span>
+        <span class="n">reparsed</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_LazyAttributes</span><span class="p">(</span><span class="n">blob</span><span class="o">=</span><span class="n">current_blob</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">reparsed</span> <span class="o">!=</span> <span class="n">stored</span><span class="p">:</span>
+            <span class="n">offenders</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">current_id</span><span class="p">,</span> <span class="n">current_seg_idx</span><span class="p">,</span> <span class="n">stored</span><span class="p">,</span> <span class="n">reparsed</span><span class="p">))</span>
+
+    <span class="k">while</span> <span class="n">rows</span> <span class="o">:=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchmany</span><span class="p">(</span><span class="mi">10_000</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">fid</span><span class="p">,</span> <span class="n">seg_idx</span><span class="p">,</span> <span class="n">blob</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">seg_idx</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="n">current_id</span><span class="p">,</span> <span class="n">current_seg_idx</span><span class="p">):</span>
+                <span class="n">check_current</span><span class="p">()</span>
+                <span class="n">current_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">fid</span><span class="p">)</span>
+                <span class="n">current_seg_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">seg_idx</span><span class="p">)</span>
+                <span class="n">current_blob</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span>
+                <span class="n">stored</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">current_id</span> <span class="o">!=</span> <span class="n">last_counted_id</span><span class="p">:</span>
+                    <span class="n">checked</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">last_counted_id</span> <span class="o">=</span> <span class="n">current_id</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">stored</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+    <span class="n">check_current</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">offenders</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">offenders</span><span class="p">[:</span><span class="n">_EXAMPLE_LIMIT</span><span class="p">]),</span> <span class="n">eligible</span><span class="p">,</span> <span class="n">checked</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_has_table</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+        <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SELECT COUNT(*) FROM duckdb_tables() WHERE table_name = ?"</span><span class="p">,</span> <span class="p">[</span><span class="n">name</span><span class="p">])</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span>
+            <span class="mi">0</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_has_column</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+        <span class="n">con</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="s2">"SELECT COUNT(*) FROM duckdb_columns() WHERE table_name = ? AND column_name = ?"</span><span class="p">,</span>
+            <span class="p">[</span><span class="n">table</span><span class="p">,</span> <span class="n">column</span><span class="p">],</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="validate_db">
+<a class="viewcode-back" href="../../content/api.html#gffbase.validate.validate_db">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_db</span><span class="p">(</span>
+    <span class="n">db</span><span class="p">,</span>
+    <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"fast"</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">raise_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ValidationReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Check a database's structural invariants.</span>
+
+<span class="sd">    `level="fast"` runs every check that is a fixed number of aggregate scans.</span>
+<span class="sd">    `level="full"` adds INV-12, which re-parses stored attribute blobs for</span>
+<span class="sd">    `sample` features and is the only check whose cost grows with the corpus.</span>
+
+<span class="sd">    Checks that depend on structures a database does not have -- a v1 shim has</span>
+<span class="sd">    no `segments` -- are recorded as skipped rather than silently passing, so a</span>
+<span class="sd">    green report cannot mean "nothing was looked at".</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">LEVELS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"level must be one of </span><span class="si">{</span><span class="n">LEVELS</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="n">level</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">sample</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"sample must be a non-negative integer or None"</span><span class="p">)</span>
+
+    <span class="n">con</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">conn</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"conn"</span><span class="p">)</span> <span class="k">else</span> <span class="n">db</span>
+    <span class="n">report</span> <span class="o">=</span> <span class="n">ValidationReport</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">)</span>
+
+    <span class="n">has_segments</span> <span class="o">=</span> <span class="n">_has_table</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s2">"segments"</span><span class="p">)</span>
+    <span class="n">has_bbox</span> <span class="o">=</span> <span class="n">_has_column</span><span class="p">(</span><span class="n">con</span><span class="p">,</span> <span class="s2">"features"</span><span class="p">,</span> <span class="s2">"bbox"</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">number</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">severity</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">needs_segments</span> <span class="ow">in</span> <span class="n">_CHECKS</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">needs_segments</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_segments</span><span class="p">:</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">skipped</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">): this database has no `segments` table"</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"bbox_matches"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_bbox</span><span class="p">:</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">skipped</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">): no R-tree was built for this database"</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">count</span><span class="p">,</span> <span class="n">examples</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">con</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">DuckDBError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">OverflowError</span><span class="p">,</span> <span class="ne">UnicodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="c1"># Corrupt tables, metadata, and stored blobs must become a report</span>
+            <span class="c1"># entry; do not hide programmer errors raised by a check itself.</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">Violation</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">severity</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"check could not run: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">report</span><span class="o">.</span><span class="n">checked</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+        <span class="n">report</span><span class="o">.</span><span class="n">checked_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">count</span><span class="p">:</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">Violation</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">severity</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">_DETAILS</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">examples</span><span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">"full"</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">number</span><span class="p">,</span> <span class="n">stable_id</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">fn</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="p">(</span><span class="s2">"INV-11 exact"</span><span class="p">,</span> <span class="s2">"INV-11-exact"</span><span class="p">,</span> <span class="s2">"closure_exact"</span><span class="p">,</span> <span class="n">_inv11_exact_closure</span><span class="p">),</span>
+            <span class="p">(</span>
+                <span class="s2">"INV-12"</span><span class="p">,</span>
+                <span class="s2">"INV-12"</span><span class="p">,</span>
+                <span class="s2">"attributes_reparse"</span><span class="p">,</span>
+                <span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">_inv12_attributes_reparse</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">sample</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">con</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">stable_id</span> <span class="o">==</span> <span class="s2">"INV-12"</span><span class="p">:</span>
+                    <span class="n">count</span><span class="p">,</span> <span class="n">examples</span><span class="p">,</span> <span class="n">report</span><span class="o">.</span><span class="n">attribute_eligible</span><span class="p">,</span> <span class="n">report</span><span class="o">.</span><span class="n">attribute_checked</span> <span class="o">=</span> <span class="n">result</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">count</span><span class="p">,</span> <span class="n">examples</span> <span class="o">=</span> <span class="n">result</span>
+            <span class="k">except</span> <span class="p">(</span><span class="n">DuckDBError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">OverflowError</span><span class="p">,</span> <span class="ne">UnicodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="n">report</span><span class="o">.</span><span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Violation</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"check could not run: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">checked</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">number</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">checked_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stable_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">count</span><span class="p">:</span>
+                <span class="n">report</span><span class="o">.</span><span class="n">violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Violation</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">ERROR</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">_DETAILS</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">examples</span><span class="p">)</span>
+                <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">violation</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">violations</span><span class="p">:</span>
+        <span class="p">(</span><span class="n">_log</span><span class="o">.</span><span class="n">error</span> <span class="k">if</span> <span class="n">violation</span><span class="o">.</span><span class="n">severity</span> <span class="o">==</span> <span class="n">ERROR</span> <span class="k">else</span> <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">)(</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">violation</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">raise_on_error</span><span class="p">:</span>
+        <span class="n">report</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">report</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

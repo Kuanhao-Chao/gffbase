@@ -1,0 +1,1164 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="API reference" href="api.html"><link rel="prev" title="Architecture" href="architecture.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/content/schema_v2.html">
+        <link rel="prefetch" href="../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Schema v2, multipart features, and the compat/strict axis - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/docs/source/content/schema_v2.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/edit/main/docs/source/content/schema_v2.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="schema-v2-multipart-features-and-the-compat-strict-axis">
+<span id="schema-v2-schema-v2-multipart-features-and-the-compatstrict-axis"></span><h1>Schema v2, multipart features, and the compat/strict axis<a class="headerlink" href="#schema-v2-multipart-features-and-the-compat-strict-axis" title="Link to this heading">¶</a></h1>
+<p>Status: <strong>implemented in 0.2.0</strong> (<code class="docutils literal notranslate"><span class="pre">gffbase.schema.SCHEMA_VERSION</span> <span class="pre">==</span> <span class="pre">&quot;2&quot;</span></code>)
+Supersedes: schema v1</p>
+<p>This document is kept as the design record. Where the implementation ended up
+somewhere other than the recommendation, §12 says so rather than being quietly
+edited to match — the disagreement is the useful part.</p>
+<p>This is the design for the three linked changes in 0.2.0: a validation-profile
+axis that makes <code class="docutils literal notranslate"><span class="pre">create_db()</span></code> usable as a drop-in again, a storage model that
+can represent a discontinuous GFF3 feature, and the migration between them.</p>
+<hr class="docutils" />
+<section id="why">
+<span id="schema-v2-1-why"></span><h2>1. Why<a class="headerlink" href="#why" title="Link to this heading">¶</a></h2>
+<section id="gffbase-rejects-files-gffutils-reads">
+<span id="schema-v2-11-gffbase-rejects-files-gffutils-reads"></span><h3>1.1 gffbase rejects files gffutils reads<a class="headerlink" href="#gffbase-rejects-files-gffutils-reads" title="Link to this heading">¶</a></h3>
+<p>The differential suite measures this: <strong>6 of the 23 upstream fixtures that
+gffutils ingests, gffbase refuses outright</strong> — including <code class="docutils literal notranslate"><span class="pre">FBgn0031208.gff</span></code>,
+the canonical gffutils fixture.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 33.0%" />
+<col style="width: 33.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Fixture</p></th>
+<th class="head"><p>gffbase error</p></th>
+<th class="head"><p>What the oracle does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">FBgn0031208.gff</span></code>, <code class="docutils literal notranslate"><span class="pre">FBgn0031208.gtf</span></code>, <code class="docutils literal notranslate"><span class="pre">wormbase_gff2_alt.txt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">InvalidPhase</span></code></p></td>
+<td><p>Loads. A <code class="docutils literal notranslate"><span class="pre">CDS</span></code> row with <code class="docutils literal notranslate"><span class="pre">.</span></code> phase is out of spec but FlyBase and WormBase both emit it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">unsanitized.gff</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">InvalidCoordinate</span></code></p></td>
+<td><p>Loads. <code class="docutils literal notranslate"><span class="pre">end</span> <span class="pre">&lt;</span> <span class="pre">start</span></code> is exactly what <code class="docutils literal notranslate"><span class="pre">sanitize_gff_file</span></code> exists to repair — rejecting it makes sanitize impossible.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">wormbase_gff2.txt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">InvalidAttribute</span></code></p></td>
+<td><p>Loads. GFF2 <code class="docutils literal notranslate"><span class="pre">Sequence</span> <span class="pre">&quot;cTel33B&quot;</span></code> has no <code class="docutils literal notranslate"><span class="pre">=</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">issue167.gff</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TooFewFields</span></code></p></td>
+<td><p>Loads <em>degenerately</em>: the line is space-delimited, <code class="docutils literal notranslate"><span class="pre">feature_from_line</span></code> splits on tab, <code class="docutils literal notranslate"><span class="pre">zip(_gffkeys,</span> <span class="pre">fields)</span></code> truncates, and every column past seqid takes its default.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The root cause is a category error: <code class="docutils literal notranslate"><span class="pre">rust/src/validate.rs</span></code> validates to the
+<strong>NCBI GFF3 specification</strong> unconditionally, but <code class="docutils literal notranslate"><span class="pre">create_db()</span></code> is the
+<em>compatibility</em> entry point. Real annotation files violate that spec routinely.
+Strict validation is a genuinely useful feature — it just cannot be the
+behaviour of the drop-in API.</p>
+</section>
+<section id="a-discontinuous-feature-has-nowhere-to-live">
+<span id="schema-v2-12-a-discontinuous-feature-has-nowhere-to-live"></span><h3>1.2 A discontinuous feature has nowhere to live<a class="headerlink" href="#a-discontinuous-feature-has-nowhere-to-live" title="Link to this heading">¶</a></h3>
+<p>GFF3 lets one logical feature span several lines sharing an <code class="docutils literal notranslate"><span class="pre">ID</span></code>, which is how
+NCBI represents a split CDS. Schema v1 makes <code class="docutils literal notranslate"><span class="pre">features.id</span></code> a primary key, so
+the second line collides. Every strategy loses information:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">error</span></code> — the file will not load;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">create_unique</span></code> — one feature becomes N unrelated features;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">merge</span></code> — refuses, because the coordinates differ, and falls back to
+<code class="docutils literal notranslate"><span class="pre">create_unique</span></code>.</p></li>
+</ul>
+<p>gffutils has the same limitation, so this is a capability gffbase adds rather
+than parity work. <code class="docutils literal notranslate"><span class="pre">dmel-all-no-analysis-r5.49_50k_lines.gff</span></code> contains <strong>345</strong>
+genuine segment runs; <code class="docutils literal notranslate"><span class="pre">synthetic.gff3</span></code> and <code class="docutils literal notranslate"><span class="pre">random-chr.gff</span></code> one each.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="two-orthogonal-axes-one-user-facing-switch">
+<span id="schema-v2-2-two-orthogonal-axes-one-user-facing-switch"></span><h2>2. Two orthogonal axes, one user-facing switch<a class="headerlink" href="#two-orthogonal-axes-one-user-facing-switch" title="Link to this heading">¶</a></h2>
+<p>Validation currently conflates two independent questions. They are separated:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 20.0%" />
+<col style="width: 20.0%" />
+<col style="width: 20.0%" />
+<col style="width: 20.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Axis</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Values</p></th>
+<th class="head"><p>Meaning</p></th>
+<th class="head"></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Which rules apply</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validation</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;gffutils&quot;</span></code> </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;ncbi&quot;</span></code></p></td>
+<td><p>The rule set</p></td>
+</tr>
+<tr class="row-odd"><td><p>What a violation does</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">on_error</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;raise&quot;</span></code> </p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;warn&quot;</span></code></p></td>
+<td><p>The disposition</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mode</span></code> is the switch users actually set; it picks both:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 33.0%" />
+<col style="width: 33.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">mode=&quot;compat&quot;</span></code> (default for <code class="docutils literal notranslate"><span class="pre">create_db</span></code>)</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code> (default for <code class="docutils literal notranslate"><span class="pre">parse_gff</span></code>)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">validation</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;gffutils&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;ncbi&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">on_error</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;raise&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;raise&quot;</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The existing <code class="docutils literal notranslate"><span class="pre">strict:</span> <span class="pre">bool</span></code> on <code class="docutils literal notranslate"><span class="pre">parse_gff</span></code>/<code class="docutils literal notranslate"><span class="pre">parse_bytes</span></code> keeps working for one
+deprecation cycle: <code class="docutils literal notranslate"><span class="pre">strict=True</span></code> → <code class="docutils literal notranslate"><span class="pre">on_error=&quot;raise&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">strict=False</span></code> →
+<code class="docutils literal notranslate"><span class="pre">on_error=&quot;warn&quot;</span></code>, with a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code> naming <code class="docutils literal notranslate"><span class="pre">on_error</span></code>. Passing both
+<code class="docutils literal notranslate"><span class="pre">strict=</span></code> and <code class="docutils literal notranslate"><span class="pre">on_error=</span></code> raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> — an argument conflict, not a data
+error, so this is the one place that is not a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
+<section id="the-rule-table">
+<span id="schema-v2-21-the-rule-table"></span><h3>2.1 The rule table<a class="headerlink" href="#the-rule-table" title="Link to this heading">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> profile enforces almost nothing, because <strong>gffutils enforces
+almost nothing</strong>. Every rule below is one gffbase currently applies:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 33.0%" />
+<col style="width: 33.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Rule</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gffutils</span></code> profile</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">ncbi</span></code> profile</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Fewer than 9 tab fields</p></td>
+<td><p>accept; <code class="docutils literal notranslate"><span class="pre">zip</span></code>-truncate, missing columns take defaults</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-odd"><td><p>Empty seqid</p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-even"><td><p>Empty featuretype</p></td>
+<td><p>accept (defaults to <code class="docutils literal notranslate"><span class="pre">.</span></code>)</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-odd"><td><p>Whitespace in featuretype</p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">&lt;</span> <span class="pre">1</span></code></p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">end</span> <span class="pre">&lt;</span> <span class="pre">start</span></code></p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-even"><td><p>Strand not in <code class="docutils literal notranslate"><span class="pre">+-?.</span></code></p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-odd"><td><p>Phase not in <code class="docutils literal notranslate"><span class="pre">.012</span></code></p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CDS</span></code> with <code class="docutils literal notranslate"><span class="pre">.</span></code> phase</p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-odd"><td><p>Non-numeric score</p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+<tr class="row-even"><td><p>Column 9 parses to no pairs</p></td>
+<td><p>accept</p></td>
+<td><p>error</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>“Accept” does not mean “ignore”: every violation is recorded as a warning,
+reachable via <code class="docutils literal notranslate"><span class="pre">FeatureDB.warnings</span></code> and <code class="docutils literal notranslate"><span class="pre">DataIterator.warnings</span></code>. A compat-mode
+user gets exactly the data gffutils gives them, <strong>plus</strong> a diagnostic gffutils
+never offered.</p>
+<p>The degenerate too-few-fields case is reproduced deliberately. It is the one
+rule where matching the oracle means matching a defect, and the alternative —
+refusing a file the oracle reads — is worse for a drop-in. The warning is what
+makes it safe.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="schema-v2">
+<span id="schema-v2-3-schema-v2"></span><h2>3. Schema v2<a class="headerlink" href="#schema-v2" title="Link to this heading">¶</a></h2>
+<section id="the-decision-that-keeps-the-change-small">
+<span id="schema-v2-31-the-decision-that-keeps-the-change-small"></span><h3>3.1 The decision that keeps the change small<a class="headerlink" href="#the-decision-that-keeps-the-change-small" title="Link to this heading">¶</a></h3>
+<p>The obvious design splits <code class="docutils literal notranslate"><span class="pre">features</span></code> into logical rows and physical rows. That
+would rewrite all eight SQL builders in <code class="docutils literal notranslate"><span class="pre">interface.py</span></code> and move the R-tree off
+the table <code class="docutils literal notranslate"><span class="pre">region()</span></code> queries.</p>
+<p>Instead:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">features</span></code> <strong>stays one row per logical feature. Its</strong>
+<code class="docutils literal notranslate"><span class="pre">start</span></code>/<code class="docutils literal notranslate"><span class="pre">end</span></code>/<code class="docutils literal notranslate"><span class="pre">bbox</span></code> <strong>become the envelope.</strong> <code class="docutils literal notranslate"><span class="pre">segments</span></code> <strong>is a
+SPARSE side table holding physical lines only for features with</strong>
+<code class="docutils literal notranslate"><span class="pre">n_segments</span> <span class="pre">&gt;</span> <span class="pre">1</span></code><strong>.</strong></p>
+</div></blockquote>
+<p>Consequences, all of which fall out for free:</p>
+<ul class="simple">
+<li><p><strong>Logical dedup is structural.</strong> <code class="docutils literal notranslate"><span class="pre">region()</span></code> cannot return a feature twice
+because <code class="docutils literal notranslate"><span class="pre">features</span></code> physically has one row for it. No <code class="docutils literal notranslate"><span class="pre">DISTINCT</span></code>, no
+<code class="docutils literal notranslate"><span class="pre">GROUP</span> <span class="pre">BY</span></code>.</p></li>
+<li><p><strong>The R-tree stays the primary access path.</strong> Envelope overlap is a superset
+of segment overlap, so the only false positives are multipart features whose
+<em>gap</em> covers the query — rechecked by an <code class="docutils literal notranslate"><span class="pre">EXISTS</span></code> that is evaluated only for
+the <code class="docutils literal notranslate"><span class="pre">n_segments</span> <span class="pre">&gt;</span> <span class="pre">1</span></code> rows.</p></li>
+<li><p><strong>Zero cost when there are no multipart features.</strong> With
+<code class="docutils literal notranslate"><span class="pre">meta.n_multipart</span> <span class="pre">==</span> <span class="pre">0</span></code> the query builder omits the extra conjunct entirely
+and emits byte-identical SQL to v1. A test asserts that string equality.</p></li>
+<li><p><strong>Storage is proportional to duplicate lines, not to corpus size.</strong> A full
+mirror table would double <code class="docutils literal notranslate"><span class="pre">attributes_blob</span></code>, the dominant column at GENCODE
+scale.</p></li>
+<li><p><strong>Migration touches zero feature rows</strong> — <code class="docutils literal notranslate"><span class="pre">ALTER</span> <span class="pre">TABLE</span> <span class="pre">ADD</span> <span class="pre">COLUMN</span></code> plus new
+tables. The existing <code class="docutils literal notranslate"><span class="pre">features_rtree</span></code> stays valid, because for a 1-segment
+feature the envelope <em>is</em> the line.</p></li>
+</ul>
+<p>The cost is that “one row per physical line” needs a view. That is paid once,
+in <code class="docutils literal notranslate"><span class="pre">segments_all</span></code>.</p>
+</section>
+<section id="ddl">
+<span id="schema-v2-32-ddl"></span><h3>3.2 DDL<a class="headerlink" href="#ddl" title="Link to this heading">¶</a></h3>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w">              </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- logical key; UNIQUE INDEX post-load</span>
+<span class="w">    </span><span class="n">raw_id</span><span class="w">          </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- id as derived from col 9, pre-resolution</span>
+<span class="w">    </span><span class="n">seqid</span><span class="w">           </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- logical: invariant across segments</span>
+<span class="w">    </span><span class="k">source</span><span class="w">          </span><span class="nb">VARCHAR</span><span class="p">,</span><span class="w">            </span><span class="c1">-- logical</span>
+<span class="w">    </span><span class="n">featuretype</span><span class="w">     </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- logical</span>
+<span class="w">    </span><span class="n">strand</span><span class="w">          </span><span class="nb">VARCHAR</span><span class="p">,</span><span class="w">            </span><span class="c1">-- logical</span>
+<span class="w">    </span><span class="k">start</span><span class="w">           </span><span class="nb">BIGINT</span><span class="p">,</span><span class="w">             </span><span class="c1">-- ENVELOPE = MIN(segment.start). NULLABLE.</span>
+<span class="w">    </span><span class="ss">"end"</span><span class="w">           </span><span class="nb">BIGINT</span><span class="p">,</span><span class="w">             </span><span class="c1">-- ENVELOPE = MAX(segment.end).   NULLABLE.</span>
+<span class="w">    </span><span class="n">score</span><span class="w">           </span><span class="nb">VARCHAR</span><span class="p">,</span><span class="w">            </span><span class="c1">-- representative: segment 0</span>
+<span class="w">    </span><span class="n">frame</span><span class="w">           </span><span class="nb">VARCHAR</span><span class="p">,</span><span class="w">            </span><span class="c1">-- representative: segment 0</span>
+<span class="w">    </span><span class="n">attributes_blob</span><span class="w"> </span><span class="nb">BLOB</span><span class="p">,</span><span class="w">               </span><span class="c1">-- representative: segment 0</span>
+<span class="w">    </span><span class="n">extra_blob</span><span class="w">      </span><span class="nb">BLOB</span><span class="p">,</span><span class="w">               </span><span class="c1">-- representative: segment 0</span>
+<span class="w">    </span><span class="n">file_order</span><span class="w">      </span><span class="nb">BIGINT</span><span class="p">,</span><span class="w">             </span><span class="c1">-- segment 0's line ordinal</span>
+<span class="w">    </span><span class="n">occ</span><span class="w">             </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">   </span><span class="c1">-- load-time occurrence of raw_id</span>
+<span class="w">    </span><span class="n">n_segments</span><span class="w">      </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="n">is_synthetic</span><span class="w">    </span><span class="nb">BOOLEAN</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">FALSE</span><span class="p">,</span>
+<span class="w">    </span><span class="n">id_origin</span><span class="w">       </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">'attribute'</span><span class="p">,</span>
+<span class="w">    </span><span class="n">seqid_y</span><span class="w">         </span><span class="nb">BIGINT</span>
+<span class="w">    </span><span class="c1">-- , bbox GEOMETRY  &lt;- conditional ALTER when the spatial extension loads</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">segments</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">feature_id</span><span class="w">      </span><span class="nb">VARCHAR</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">seg_idx</span><span class="w">         </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- 0-based, ordered by FILE APPEARANCE</span>
+<span class="w">    </span><span class="k">start</span><span class="w">           </span><span class="nb">BIGINT</span><span class="p">,</span>
+<span class="w">    </span><span class="ss">"end"</span><span class="w">           </span><span class="nb">BIGINT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">score</span><span class="w">           </span><span class="nb">VARCHAR</span><span class="p">,</span>
+<span class="w">    </span><span class="n">frame</span><span class="w">           </span><span class="nb">VARCHAR</span><span class="p">,</span><span class="w">            </span><span class="c1">-- per-segment CDS phase: the main reason this table exists</span>
+<span class="w">    </span><span class="n">attributes_blob</span><span class="w"> </span><span class="nb">BLOB</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">extra_blob</span><span class="w">      </span><span class="nb">BLOB</span><span class="p">,</span>
+<span class="w">    </span><span class="n">file_order</span><span class="w">      </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">attrs_same_as_seg0</span><span class="w"> </span><span class="nb">BOOLEAN</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">TRUE</span><span class="p">,</span>
+<span class="w">    </span><span class="n">seqid_y</span><span class="w">         </span><span class="nb">BIGINT</span>
+<span class="w">    </span><span class="c1">-- , bbox GEOMETRY</span>
+<span class="p">);</span>
+</pre></div>
+</div>
+<p><strong>Invariant:</strong> <code class="docutils literal notranslate"><span class="pre">segments</span></code> holds rows only for <code class="docutils literal notranslate"><span class="pre">feature_id</span></code>s with
+<code class="docutils literal notranslate"><span class="pre">n_segments</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, and for those it holds <em>all</em> segments <code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">…</span> <span class="pre">n-1</span></code>. Segment 0 is
+present even though <code class="docutils literal notranslate"><span class="pre">features</span></code> carries its blob, because <code class="docutils literal notranslate"><span class="pre">features.start/end</span></code>
+is the envelope and segment 0’s own coordinates need somewhere to live.</p>
+<p><code class="docutils literal notranslate"><span class="pre">seg_idx</span></code> is ordered by file appearance, not coordinate: GFF3 does not require
+sorted segments and <code class="docutils literal notranslate"><span class="pre">to_lines()</span></code> must reproduce the input order. Coordinate
+order is recovered with <code class="docutils literal notranslate"><span class="pre">ORDER</span> <span class="pre">BY</span> <span class="pre">start</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">raw_id</span></code> and <code class="docutils literal notranslate"><span class="pre">occ</span></code> form the load-time surrogate identity <code class="docutils literal notranslate"><span class="pre">(raw_id,</span> <span class="pre">occ)</span></code>. This
+also <strong>removes</strong> the <code class="docutils literal notranslate"><span class="pre">f&quot;{fid}_{n}&quot;</span></code> string build from the per-row Python loop:
+the builder appends an integer instead.</p>
+</section>
+<section id="segments-all-the-uniform-physical-view">
+<span id="schema-v2-33-segments-all-the-uniform-physical-view"></span><h3>3.3 <code class="docutils literal notranslate"><span class="pre">segments_all</span></code> — the uniform physical view<a class="headerlink" href="#segments-all-the-uniform-physical-view" title="Link to this heading">¶</a></h3>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span><span class="w"> </span><span class="k">OR</span><span class="w"> </span><span class="k">REPLACE</span><span class="w"> </span><span class="k">VIEW</span><span class="w"> </span><span class="n">segments_all</span><span class="w"> </span><span class="k">AS</span>
+<span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">feature_id</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">seg_idx</span><span class="p">,</span><span class="w"> </span><span class="n">seqid</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">featuretype</span><span class="p">,</span><span class="w"> </span><span class="n">strand</span><span class="p">,</span>
+<span class="w">           </span><span class="k">start</span><span class="p">,</span><span class="w"> </span><span class="ss">"end"</span><span class="p">,</span><span class="w"> </span><span class="n">score</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">,</span><span class="w"> </span><span class="n">attributes_blob</span><span class="p">,</span><span class="w"> </span><span class="n">extra_blob</span><span class="p">,</span>
+<span class="w">           </span><span class="n">file_order</span><span class="p">,</span><span class="w"> </span><span class="n">seqid_y</span>
+<span class="w">    </span><span class="k">FROM</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">n_segments</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="k">UNION</span><span class="w"> </span><span class="k">ALL</span>
+<span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">feature_id</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">seg_idx</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">seqid</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="k">source</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">featuretype</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">strand</span><span class="p">,</span>
+<span class="w">           </span><span class="n">s</span><span class="p">.</span><span class="k">start</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="ss">"end"</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">score</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">frame</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">attributes_blob</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">extra_blob</span><span class="p">,</span>
+<span class="w">           </span><span class="n">s</span><span class="p">.</span><span class="n">file_order</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">seqid_y</span>
+<span class="w">    </span><span class="k">FROM</span><span class="w"> </span><span class="n">segments</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">feature_id</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Exactly one row per physical input line — the <code class="docutils literal notranslate"><span class="pre">n_segments</span> <span class="pre">=</span> <span class="pre">1</span></code> filter is what
+makes the branches disjoint. Every physical-level consumer (<code class="docutils literal notranslate"><span class="pre">explode_segments</span></code>,
+<code class="docutils literal notranslate"><span class="pre">export_sqlite</span></code>, <code class="docutils literal notranslate"><span class="pre">to_lines()</span></code>, the validator) reads this name.</p>
+</section>
+<section id="attributes">
+<span id="schema-v2-34-attributes"></span><h3>3.4 <code class="docutils literal notranslate"><span class="pre">attributes</span></code><a class="headerlink" href="#attributes" title="Link to this heading">¶</a></h3>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">attributes</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">feature_id</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="w">  </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">   </span><span class="c1">-- LOGICAL id</span>
+<span class="w">    </span><span class="k">key</span><span class="w">        </span><span class="nb">VARCHAR</span><span class="w">  </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">value</span><span class="w">      </span><span class="nb">VARCHAR</span><span class="w">  </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">idx</span><span class="w">        </span><span class="nb">SMALLINT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">  </span><span class="c1">-- multivalue index (v1 meaning)</span>
+<span class="w">    </span><span class="n">seg_idx</span><span class="w">    </span><span class="nb">INTEGER</span><span class="w">  </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">  </span><span class="c1">-- owning physical line</span>
+<span class="w">    </span><span class="n">ord</span><span class="w">        </span><span class="nb">INTEGER</span><span class="w">  </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="w">   </span><span class="c1">-- pair position within that line</span>
+<span class="p">);</span>
+</pre></div>
+</div>
+<p><strong>Storage rule:</strong> rows with <code class="docutils literal notranslate"><span class="pre">seg_idx</span> <span class="pre">&gt;</span> <span class="pre">0</span></code> exist only where that segment’s raw
+blob differs byte-for-byte from segment 0’s. NCBI repeats identical attributes
+on every CDS line, so this keeps the row count effectively unchanged from v1.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ord</span></code> is new and load-bearing: v1 relies on physical insertion order to
+reproduce key order, which no SQL engine guarantees.</p>
+</section>
+<section id="edges-closure">
+<span id="schema-v2-35-edges-closure"></span><h3>3.5 <code class="docutils literal notranslate"><span class="pre">edges</span></code> / <code class="docutils literal notranslate"><span class="pre">closure</span></code><a class="headerlink" href="#edges-closure" title="Link to this heading">¶</a></h3>
+<p>Unchanged in shape; both reference logical ids. A discontinuous CDS has one
+parent edge, not N. <code class="docutils literal notranslate"><span class="pre">EDGES_FROM_PARENT</span></code> gains <code class="docutils literal notranslate"><span class="pre">DISTINCT</span></code>, which also fixes a
+latent v1 bug on <code class="docutils literal notranslate"><span class="pre">Parent=a,a</span></code>.</p>
+<p>Where segments disagree on <code class="docutils literal notranslate"><span class="pre">Parent</span></code>, the logical feature takes the <strong>union</strong> —
+legal GFF3, and forcing equality would fragment real files over vendor typos.
+The validator flags it.</p>
+</section>
+<section id="nullable-coordinates">
+<span id="schema-v2-36-nullable-coordinates"></span><h3>3.6 Nullable coordinates<a class="headerlink" href="#nullable-coordinates" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">features.start/&quot;end&quot;</span></code> become nullable, storing <code class="docutils literal notranslate"><span class="pre">NULL</span></code> for a <code class="docutils literal notranslate"><span class="pre">.</span></code> column. This
+is the fix for the coercion-to-<code class="docutils literal notranslate"><span class="pre">0</span></code> defect already pinned by a strict xfail.
+<code class="docutils literal notranslate"><span class="pre">bbox</span></code> is <code class="docutils literal notranslate"><span class="pre">CASE</span> <span class="pre">WHEN</span> <span class="pre">start</span> <span class="pre">IS</span> <span class="pre">NULL</span> <span class="pre">THEN</span> <span class="pre">NULL</span> <span class="pre">ELSE</span> <span class="pre">ST_MakeEnvelope(...)</span> <span class="pre">END</span></code>, so
+such rows are excluded from <code class="docutils literal notranslate"><span class="pre">region()</span></code> — matching gffutils, where <code class="docutils literal notranslate"><span class="pre">NULL</span> <span class="pre">&lt;=</span> <span class="pre">?</span></code>
+is unknown. In <code class="docutils literal notranslate"><span class="pre">ncbi</span></code> validation a null coordinate is an error.</p>
+</section>
+<section id="duplicates-vs-id-conflicts">
+<span id="schema-v2-37-duplicates-vs-id-conflicts"></span><h3>3.7 <code class="docutils literal notranslate"><span class="pre">duplicates</span></code> vs <code class="docutils literal notranslate"><span class="pre">id_conflicts</span></code><a class="headerlink" href="#duplicates-vs-id-conflicts" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">duplicates</span></code> must be exactly what gffutils writes, because <code class="docutils literal notranslate"><span class="pre">export_sqlite</span></code>
+copies it verbatim and the oracle’s <code class="docutils literal notranslate"><span class="pre">_candidate_merges</span></code> reads it. As
+established in Phase 4, gffutils populates it <strong>only</strong> from the
+<code class="docutils literal notranslate"><span class="pre">merge</span></code>→<code class="docutils literal notranslate"><span class="pre">create_unique</span></code> fallback.</p>
+<p>A gffbase-native <code class="docutils literal notranslate"><span class="pre">id_conflicts</span></code> table records every resolution
+(<code class="docutils literal notranslate"><span class="pre">multipart</span></code> / <code class="docutils literal notranslate"><span class="pre">create_unique</span></code> / <code class="docutils literal notranslate"><span class="pre">merge</span></code> / <code class="docutils literal notranslate"><span class="pre">merge_fallback</span></code> /
+<code class="docutils literal notranslate"><span class="pre">warning_dropped</span></code> / <code class="docutils literal notranslate"><span class="pre">replaced</span></code> / <code class="docutils literal notranslate"><span class="pre">strict_split</span></code>) with the reason.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="the-multipart-predicate">
+<span id="schema-v2-4-the-multipart-predicate"></span><h2>4. The multipart predicate<a class="headerlink" href="#the-multipart-predicate" title="Link to this heading">¶</a></h2>
+<p>Over the physical lines sharing one <code class="docutils literal notranslate"><span class="pre">ID</span></code>:</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 25.0%" />
+<col style="width: 25.0%" />
+<col style="width: 25.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Col</p></th>
+<th class="head"><p>Field</p></th>
+<th class="head"><p>Must match?</p></th>
+<th class="head"><p>Why</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">seqid</span></code></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>one feature cannot span two sequences</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">source</span></code></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>provenance is a property of the feature</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">featuretype</span></code></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>required by the GFF3 spec for discontinuous features</p></td>
+</tr>
+<tr class="row-odd"><td><p>4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">start</span></code></p></td>
+<td><p>no</p></td>
+<td><p>the point of the exercise</p></td>
+</tr>
+<tr class="row-even"><td><p>5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">end</span></code></p></td>
+<td><p>no</p></td>
+<td><p>the point of the exercise</p></td>
+</tr>
+<tr class="row-odd"><td><p>6</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">score</span></code></p></td>
+<td><p>no</p></td>
+<td><p>per-segment alignment scores are legal</p></td>
+</tr>
+<tr class="row-even"><td><p>7</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">strand</span></code></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>one feature has one orientation</p></td>
+</tr>
+<tr class="row-odd"><td><p>8</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">frame</span></code></p></td>
+<td><p>no</p></td>
+<td><p><strong>the primary reason this exists</strong> — per-segment CDS phase</p></td>
+</tr>
+<tr class="row-even"><td><p>9</p></td>
+<td><p>attributes</p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Parent</span></code> is unioned; divergence is recorded</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="n">multipart_ok</span><span class="w"> </span><span class="p">:</span><span class="o">=</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="k">DISTINCT</span><span class="w"> </span><span class="n">seqid</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">            </span><span class="k">AND</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="k">DISTINCT</span><span class="w"> </span><span class="k">source</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">            </span><span class="k">AND</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="k">DISTINCT</span><span class="w"> </span><span class="n">featuretype</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">            </span><span class="k">AND</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="k">DISTINCT</span><span class="w"> </span><span class="n">strand</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ncbi_gff3.txt</span></code> is the <strong>negative</strong> test: one id there is shared by a <code class="docutils literal notranslate"><span class="pre">CDS</span></code>, a
+<code class="docutils literal notranslate"><span class="pre">start_codon</span></code> and a <code class="docutils literal notranslate"><span class="pre">stop_codon</span></code>, and four separate <code class="docutils literal notranslate"><span class="pre">gene</span></code> rows at different
+loci (one on the opposite strand) share another. That is malformed GFF3 and the
+predicate must reject it. The FlyBase <code class="docutils literal notranslate"><span class="pre">orthologous_region</span></code> runs are the
+positive case.</p>
+<p>Note that gffutils’ <code class="docutils literal notranslate"><span class="pre">merge_strategy=&quot;merge&quot;</span></code> requires <strong>all eight</strong>
+non-attribute columns to match, so it never merges a genuine discontinuous
+feature — it routes them to <code class="docutils literal notranslate"><span class="pre">create_unique</span></code>. Multipart fusion is therefore new
+behaviour, not a change to gffutils behaviour, which is exactly why it belongs
+behind <code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code> and not in compat.</p>
+<p>When the predicate fails in strict mode: <code class="docutils literal notranslate"><span class="pre">on_multipart_conflict=&quot;error&quot;</span></code>
+(default) raises <code class="docutils literal notranslate"><span class="pre">MultipartConstraintError</span></code> naming the id, the diverging column
+and both line numbers; <code class="docutils literal notranslate"><span class="pre">&quot;split&quot;</span></code> partitions by the constraint key, lowest
+<code class="docutils literal notranslate"><span class="pre">file_order</span></code> keeps the bare id, the rest get <code class="docutils literal notranslate"><span class="pre">_1</span></code>, <code class="docutils literal notranslate"><span class="pre">_2</span></code>.</p>
+<hr class="docutils" />
+</section>
+<section id="python-model">
+<span id="schema-v2-5-python-model"></span><h2>5. Python model<a class="headerlink" href="#python-model" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">MultipartFeature</span></code> and <code class="docutils literal notranslate"><span class="pre">FeatureSegment</span></code> both <strong>subclass</strong> <code class="docutils literal notranslate"><span class="pre">Feature</span></code>.</p>
+<p>A sibling or wrapper class is wrong here, for a concrete reason:
+<code class="docutils literal notranslate"><span class="pre">isinstance(x,</span> <span class="pre">Feature)</span></code> is load-bearing at nine call sites inside gffbase
+itself — <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code>, <code class="docutils literal notranslate"><span class="pre">__contains__</span></code>, <code class="docutils literal notranslate"><span class="pre">children</span></code>, <code class="docutils literal notranslate"><span class="pre">parents</span></code>, <code class="docutils literal notranslate"><span class="pre">_coerce_ids</span></code>,
+<code class="docutils literal notranslate"><span class="pre">_coerce_id_list</span></code>, <code class="docutils literal notranslate"><span class="pre">_normalize_region_args</span></code>, <code class="docutils literal notranslate"><span class="pre">update</span></code>, <code class="docutils literal notranslate"><span class="pre">merge</span></code>. A sibling
+breaks <code class="docutils literal notranslate"><span class="pre">db[db[&quot;cds-x&quot;]]</span></code> and <code class="docutils literal notranslate"><span class="pre">db.children(f)</span></code> on day one. <code class="docutils literal notranslate"><span class="pre">Feature.__eq__</span></code>
+returns <code class="docutils literal notranslate"><span class="pre">NotImplemented</span></code> for non-<code class="docutils literal notranslate"><span class="pre">Feature</span></code> operands, so a sibling would compare
+unequal to an identical <code class="docutils literal notranslate"><span class="pre">Feature</span></code>.</p>
+<p>Subclassing lets us <strong>not override</strong> <code class="docutils literal notranslate"><span class="pre">__str__</span></code>, <code class="docutils literal notranslate"><span class="pre">__len__</span></code>, <code class="docutils literal notranslate"><span class="pre">astuple</span></code>,
+<code class="docutils literal notranslate"><span class="pre">__getitem__</span></code>, <code class="docutils literal notranslate"><span class="pre">__eq__</span></code>, <code class="docutils literal notranslate"><span class="pre">__hash__</span></code>. The compat surface is preserved by
+<em>inaction</em>, which is the only reliable way to preserve it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Feature</span><span class="p">:</span>                      <span class="c1"># unchanged</span>
+    <span class="n">is_multipart</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">n_segments</span><span class="p">:</span>   <span class="n">ClassVar</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>  <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">segments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FeatureSegment</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""A singleton feature is its own sole segment."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lines</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FeatureSegment</span><span class="p">(</span><span class="n">Feature</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One physical line. `self.id` is the LOGICAL id; the segment's own col-9</span>
+<span class="sd">    `ID=` is preserved byte-for-byte in `_attributes_blob`."""</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"seg_idx"</span><span class="p">,)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MultipartFeature</span><span class="p">(</span><span class="n">Feature</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One logical feature over &gt;1 line. Inherits gffutils-identical</span>
+<span class="sd">    behaviour on the ENVELOPE row; nothing is overridden."""</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"_n_segments"</span><span class="p">,</span> <span class="s2">"_segments"</span><span class="p">,</span> <span class="s2">"_segment_loader"</span><span class="p">)</span>
+    <span class="n">is_multipart</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">segments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FeatureSegment</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span> <span class="o">...</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">covered_length</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>   <span class="c1"># sum of segment lengths, gaps excluded</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_lines</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">len(mf)</span></code> stays the envelope span (<code class="docutils literal notranslate"><span class="pre">end</span> <span class="pre">-</span> <span class="pre">start</span> <span class="pre">+</span> <span class="pre">1</span></code>), matching <code class="docutils literal notranslate"><span class="pre">Feature</span></code>;
+<code class="docutils literal notranslate"><span class="pre">covered_length</span></code> is the new, different quantity.</p>
+<p><strong>Avoiding an N+1:</strong> <code class="docutils literal notranslate"><span class="pre">MultipartFeature</span></code> holds a <code class="docutils literal notranslate"><span class="pre">segment_loader</span></code> closure, and
+<code class="docutils literal notranslate"><span class="pre">_yield_features</span></code> prefetches at the existing <code class="docutils literal notranslate"><span class="pre">fetchmany(10_000)</span></code> chunk
+boundary — one query per chunk, gated on <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">self._n_multipart:</span></code> so corpora
+without multipart features pay a single attribute test per 10 000 rows.</p>
+<p><strong>Documented consequence:</strong> <code class="docutils literal notranslate"><span class="pre">type(f)</span> <span class="pre">is</span> <span class="pre">Feature</span></code> stops being true for multipart
+rows. <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> is unaffected.</p>
+<hr class="docutils" />
+</section>
+<section id="query-shapes">
+<span id="schema-v2-6-query-shapes"></span><h2>6. Query shapes<a class="headerlink" href="#query-shapes" title="Link to this heading">¶</a></h2>
+<section id="region-r-tree-path">
+<span id="schema-v2-61-region-r-tree-path"></span><h3>6.1 Region, R-tree path<a class="headerlink" href="#region-r-tree-path" title="Link to this heading">¶</a></h3>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="p">...,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">n_segments</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="n">f</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">seqid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">?</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">ST_Intersects</span><span class="p">(</span><span class="n">f</span><span class="p">.</span><span class="n">bbox</span><span class="p">,</span><span class="w"> </span><span class="n">ST_MakeEnvelope</span><span class="p">(</span><span class="o">?</span><span class="p">,</span><span class="w"> </span><span class="o">?</span><span class="p">,</span><span class="w"> </span><span class="o">?</span><span class="p">,</span><span class="w"> </span><span class="o">?</span><span class="p">))</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">n_segments</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">                        </span><span class="c1">-- emitted ONLY when n_multipart &gt; 0</span>
+<span class="w">        </span><span class="k">OR</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">segments</span><span class="w"> </span><span class="n">s</span>
+<span class="w">                   </span><span class="k">WHERE</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">feature_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">id</span>
+<span class="w">                     </span><span class="k">AND</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="k">start</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="ss">"end"</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="o">?</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="k">start</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ST_Intersects</span></code> stays a top-level conjunct so the planner still chooses the
+R-tree; the disjunction is parenthesized and never touches <code class="docutils literal notranslate"><span class="pre">bbox</span></code>. A test
+asserts <code class="docutils literal notranslate"><span class="pre">RTREE_INDEX_SCAN</span></code> in the <code class="docutils literal notranslate"><span class="pre">EXPLAIN</span></code> output.</p>
+<p><code class="docutils literal notranslate"><span class="pre">completely_within=True</span></code> needs <strong>no</strong> recheck: envelope containment already
+implies every segment is contained, because the envelope is <code class="docutils literal notranslate"><span class="pre">MIN</span></code>/<code class="docutils literal notranslate"><span class="pre">MAX</span></code> over
+segments.</p>
+</section>
+<section id="explode-segments-true">
+<span id="schema-v2-62-explode-segmentstrue"></span><h3>6.2 <code class="docutils literal notranslate"><span class="pre">explode_segments=True</span></code><a class="headerlink" href="#explode-segments-true" title="Link to this heading">¶</a></h3>
+<p>On the tabular/batched APIs only (<code class="docutils literal notranslate"><span class="pre">region_batched</span></code>, <code class="docutils literal notranslate"><span class="pre">children_batched</span></code>,
+<code class="docutils literal notranslate"><span class="pre">parents_batched</span></code>) — never on <code class="docutils literal notranslate"><span class="pre">region()</span></code>/<code class="docutils literal notranslate"><span class="pre">children()</span></code>/<code class="docutils literal notranslate"><span class="pre">all_features()</span></code>, which
+must keep yielding <code class="docutils literal notranslate"><span class="pre">Feature</span></code> objects for parity. Letting <code class="docutils literal notranslate"><span class="pre">FeatureSegment</span></code> rows
+leak into those would corrupt legacy consumers.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="ingest-order">
+<span id="schema-v2-7-ingest-order"></span><h2>7. Ingest order<a class="headerlink" href="#ingest-order" title="Link to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>parse → Arrow load → RESOLVE → edges → [GTF synth] → closure
+      → blob regen → indexes → rtree → validate
+</pre></div>
+</div>
+<p>The resolve pass runs <strong>before</strong> <code class="docutils literal notranslate"><span class="pre">EDGES_FROM_PARENT</span></code>, so edges and closure are
+built once against final logical ids and never need rewriting. GTF synthesis
+runs <strong>after</strong> resolve, so synthesized rows are never duplicate candidates.</p>
+<p>The pass is skipped entirely when no <code class="docutils literal notranslate"><span class="pre">raw_id</span></code> collided — the common case for
+every GTF corpus and for GENCODE GFF3.</p>
+<hr class="docutils" />
+</section>
+<section id="migration">
+<span id="schema-v2-8-migration"></span><h2>8. Migration<a class="headerlink" href="#migration" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">FeatureDB.__init__</span></code> reads <code class="docutils literal notranslate"><span class="pre">meta.schema_version</span></code> immediately:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">"2"</span>          <span class="o">-&gt;</span> <span class="n">proceed</span>
+<span class="n">missing</span><span class="o">/</span><span class="s2">"1"</span>  <span class="o">-&gt;</span> <span class="n">upgrade</span><span class="o">=</span><span class="s2">"auto"</span> <span class="p">(</span><span class="n">default</span><span class="p">)</span> <span class="o">+</span> <span class="n">writable</span> <span class="o">-&gt;</span> <span class="n">migrate</span> <span class="ow">in</span> <span class="n">place</span><span class="p">,</span> <span class="n">log</span> <span class="n">INFO</span>
+                <span class="n">read</span><span class="o">-</span><span class="n">only</span> <span class="ow">or</span> <span class="n">upgrade</span><span class="o">=</span><span class="s2">"never"</span>        <span class="o">-&gt;</span> <span class="n">v1</span> <span class="n">shim</span> <span class="n">mode</span>
+                <span class="n">upgrade</span><span class="o">=</span><span class="s2">"error"</span>                     <span class="o">-&gt;</span> <span class="n">SchemaVersionError</span>
+<span class="o">&gt;</span> <span class="s2">"2"</span>        <span class="o">-&gt;</span> <span class="n">SchemaVersionError</span><span class="p">(</span><span class="s2">"written by a newer gffbase"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>v1 shim mode</strong> sets <code class="docutils literal notranslate"><span class="pre">_n_multipart</span> <span class="pre">=</span> <span class="pre">0</span></code>, which makes every query builder take
+the branch that emits v1 SQL anyway. <code class="docutils literal notranslate"><span class="pre">explode_segments=True</span></code> raises
+<code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>; <code class="docutils literal notranslate"><span class="pre">.segments</span></code> returns the singleton.</p>
+<p>The structural migration is <code class="docutils literal notranslate"><span class="pre">ADD</span> <span class="pre">COLUMN</span></code>/<code class="docutils literal notranslate"><span class="pre">CREATE</span> <span class="pre">TABLE</span></code>/<code class="docutils literal notranslate"><span class="pre">CREATE</span> <span class="pre">VIEW</span></code> in one
+transaction, idempotent, touching zero feature rows.</p>
+<p>Re-fusing v1’s <code class="docutils literal notranslate"><span class="pre">__2</span></code>/<code class="docutils literal notranslate"><span class="pre">__3</span></code> rows into multipart features is <strong>not</strong> part of the
+upgrade — an in-place upgrade must never change query results. It is a separate
+explicit call, <code class="docutils literal notranslate"><span class="pre">gffbase.migrate.coalesce_multipart(db)</span></code>, which reuses the same
+resolve pass.</p>
+<p><code class="docutils literal notranslate"><span class="pre">attributes.ord</span></code> cannot be recovered for a v1 database (insertion order is not
+a guarantee), so it stays <code class="docutils literal notranslate"><span class="pre">0</span></code> and <code class="docutils literal notranslate"><span class="pre">meta.attributes_ord_valid</span> <span class="pre">=</span> <span class="pre">'false'</span></code> records
+that. Consumers needing key order fall back to the raw blob, which is intact.</p>
+<hr class="docutils" />
+</section>
+<section id="legacy-sqlite-export">
+<span id="schema-v2-9-legacy-sqlite-export"></span><h2>9. Legacy SQLite export<a class="headerlink" href="#legacy-sqlite-export" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">export_sqlite</span></code> writes <strong>one legacy row per physical segment</strong>, reading from
+<code class="docutils literal notranslate"><span class="pre">segments_all</span></code> — a seg-0 row must carry its own coordinates, not the envelope.</p>
+<p>There is no <code class="docutils literal notranslate"><span class="pre">flatten=</span></code> parameter in the shipped <code class="docutils literal notranslate"><span class="pre">export_sqlite(con,</span> <span class="pre">path,</span> <span class="pre">force=False)</span></code>: open question 1 was resolved by hardcoding the fan-out, so the
+alternative was never built. The behaviour described here is what it does
+unconditionally, reproducing what
+<code class="docutils literal notranslate"><span class="pre">gffutils.create_db(file,</span> <span class="pre">merge_strategy=&quot;create_unique&quot;)</span></code> would have produced:
+<code class="docutils literal notranslate"><span class="pre">legacy_id(seg</span> <span class="pre">0)</span> <span class="pre">=</span> <span class="pre">&lt;logical</span> <span class="pre">id&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">legacy_id(seg</span> <span class="pre">k&gt;0)</span> <span class="pre">=</span> <span class="pre">&lt;logical</span> <span class="pre">id&gt;_k</span></code>,
+collision-hardened by anti-join. Relations fan out over both endpoints’
+legacy ids. <code class="docutils literal notranslate"><span class="pre">duplicates</span></code> gets <code class="docutils literal notranslate"><span class="pre">(logical_id,</span> <span class="pre">legacy_id)</span></code> for every <code class="docutils literal notranslate"><span class="pre">k</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>,
+which is both what the legacy table means and how a round-trip re-import can
+rediscover the grouping.</p>
+<hr class="docutils" />
+</section>
+<section id="post-ingest-invariants">
+<span id="schema-v2-10-post-ingest-invariants"></span><h2>10. Post-ingest invariants<a class="headerlink" href="#post-ingest-invariants" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">gffbase.validate.validate_db(db,</span> <span class="pre">level=&quot;fast&quot;|&quot;full&quot;)</span></code>, run automatically at
+the end of a strict-mode ingest. All checks are single set-based queries.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Invariant</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>INV-1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">features.id</span></code> is unique</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-2</p></td>
+<td><p>No orphan segments</p></td>
+</tr>
+<tr class="row-even"><td><p>INV-3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">n_segments</span></code> agrees with the <code class="docutils literal notranslate"><span class="pre">segments</span></code> row count</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">seg_idx</span></code> is dense <code class="docutils literal notranslate"><span class="pre">0…n-1</span></code> and unique per feature</p></td>
+</tr>
+<tr class="row-even"><td><p>INV-5</p></td>
+<td><p><strong>Envelope is exact</strong>: <code class="docutils literal notranslate"><span class="pre">features.start</span> <span class="pre">=</span> <span class="pre">MIN(seg.start)</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;end&quot;</span> <span class="pre">=</span> <span class="pre">MAX(seg.&quot;end&quot;)</span></code> — the single most important check; a wrong envelope silently loses features from <code class="docutils literal notranslate"><span class="pre">region()</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-6</p></td>
+<td><p>Every <code class="docutils literal notranslate"><span class="pre">edges</span></code> endpoint resolves to a <code class="docutils literal notranslate"><span class="pre">features.id</span></code> (warn — a dangling <code class="docutils literal notranslate"><span class="pre">Parent=</span></code> is common in hand-edited files and costs an edge, not correctness elsewhere)</p></td>
+</tr>
+<tr class="row-even"><td><p>INV-7</p></td>
+<td><p>Segments of one feature share the logical columns and do not overlap each other (warn — abutting segments occur in real files)</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-8</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bbox</span></code> agrees with <code class="docutils literal notranslate"><span class="pre">(start,</span> <span class="pre">seqid_y,</span> <span class="pre">&quot;end&quot;,</span> <span class="pre">seqid_y+1)</span></code>, and is NULL exactly when coords are NULL</p></td>
+</tr>
+<tr class="row-even"><td><p>INV-9</p></td>
+<td><p>Every <code class="docutils literal notranslate"><span class="pre">features.seqid</span></code> has a <code class="docutils literal notranslate"><span class="pre">seqid_map</span></code> row with a matching band</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-10</p></td>
+<td><p>Attribute dedup is consistent with <code class="docutils literal notranslate"><span class="pre">attrs_same_as_seg0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>INV-11</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">closure</span></code> is acyclic and depth-consistent</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-11b</p></td>
+<td><p>No feature is its own ancestor (warn — a self-loop is recorded rather than repaired, since silently rewriting a user’s hierarchy is worse)</p></td>
+</tr>
+<tr class="row-even"><td><p>INV-12</p></td>
+<td><p>(<code class="docutils literal notranslate"><span class="pre">full</span></code> only) Re-parsing <code class="docutils literal notranslate"><span class="pre">attributes_blob</span></code> for a sample reproduces the normalized <code class="docutils literal notranslate"><span class="pre">attributes</span></code> rows — the check that catches escaping bugs</p></td>
+</tr>
+<tr class="row-odd"><td><p>INV-13</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">id_origin='create_unique'</span></code> ⟺ an <code class="docutils literal notranslate"><span class="pre">id_conflicts</span></code> row exists; <code class="docutils literal notranslate"><span class="pre">duplicates</span></code> is non-empty only under <code class="docutils literal notranslate"><span class="pre">merge</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>INV-14</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">features.file_order</span></code> equals <code class="docutils literal notranslate"><span class="pre">MIN(file_order)</span></code> over its segments</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<hr class="docutils" />
+</section>
+<section id="implementation-order-and-risk">
+<span id="schema-v2-11-implementation-order-and-risk"></span><h2>11. Implementation order and risk<a class="headerlink" href="#implementation-order-and-risk" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 34.0%" />
+<col style="width: 33.0%" />
+<col style="width: 33.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>#</p></th>
+<th class="head"><p>Change</p></th>
+<th class="head"><p>Risk</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">exceptions.py</span></code>: add <code class="docutils literal notranslate"><span class="pre">MultipartConstraintError</span></code>, <code class="docutils literal notranslate"><span class="pre">CyclicRelationError</span></code>, <code class="docutils literal notranslate"><span class="pre">SchemaVersionError</span></code></p></td>
+<td><p><strong>low</strong> — additive</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">modes.py</span></code> (new): <code class="docutils literal notranslate"><span class="pre">Mode</span></code>, <code class="docutils literal notranslate"><span class="pre">ValidationProfile</span></code>, <code class="docutils literal notranslate"><span class="pre">resolve_mode()</span></code></p></td>
+<td><p><strong>low</strong> — single source of truth</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validate.rs</span></code> + <code class="docutils literal notranslate"><span class="pre">_pyfallback</span></code>: gate rules on the profile</p></td>
+<td><p><strong>medium</strong> — must be mirrored exactly in both engines or <code class="docutils literal notranslate"><span class="pre">test_engine_equivalence</span></code> fails; needs a wheel rebuild in CI</p></td>
+</tr>
+<tr class="row-odd"><td><p>4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">schema.py</span></code>: v2 DDL, views, resolve SQL, migration SQL</p></td>
+<td><p>low to write, <strong>high blast radius</strong> — land first, review hardest</p></td>
+</tr>
+<tr class="row-even"><td><p>5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">feature.py</span></code>: <code class="docutils literal notranslate"><span class="pre">FeatureSegment</span></code>, <code class="docutils literal notranslate"><span class="pre">MultipartFeature</span></code></p></td>
+<td><p><strong>medium-high</strong> — this is the compat surface. Rule: <em>override nothing</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>6</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ingest.py</span></code>: <code class="docutils literal notranslate"><span class="pre">raw_id</span></code>/<code class="docutils literal notranslate"><span class="pre">occ</span></code>, resolve pass, nullable coords</p></td>
+<td><p><strong>highest</strong> — see below</p></td>
+</tr>
+<tr class="row-even"><td><p>7</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">interface.py</span></code>: schema gate, <code class="docutils literal notranslate"><span class="pre">_n_multipart</span></code>, <code class="docutils literal notranslate"><span class="pre">OR</span> <span class="pre">EXISTS</span></code>, prefetch, <code class="docutils literal notranslate"><span class="pre">explode_segments</span></code>; <code class="docutils literal notranslate"><span class="pre">delete()</span></code>/<code class="docutils literal notranslate"><span class="pre">update()</span></code> must cascade to <code class="docutils literal notranslate"><span class="pre">segments</span></code></p></td>
+<td><p><strong>high</strong> — 8 SQL builders</p></td>
+</tr>
+<tr class="row-odd"><td><p>8</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">migrate.py</span></code> (new)</p></td>
+<td><p>medium — must be idempotent and transactional</p></td>
+</tr>
+<tr class="row-even"><td><p>9</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validate.py</span></code> (new)</p></td>
+<td><p>low</p></td>
+</tr>
+<tr class="row-odd"><td><p>10</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sqlite_export.py</span></code>: flattening</p></td>
+<td><p>medium — verified by opening the output with real gffutils</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Specific hazards.</strong></p>
+<ul class="simple">
+<li><p>Making <code class="docutils literal notranslate"><span class="pre">start</span></code>/<code class="docutils literal notranslate"><span class="pre">end</span></code> nullable turns every <code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">&lt;=</span> <span class="pre">?</span></code> into three-valued
+logic, so NULL-coordinate rows silently disappear from <code class="docutils literal notranslate"><span class="pre">region()</span></code>. That is
+the correct, gffutils-matching behaviour, but it must be a deliberate tested
+decision, and <code class="docutils literal notranslate"><span class="pre">ST_MakeEnvelope</span></code> must be CASE-guarded or the first <code class="docutils literal notranslate"><span class="pre">.</span></code>
+coordinate fails the whole insert.</p></li>
+<li><p>Resolve must precede <code class="docutils literal notranslate"><span class="pre">EDGES_FROM_PARENT</span></code>, and GTF synthesis must follow
+resolve. Getting the order wrong produces edges pointing at ids that no
+longer exist — and <code class="docutils literal notranslate"><span class="pre">closure</span></code> will silently drop them rather than error.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">delete()</span></code> currently issues four <code class="docutils literal notranslate"><span class="pre">DELETE</span></code>s and none touches <code class="docutils literal notranslate"><span class="pre">segments</span></code>.
+Forgetting the fifth leaves orphans that <code class="docutils literal notranslate"><span class="pre">segments_all</span></code> joins back,
+resurrecting deleted data. INV-2 catches it.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">OR</span> <span class="pre">EXISTS</span></code> can defeat the R-tree if it is not written as a separate
+parenthesized conjunct.</p></li>
+</ul>
+<hr class="docutils" />
+</section>
+<section id="open-questions-all-resolved">
+<span id="schema-v2-12-open-questions-all-resolved"></span><h2>12. Open questions — all resolved<a class="headerlink" href="#open-questions-all-resolved" title="Link to this heading">¶</a></h2>
+<ol class="arabic">
+<li><p><code class="docutils literal notranslate"><span class="pre">export_sqlite</span></code> <strong>default flatten mode</strong> — resolved as <code class="docutils literal notranslate"><span class="pre">&quot;gffutils&quot;</span></code>
+(fan-out), and <strong>hardcoded</strong>: no <code class="docutils literal notranslate"><span class="pre">flatten=</span></code> parameter exists, because
+nothing wanted the alternative once the parity claim was the point.
+Verified by opening a gffbase export with real gffutils 0.14.</p></li>
+<li><p><strong>Default</strong> <code class="docutils literal notranslate"><span class="pre">on_multipart_conflict</span></code> — resolved as <code class="docutils literal notranslate"><span class="pre">&quot;error&quot;</span></code>, as
+recommended. It only applies under <code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code>, which is opt-in, so
+refusing an ambiguous fusion is the conservative default; <code class="docutils literal notranslate"><span class="pre">&quot;split&quot;</span></code>
+partitions the run instead.</p></li>
+<li><p><strong>Serialization model</strong> — resolved <strong>opposite to the recommendation</strong>, and
+worth recording as such. The recommendation was to match the oracle in
+<code class="docutils literal notranslate"><span class="pre">str(feature)</span></code> and expose the original line separately. What shipped is the
+reverse: <code class="docutils literal notranslate"><span class="pre">str(feature)</span></code> is byte-faithful, and <code class="docutils literal notranslate"><span class="pre">to_line(normalized=True)</span></code>
+produces the oracle’s rendering on demand.</p>
+<p>The deciding evidence arrived after this document was written. Once the
+attribute encoder existed, <code class="docutils literal notranslate"><span class="pre">to_line(normalized=True)</span></code> was measured against
+gffutils across the whole shared corpus and matched exactly on 11 of 15
+GFF3 fixtures — the four that differ are dialect-<em>inference</em> differences,
+not serialization ones. So both properties are available either way, and
+the question became which should be the default. Byte-faithful won because
+a round trip that silently rewrites a user’s file is the more surprising
+default, and because <code class="docutils literal notranslate"><span class="pre">_EMPTY_VALUE_RENDERING</span></code> turned out to be a case where
+the ORACLE is lossy: it renders <code class="docutils literal notranslate"><span class="pre">ID=</span></code> as a bare <code class="docutils literal notranslate"><span class="pre">ID</span></code>.</p>
+</li>
+</ol>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="api.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">API reference</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="architecture.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Architecture</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Schema v2, multipart features, and the compat/strict axis</a><ul>
+<li><a class="reference internal" href="#why">1. Why</a><ul>
+<li><a class="reference internal" href="#gffbase-rejects-files-gffutils-reads">1.1 gffbase rejects files gffutils reads</a></li>
+<li><a class="reference internal" href="#a-discontinuous-feature-has-nowhere-to-live">1.2 A discontinuous feature has nowhere to live</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#two-orthogonal-axes-one-user-facing-switch">2. Two orthogonal axes, one user-facing switch</a><ul>
+<li><a class="reference internal" href="#the-rule-table">2.1 The rule table</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#schema-v2">3. Schema v2</a><ul>
+<li><a class="reference internal" href="#the-decision-that-keeps-the-change-small">3.1 The decision that keeps the change small</a></li>
+<li><a class="reference internal" href="#ddl">3.2 DDL</a></li>
+<li><a class="reference internal" href="#segments-all-the-uniform-physical-view">3.3 <code class="docutils literal notranslate"><span class="pre">segments_all</span></code> — the uniform physical view</a></li>
+<li><a class="reference internal" href="#attributes">3.4 <code class="docutils literal notranslate"><span class="pre">attributes</span></code></a></li>
+<li><a class="reference internal" href="#edges-closure">3.5 <code class="docutils literal notranslate"><span class="pre">edges</span></code> / <code class="docutils literal notranslate"><span class="pre">closure</span></code></a></li>
+<li><a class="reference internal" href="#nullable-coordinates">3.6 Nullable coordinates</a></li>
+<li><a class="reference internal" href="#duplicates-vs-id-conflicts">3.7 <code class="docutils literal notranslate"><span class="pre">duplicates</span></code> vs <code class="docutils literal notranslate"><span class="pre">id_conflicts</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#the-multipart-predicate">4. The multipart predicate</a></li>
+<li><a class="reference internal" href="#python-model">5. Python model</a></li>
+<li><a class="reference internal" href="#query-shapes">6. Query shapes</a><ul>
+<li><a class="reference internal" href="#region-r-tree-path">6.1 Region, R-tree path</a></li>
+<li><a class="reference internal" href="#explode-segments-true">6.2 <code class="docutils literal notranslate"><span class="pre">explode_segments=True</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#ingest-order">7. Ingest order</a></li>
+<li><a class="reference internal" href="#migration">8. Migration</a></li>
+<li><a class="reference internal" href="#legacy-sqlite-export">9. Legacy SQLite export</a></li>
+<li><a class="reference internal" href="#post-ingest-invariants">10. Post-ingest invariants</a></li>
+<li><a class="reference internal" href="#implementation-order-and-risk">11. Implementation order and risk</a></li>
+<li><a class="reference internal" href="#open-questions-all-resolved">12. Open questions — all resolved</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>

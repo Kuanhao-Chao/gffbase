@@ -1,0 +1,497 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Troubleshooting" href="troubleshooting.html"><link rel="prev" title="API reference" href="api.html">
+        <link rel="canonical" href="https://khchao.com/gffbase/content/faq.html">
+        <link rel="prefetch" href="../_static/logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../_static/favicon.svg"><!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Frequently asked questions - GFFBase</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">GFFBase</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/logo.svg" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modes.html">Compatibility &amp; strict modes</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Using GFFBase</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage_gallery.html">Usage Gallery — every public method, copy-pasteable</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Analysis gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="connections.html">Connections &amp; concurrency</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migration.html">Migrating from <code class="docutils literal notranslate"><span class="pre">gffutils</span></code> to <code class="docutils literal notranslate"><span class="pre">gffbase</span></code></a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="cookbooks.html">Cookbooks</a><input aria-label="Toggle navigation of Cookbooks" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_gencode_ensembl.html">GENCODE / Ensembl GTF Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_refseq.html">NCBI RefSeq GFF3 Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_mane.html">MANE (Matched Annotation from NCBI and EBI) Cookbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook_ml_workflows.html">Machine Learning Workflows Cookbook</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Background</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="performance.html">Performance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methodology.html">Benchmark methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasets.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="schema_v2.html">Schema v2, multipart features, and the compat/strict axis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Frequently asked questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="citation.html">Citation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contact.html">Contact</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Project</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing and release gates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="roadmap.html">Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to GFFBase</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security Policy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advisory_sql_injection.html">Security advisory — SQL injection via <code class="docutils literal notranslate"><span class="pre">order_by</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pragmas</span></code></a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/blob/main/docs/source/content/faq.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/Kuanhao-Chao/gffbase/edit/main/docs/source/content/faq.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="frequently-asked-questions">
+<span id="faq-frequently-asked-questions"></span><h1>Frequently asked questions<a class="headerlink" href="#frequently-asked-questions" title="Link to this heading">¶</a></h1>
+<p>Short answers with a pointer to the page that covers each properly. For a
+symptom you are actively hitting, go to
+<a class="reference internal" href="troubleshooting.html"><span class="doc">Troubleshooting</span></a> instead — it is organised by
+error message.</p>
+<hr class="docutils" />
+<section id="is-gffbase-really-a-drop-in-replacement-for-gffutils">
+<span id="faq-is-gffbase-really-a-drop-in-replacement-for-gffutils"></span><h2>Is gffbase really a drop-in replacement for gffutils?<a class="headerlink" href="#is-gffbase-really-a-drop-in-replacement-for-gffutils" title="Link to this heading">¶</a></h2>
+<p>For most code, yes: <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">gffbase</span> <span class="pre">as</span> <span class="pre">gffutils</span></code> and carry on. 23 of the 24
+<code class="docutils literal notranslate"><span class="pre">FeatureDB</span></code> methods match by name <strong>and exact signature</strong>, and the differences
+that remain are declared in a register that CI checks against a pinned
+<code class="docutils literal notranslate"><span class="pre">gffutils</span></code> build — it fails both on an undeclared gap and on a declaration
+that has gone stale. One behavioural difference matters enough to read about
+before a production run.
+→ <a class="reference internal" href="migration.html"><span class="doc">Migration guide</span></a></p>
+</section>
+<section id="what-is-the-one-thing-that-will-surprise-me">
+<span id="faq-what-is-the-one-thing-that-will-surprise-me"></span><h2>What is the one thing that will surprise me?<a class="headerlink" href="#what-is-the-one-thing-that-will-surprise-me" title="Link to this heading">¶</a></h2>
+<p>A <strong>row-by-row loop over many IDs</strong> is slower in gffbase than in gffutils.
+DuckDB pays vectorization startup per call; SQLite, an OLTP engine, does not.
+That is a real trade, not a defect, and it is why the batched API exists.
+→ <a class="reference internal" href="migration.html"><span class="doc">Migration guide</span></a></p>
+</section>
+<section id="why-does-my-ingest-fail-with-duplicateiderror">
+<span id="faq-why-does-my-ingest-fail-with-duplicateiderror"></span><h2>Why does my ingest fail with <code class="docutils literal notranslate"><span class="pre">DuplicateIDError</span></code>?<a class="headerlink" href="#why-does-my-ingest-fail-with-duplicateiderror" title="Link to this heading">¶</a></h2>
+<p>The file uses the split-CDS convention — several lines sharing one <code class="docutils literal notranslate"><span class="pre">ID</span></code>,
+describing one discontinuous feature. RefSeq, MANE and GENCODE’s GFF3 edition
+all do this. <code class="docutils literal notranslate"><span class="pre">merge_strategy</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">&quot;error&quot;</span></code>, as it does in gffutils,
+so you choose the reading: <code class="docutils literal notranslate"><span class="pre">merge_strategy=&quot;create_unique&quot;</span></code> renames the rows,
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;strict&quot;</span></code> fuses them into one feature.
+→ <a class="reference internal" href="modes.html"><span class="doc">Compatibility &amp; strict modes</span></a></p>
+</section>
+<section id="do-i-need-to-close-the-database">
+<span id="faq-do-i-need-to-close-the-database"></span><h2>Do I need to close the database?<a class="headerlink" href="#do-i-need-to-close-the-database" title="Link to this heading">¶</a></h2>
+<p>Yes. DuckDB takes an <strong>exclusive lock</strong> on the file for the life of a writable
+handle, so an unclosed handle stops any other process opening it and, on
+Windows, stops the file being replaced. Use <code class="docutils literal notranslate"><span class="pre">with</span></code>, or call <code class="docutils literal notranslate"><span class="pre">close()</span></code>.
+→ <a class="reference internal" href="connections.html"><span class="doc">Connections &amp; concurrency</span></a></p>
+</section>
+<section id="can-several-processes-read-one-database-at-once">
+<span id="faq-can-several-processes-read-one-database-at-once"></span><h2>Can several processes read one database at once?<a class="headerlink" href="#can-several-processes-read-one-database-at-once" title="Link to this heading">¶</a></h2>
+<p>Yes, with <code class="docutils literal notranslate"><span class="pre">FeatureDB(path,</span> <span class="pre">read_only=True)</span></code>. A read-only connection takes no
+exclusive lock, so a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> or a <code class="docutils literal notranslate"><span class="pre">multiprocessing.Pool</span></code> can fan out over
+one annotation. Open the handle <em>inside</em> each worker: a DuckDB connection is
+not fork-safe.
+→ <a class="reference internal" href="connections.html"><span class="doc">Connections &amp; concurrency</span></a></p>
+</section>
+<section id="how-do-i-get-a-dataframe-out-of-it">
+<span id="faq-how-do-i-get-a-dataframe-out-of-it"></span><h2>How do I get a dataframe out of it?<a class="headerlink" href="#how-do-i-get-a-dataframe-out-of-it" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">db.to_table(featuretype,</span> <span class="pre">format=&quot;df&quot;)</span></code> returns the whole database, or a
+filtered slice, as pandas — or <code class="docutils literal notranslate"><span class="pre">&quot;polars&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;arrow&quot;</span></code> for a zero-copy
+<code class="docutils literal notranslate"><span class="pre">pyarrow.Table</span></code>. No <code class="docutils literal notranslate"><span class="pre">Feature</span></code> objects are constructed at any layer.
+→ <a class="reference internal" href="usage_gallery.html"><span class="doc">Usage gallery</span></a></p>
+</section>
+<section id="how-do-i-get-every-exon-for-thousands-of-transcripts">
+<span id="faq-how-do-i-get-every-exon-for-thousands-of-transcripts"></span><h2>How do I get every exon for thousands of transcripts?<a class="headerlink" href="#how-do-i-get-every-exon-for-thousands-of-transcripts" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">db.children_batched(ids,</span> <span class="pre">featuretype=&quot;exon&quot;,</span> <span class="pre">format=&quot;arrow&quot;)</span></code> — one set-based
+query returning Arrow buffers, with an <code class="docutils literal notranslate"><span class="pre">anchor</span></code> column carrying each row’s
+input ID so you can regroup without re-querying.
+→ <a class="reference internal" href="cookbook_ml_workflows.html"><span class="doc">Machine learning workflows</span></a></p>
+</section>
+<section id="why-is-my-database-bigger-than-the-sqlite-one">
+<span id="faq-why-is-my-database-bigger-than-the-sqlite-one"></span><h2>Why is my database bigger than the SQLite one?<a class="headerlink" href="#why-is-my-database-bigger-than-the-sqlite-one" title="Link to this heading">¶</a></h2>
+<p>1.18× to 1.36× across the benchmark corpora, and deliberately: gffbase
+materializes a transitive closure and a long-form attributes table so hierarchy
+walks and attribute searches are indexed lookups rather than scans. That is the
+trade for the query speed.
+→ <a class="reference internal" href="performance.html"><span class="doc">Performance</span></a></p>
+</section>
+<section id="native-available-says-false-does-that-matter">
+<span id="faq-native-available-says-false-does-that-matter"></span><h2><code class="docutils literal notranslate"><span class="pre">native_available()</span></code> says False. Does that matter?<a class="headerlink" href="#native-available-says-false-does-that-matter" title="Link to this heading">¶</a></h2>
+<p>Results are identical — gffbase ships a pure-Python fallback parser that is
+diffed against the Rust one in CI. Throughput is not identical. On a platform
+with wheels it means the install went wrong.
+→ <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a></p>
+</section>
+<section id="do-i-need-bedtools-or-pybedtools">
+<span id="faq-do-i-need-bedtools-or-pybedtools"></span><h2>Do I need <code class="docutils literal notranslate"><span class="pre">bedtools</span></code> or <code class="docutils literal notranslate"><span class="pre">pybedtools</span></code>?<a class="headerlink" href="#do-i-need-bedtools-or-pybedtools" title="Link to this heading">¶</a></h2>
+<p>Only for <code class="docutils literal notranslate"><span class="pre">to_bedtool()</span></code> and <code class="docutils literal notranslate"><span class="pre">tsses()</span></code>. Everything else works without them.
+<code class="docutils literal notranslate"><span class="pre">pybedtools</span></code> cannot be installed on Windows at all — its <code class="docutils literal notranslate"><span class="pre">pysam</span></code> dependency is
+POSIX-only — so those two functions are Linux and macOS only.
+→ <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a></p>
+</section>
+<section id="can-i-still-use-my-old-gffutils-database">
+<span id="faq-can-i-still-use-my-old-gffutils-database"></span><h2>Can I still use my old gffutils database?<a class="headerlink" href="#can-i-still-use-my-old-gffutils-database" title="Link to this heading">¶</a></h2>
+<p>Not directly — it is SQLite and gffbase is DuckDB. Rebuild from the same GFF
+source. Going the other way <em>is</em> supported: <code class="docutils literal notranslate"><span class="pre">export_sqlite(db,</span> <span class="pre">&quot;legacy.db&quot;)</span></code>
+writes a database real gffutils can open.
+→ <a class="reference internal" href="usage_gallery.html"><span class="doc">Usage gallery</span></a></p>
+</section>
+<section id="what-about-a-database-made-by-gffbase-0-1-x">
+<span id="faq-what-about-a-database-made-by-gffbase-01x"></span><h2>What about a database made by gffbase 0.1.x?<a class="headerlink" href="#what-about-a-database-made-by-gffbase-0-1-x" title="Link to this heading">¶</a></h2>
+<p>It is upgraded in place when you open it. The migration is structural and
+changes no query result, which is what makes it acceptable to run unasked; the
+step that <em>does</em> change results is opt-in and separate.
+→ <a class="reference internal" href="api.html"><span class="doc">migrate</span></a></p>
+</section>
+<section id="how-do-i-know-my-database-is-sound">
+<span id="faq-how-do-i-know-my-database-is-sound"></span><h2>How do I know my database is sound?<a class="headerlink" href="#how-do-i-know-my-database-is-sound" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">db.validate()</span></code> runs 17 structural invariants, each a single set-based query —
+cheap enough for CI. <code class="docutils literal notranslate"><span class="pre">gffbase</span> <span class="pre">stats</span></code> summarises what is actually in it.
+→ <a class="reference internal" href="api.html"><span class="doc">validate</span></a> · <a class="reference internal" href="cli.html"><span class="doc">Command line</span></a></p>
+</section>
+<section id="which-python-versions-are-supported">
+<span id="faq-which-python-versions-are-supported"></span><h2>Which Python versions are supported?<a class="headerlink" href="#which-python-versions-are-supported" title="Link to this heading">¶</a></h2>
+<p>3.10 through 3.14, one abi3 wheel per platform. DuckDB ≥ 1.4.1 and PyArrow
+≥ 18.1, and those floors are enforced by a CI job that installs exactly them.
+→ <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a></p>
+</section>
+<section id="how-do-i-cite-it">
+<span id="faq-how-do-i-cite-it"></span><h2>How do I cite it?<a class="headerlink" href="#how-do-i-cite-it" title="Link to this heading">¶</a></h2>
+<p>→ <a class="reference internal" href="citation.html"><span class="doc">Citation</span></a> — and please cite the annotation you used, and
+<code class="docutils literal notranslate"><span class="pre">gffutils</span></code>, whose API and test corpus this builds on.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="troubleshooting.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Troubleshooting</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="api.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">API reference</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Kuan-Hao Chao
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/Kuanhao-Chao/gffbase" aria-label="GitHub"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.011.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.441.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Frequently asked questions</a><ul>
+<li><a class="reference internal" href="#is-gffbase-really-a-drop-in-replacement-for-gffutils">Is gffbase really a drop-in replacement for gffutils?</a></li>
+<li><a class="reference internal" href="#what-is-the-one-thing-that-will-surprise-me">What is the one thing that will surprise me?</a></li>
+<li><a class="reference internal" href="#why-does-my-ingest-fail-with-duplicateiderror">Why does my ingest fail with <code class="docutils literal notranslate"><span class="pre">DuplicateIDError</span></code>?</a></li>
+<li><a class="reference internal" href="#do-i-need-to-close-the-database">Do I need to close the database?</a></li>
+<li><a class="reference internal" href="#can-several-processes-read-one-database-at-once">Can several processes read one database at once?</a></li>
+<li><a class="reference internal" href="#how-do-i-get-a-dataframe-out-of-it">How do I get a dataframe out of it?</a></li>
+<li><a class="reference internal" href="#how-do-i-get-every-exon-for-thousands-of-transcripts">How do I get every exon for thousands of transcripts?</a></li>
+<li><a class="reference internal" href="#why-is-my-database-bigger-than-the-sqlite-one">Why is my database bigger than the SQLite one?</a></li>
+<li><a class="reference internal" href="#native-available-says-false-does-that-matter"><code class="docutils literal notranslate"><span class="pre">native_available()</span></code> says False. Does that matter?</a></li>
+<li><a class="reference internal" href="#do-i-need-bedtools-or-pybedtools">Do I need <code class="docutils literal notranslate"><span class="pre">bedtools</span></code> or <code class="docutils literal notranslate"><span class="pre">pybedtools</span></code>?</a></li>
+<li><a class="reference internal" href="#can-i-still-use-my-old-gffutils-database">Can I still use my old gffutils database?</a></li>
+<li><a class="reference internal" href="#what-about-a-database-made-by-gffbase-0-1-x">What about a database made by gffbase 0.1.x?</a></li>
+<li><a class="reference internal" href="#how-do-i-know-my-database-is-sound">How do I know my database is sound?</a></li>
+<li><a class="reference internal" href="#which-python-versions-are-supported">Which Python versions are supported?</a></li>
+<li><a class="reference internal" href="#how-do-i-cite-it">How do I cite it?</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=f1f9ae6c"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>
