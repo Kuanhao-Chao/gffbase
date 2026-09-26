@@ -376,3 +376,40 @@ def test_a_failed_update_leaves_the_database_as_it_was(gff3_db, monkeypatch):
         gff3_db.update([line("chr1\tt\tmRNA\t1\t900\t.\t+\t.\tID=t2;Parent=g1")])
     assert (ids(gff3_db), kids(gff3_db, "g1", level=None)) == before
     assert_valid(gff3_db)
+
+
+def test_an_edited_feature_is_persisted_with_replace(gff3_db):
+    """The gffutils idiom for writing an edit back: re-add it and let
+    `merge_strategy="replace"` swap it in. Its hierarchy survives."""
+    gene = gff3_db["g1"]
+    gene.attributes["custom_tag"] = ["my_pipeline:v1"]
+    gene.start = 5
+    gff3_db.update([gene], merge_strategy="replace")
+    again = gff3_db["g1"]
+    assert (again.start, again.attributes["custom_tag"]) == (5, ["my_pipeline:v1"])
+    assert kids(gff3_db, "g1") == ["t1"]
+    assert_valid(gff3_db)
+
+
+def test_an_update_joins_the_callers_transaction(gff3_db):
+    """Inside the caller's transaction the update neither commits early nor
+    breaks it: rolling back undoes the update and the connection still works."""
+    gff3_db.conn.execute("BEGIN TRANSACTION")
+    gff3_db.update([line("chr1\tt\texon\t500\t600\t.\t+\t.\tID=e5;Parent=t1")])
+    assert "e5" in gff3_db
+    gff3_db.conn.execute("ROLLBACK")
+    assert "e5" not in gff3_db
+    gff3_db.update([line("chr1\tt\texon\t500\t600\t.\t+\t.\tID=e6;Parent=t1")])
+    assert "e6" in kids(gff3_db, "t1")
+
+
+def test_in_transaction_detects_an_open_transaction():
+    import duckdb
+    from gffbase._dbutil import in_transaction
+
+    con = duckdb.connect()
+    assert not in_transaction(con)
+    con.execute("BEGIN TRANSACTION")
+    assert in_transaction(con)
+    con.execute("ROLLBACK")
+    assert not in_transaction(con)

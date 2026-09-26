@@ -40,7 +40,7 @@ from typing import Any, Union
 
 import duckdb
 
-from gffbase._dbutil import apply_settings, scalar, scalar_or
+from gffbase._dbutil import apply_settings, in_transaction, scalar, scalar_or
 from gffbase.exceptions import (
     ClosedDatabaseError,
     FeatureNotFoundError,
@@ -2398,14 +2398,14 @@ class FeatureDB:
         if stage is None:
             return self
         # All or nothing. A failure part-way -- a constraint, a full disk, an
-        # interrupt -- must not leave half an update behind. `BEGIN` fails
-        # when a caller-supplied connection is already inside a transaction;
-        # the caller owns that one, so its commit or rollback decides.
-        try:
+        # interrupt -- must not leave half an update behind. If the caller
+        # already has a transaction open, it owns the outcome: the update
+        # joins it, and the caller's commit or rollback decides. (Asking by
+        # issuing `BEGIN` would not do: a failed statement aborts the
+        # caller's transaction.)
+        began = not in_transaction(self.conn)
+        if began:
             self.conn.execute("BEGIN TRANSACTION")
-            began = True
-        except duckdb.TransactionException:
-            began = False
         saved = (self._closure_max_depth, self._n_multipart, dict(self._seqid_y_map))
         try:
             _update.merge(self, stage, options)
