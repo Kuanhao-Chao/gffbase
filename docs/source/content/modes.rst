@@ -49,8 +49,8 @@ And the two modes are just presets:
      - Behaviour
    * - ``compat`` *(default)*
      - ``gffutils``
-     - ``raise``
-     - Every rule still runs, but a violation **annotates** the record instead of rejecting it.
+     - ``raise`` (moot)
+     - Every rule still runs, but a violation **annotates** the record instead of rejecting it. The gffutils rules reject nothing, so ``on_error`` has nothing to act on; a line that cannot be parsed at all is skipped and recorded in ``warnings``.
    * - ``strict``
      - ``ncbi``
      - ``raise``
@@ -108,18 +108,21 @@ FlyBase file whose column 9 does not survive a strict reading.
 Discontinuous features: the case that actually matters
 ------------------------------------------------------
 
-A CDS split across several lines shares one ``ID=``. NCBI RefSeq and MANE both do
-this; it is the single most common place the two modes visibly disagree.
+A CDS split across several lines shares one ``ID=``. NCBI RefSeq, MANE and
+GENCODE's GFF3 all do this; it is the single most common place the two modes
+visibly disagree.
 
 Take three lines that all say ``ID=cds-NP_001``:
 
 ``mode="compat"``
 ^^^^^^^^^^^^^^^^^
 
-Each line becomes **its own feature**, renamed the way
-``gffutils.merge_strategy="create_unique"`` renames them — ``cds-NP_001``,
-``cds-NP_001_1``, ``cds-NP_001_2``. A ported script sees exactly what it
-expects to see.
+A repeated ``ID`` is a duplicate, resolved by ``merge_strategy`` exactly as in
+gffutils -- and the default, ``"error"``, raises ``DuplicateIDError`` (see the
+warning below). With ``merge_strategy="create_unique"`` each line becomes **its
+own feature**, renamed the way gffutils renames them -- ``cds-NP_001``,
+``cds-NP_001_1``, ``cds-NP_001_2`` -- which is what a ported script expects to
+see.
 
 ``mode="strict"``
 ^^^^^^^^^^^^^^^^^
@@ -230,6 +233,8 @@ back when you open it:
 So a database always knows how it was made, and a script that reopens one does
 not have to be told.
 
-Mode also selects the ``source`` field of derived features — ``gffutils_derived``
-under ``compat``, ``gffbase_derived`` under ``strict`` — so ``create_introns()`` output
-round-trips through a ``gffutils``-aware pipeline unchanged.
+Mode also selects the ``source`` field of derived features -- introns, splice
+sites and a GTF's inferred genes and transcripts: ``gffutils_derived`` under
+``compat``, ``gffbase_derived`` under ``strict``. So a ported script that filters
+on ``source == "gffutils_derived"`` finds what it found under gffutils. (Before
+0.2.1, inferred GTF parents were ``gffbase_derived`` in both modes.)

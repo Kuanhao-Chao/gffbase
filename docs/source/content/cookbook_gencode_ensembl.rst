@@ -27,15 +27,21 @@ need.
        "gencode.duckdb",
        force=True,
    )
-   print(f"{db.count_features_of_type():,} features")    # ~6.5 M (incl. synth parents)
+   print(f"{db.count_features_of_type():,} features")    # 6,068,892
    print(db.fmt)                                          # 'gtf'
 
-GTF input is auto-detected. GENCODE v49 already supplies gene and transcript
-rows, so reproducible real-data benchmarks set ``disable_infer_genes=True`` and
-``disable_infer_transcripts=True``. Leave inference enabled for older or derived
-leaf-only files: missing parents are synthesized by set-based ``GROUP BY`` over
-the normalized ``transcript_id`` / ``gene_id`` columns. See the controlled arms in
-:doc:`Benchmark methodology <methodology>`.
+GTF input is auto-detected. GENCODE v49 supplies a gene row for every
+``gene_id`` and a transcript row for every ``transcript_id``, so inference finds
+nothing to synthesize: the database holds exactly the file's 6,068,892 rows.
+``disable_infer_genes=True`` and ``disable_infer_transcripts=True`` skip the
+check, which the benchmarks do for a controlled comparison (see
+:doc:`Benchmark methodology <methodology>`). Leave inference on for leaf-only
+files -- StringTie, older Ensembl releases, anything derived: missing parents
+are synthesized set-based from the ``transcript_id`` / ``gene_id`` attributes
+(or the ones named by ``gtf_transcript_key`` / ``gtf_gene_key``).
+
+GENCODE ids are **versioned**: a gene's id is its ``gene_id`` attribute,
+``ENSG00000139618.19``, not the bare accession.
 
 .. _cookbook_gencode_ensembl--2-walk-a-single-genes-hierarchy:
 
@@ -46,8 +52,14 @@ the normalized ``transcript_id`` / ``gene_id`` columns. See the controlled arms 
 
 .. code-block:: python
 
-   gene = db["ENSG00000139618"]                # BRCA2
+   gene = db["ENSG00000139618.19"]             # BRCA2; ids carry the version
    print(gene.featuretype, gene.start, gene.end)
+
+   # Only have the unversioned accession? Resolve it first:
+   (gene_id,) = db.execute(
+       "SELECT id FROM features WHERE featuretype = 'gene' AND split_part(id, '.', 1) = ?",
+       ["ENSG00000139618"],
+   ).fetchone()
 
    for tx in db.children(gene, level=1, featuretype="transcript"):
        n_exons = sum(1 for _ in db.children(tx, level=1, featuretype="exon"))
@@ -57,18 +69,20 @@ the normalized ``transcript_id`` / ``gene_id`` columns. See the controlled arms 
    for f in db.children(gene, level=None):
        pass
 
-``children(level=1)`` is a closure-cache point lookup; ``children(level=None)``
-returns the full descendant set. The relational dispatcher auto-routes
-between the materialized closure and a recursive CTE.
+``children(level=1)`` reads the materialized closure; ``children(level=None)``
+returns the full descendant set. The dispatcher routes between the closure and
+a recursive CTE. Each call is one or two queries, a few milliseconds -- fine
+for a handful of genes, slow as a loop over thousands. For those, use
+``children_batched`` (section 5).
 
 .. _cookbook_gencode_ensembl--3-filter-by-attribute-eg-all-protein-coding-genes:
 
 3. Filter by attribute (e.g. all protein-coding genes)
 ------------------------------------------------------
 
-GENCODE attributes are stored in a normalized long-form table indexed on
-``(key, value)``. Attribute filtering is therefore an indexed query, not a
-JSON scan:
+GENCODE attributes are stored in a normalized long-form table,
+``attributes(feature_id, key, value, idx)``, so an attribute filter is an
+ordinary join that DuckDB runs as a columnar scan -- no JSON is parsed:
 
 .. code-block:: python
 
@@ -115,25 +129,32 @@ full pattern:
 
 .. _cookbook_gencode_ensembl--performance-notes-real-gencode-v49-numbers:
 
-Performance notes (real GENCODE v49 numbers)
---------------------------------------------
+Performance notes
+-----------------
+
+Whole-corpus numbers -- ingest time, peak memory, batched extraction -- are on
+the :doc:`performance` page, measured per release. Per-call latency, measured
+on MANE v1.5 (19,363 genes) on the benchmark machine:
 
 .. list-table::
    :header-rows: 1
-   :widths: 34 33 33
+   :widths: 50 25 25
 
-   * - Task
-     - Wall
-     - Source
-   * - Full ingest (6.07 M lines)
-     - see :doc:`performance`
-     - measured per release
-   * - ``children(g, level=1)`` (single gene)
-     - <1 ms
-     - materialized closure cache
-   * - Bulk ``children_batched()``
-     - see :doc:`performance`
-     - measured per release
-   * - Random ``region(seqid:start-end)``
-     - ~0.7 ms
-     - R-tree path
+   * - Call
+     - Median
+     - Path
+   * - ``db[id]``
+     - ~0.6 ms
+     - primary-key lookup
+   * - ``children(gene, level=1)``
+     - ~5 ms
+     - closure table
+   * - ``children(gene)`` (all descendants)
+     - ~10 ms
+     - closure table
+   * - ``region(seqid, start, end)``, 10 kb window
+     - ~2 ms
+     - R-tree
+
+A per-feature loop pays those costs once per feature. That is why the batched
+API exists: ``children_batched`` answers thousands of anchors in one query.

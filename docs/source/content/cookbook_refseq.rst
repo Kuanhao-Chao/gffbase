@@ -14,13 +14,18 @@ worth calling out:
 - ``Note=...`` — long, free-form text often containing semicolons that
   confuse naïve parsers.
 
-- Mixed ``chromosome`` features at the top level (one per chromosome).
-- Chromosome names like ``NC_000001.11`` instead of ``chr1``.
+- One ``region`` row per sequence (``ID=NC_000001.11:1..248956422``,
+  with ``chromosome=``, ``genome=`` and ``mol_type=`` attributes). It is
+  metadata about the sequence, not a parent: genes carry no ``Parent=`` and
+  are roots of their own hierarchies.
 
-GFFBase handles all of these out of the box — the Rust parser's state
-machine treats quoted-and-percent-encoded GFF3 attribute values
-correctly. This cookbook shows the patterns
-that come up most often.
+- Chromosome names like ``NC_000001.11`` instead of ``chr1``.
+- Split CDS: every line of a discontinuous CDS repeats the same ``ID=``, and
+  alignment rows (``match``, ``cDNA_match``) do the same.
+
+GFFBase handles all of these -- the attribute parser treats quoted and
+percent-encoded GFF3 values correctly -- but the split CDS needs one decision
+at ingest, below. This cookbook shows the patterns that come up most often.
 
 .. _cookbook_refseq--1-ingest-a-refseq-genome-annotation:
 
@@ -37,11 +42,23 @@ that come up most often.
        "GCF_000001405.40_GRCh38.p14_genomic.gff.gz",   # NCBI Human RefSeq
        "refseq.duckdb",
        force=True,
+       merge_strategy="create_unique",   # one row per CDS line, as gffutils
    )
    print(db.fmt)   # 'gff3'
 
+With the defaults this raises ``DuplicateIDError``, as gffutils does: the
+lines of a split CDS share one ``ID``, and ``merge_strategy="error"`` is the
+default. Choose a reading:
+
+- ``merge_strategy="create_unique"`` keeps one row per line and renames the
+  repeats (``cds-NP_000537.3_1``, ...) -- what a ported gffutils script
+  expects.
+
+- ``mode="strict"`` fuses the lines into one discontinuous feature per ``ID``,
+  with per-segment phase; see :doc:`modes` and :doc:`schema_v2`.
+
 RefSeq files are GFF3, so ``Parent=`` attributes drive edge construction
-directly (no inference passes — ``disable_infer_*`` is moot here).
+directly (no inference passes -- ``disable_infer_*`` is moot here).
 
 .. _cookbook_refseq--2-convert-ncbi-seqids-to-ucsc-style-chromosomes:
 
@@ -116,19 +133,27 @@ seamless:
 (via the ``_LazyAttributes`` wrapper); features whose attributes are never read
 pay zero parsing cost.
 
-.. _cookbook_refseq--5-coordinate-the-chromosome-row-everything-on-it:
+.. _cookbook_refseq--5-one-row-per-sequence-the-region-records:
 
-5. Coordinate the chromosome row + everything on it
----------------------------------------------------
+5. One row per sequence: the ``region`` records
+-----------------------------------------------
 
-RefSeq emits one ``chromosome`` feature per seqid as the root of the
-hierarchy. ``iter_by_parent_childs`` gives you each chromosome plus
-everything in it, in file order:
+Each sequence has a ``region`` row describing it. It is not the parent of the
+genes on that sequence -- nothing names it in ``Parent=`` -- so walk it by
+coordinates or by ``seqid``, not by hierarchy:
 
 .. code-block:: python
 
-   for parent, *children in db.iter_by_parent_childs(featuretype="chromosome"):
-       print(f"{parent.seqid}: {len(children):,} child features")
+   # Which sequences are placed chromosomes, and what are they called?
+   for r in db.features_of_type("region"):
+       if r.attributes.get("genome") == ["chromosome"]:
+           print(r.seqid, r.attributes["chromosome"][0], r.end)
+
+   # Feature counts per sequence, in one query rather than a Python loop:
+   for seqid, n in db.execute(
+       "SELECT seqid, count(*) FROM features GROUP BY seqid ORDER BY 2 DESC LIMIT 5"
+   ).fetchall():
+       print(seqid, n)
 
 .. _cookbook_refseq--6-bulk-export-to-bed-for-downstream-tools:
 
@@ -151,7 +176,20 @@ everything in it, in file order:
 Performance notes
 -----------------
 
-RefSeq's largest GFFs (e.g. mouse GRCm39, ~3 GB uncompressed) ingest
-in **~5–6 minutes** on a stock laptop with the same recursive-CTE
-closure + bulk Arrow path used for GENCODE. Per-feature memory stays
-flat thanks to the 50 000-row Arrow batching in ``_ArrowBatchBuilder``.
+On the benchmark machine (see :doc:`performance`), RefSeq GRCh38.p14 --
+4.9 million lines -- ingests in about 7 minutes, level with gffutils.
+
+Ingest memory is not flat in 0.2.x: it grows with the file, and most of it is
+the parser and per-record work rather than DuckDB. Two settings help:
+
+- Fewer DuckDB threads. DuckDB sizes its thread pool, and the buffers that
+  come with it, from every core it can see. ``GFFBASE_THREADS=8`` (or
+  ``pragmas={"threads": 8}``) matters on a many-core node.
+
+- ``pragmas={"memory_limit": "2GB"}`` caps DuckDB's own share, and spills to
+  disk beyond it. It does not cap the parser.
+
+Measured on MANE v1.5 (525 thousand features) on a 128-core node: 3.2 GB peak
+with the defaults, 2.6 GB with a 512 MB DuckDB cap, and 1.9 GB with 10
+threads, where the cap then makes no further difference. Bounding the whole
+ingest is the work planned for 0.3.0 (:doc:`roadmap`).

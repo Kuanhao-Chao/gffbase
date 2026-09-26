@@ -179,7 +179,8 @@ Quick start
    from gffbase import create_db
 
    with create_db("gencode.v49.annotation.gtf.gz", "gencode.duckdb") as db:
-       for tx in db.children("ENSG00000139618", featuretype="transcript"):
+       # GENCODE ids carry their version.
+       for tx in db.children("ENSG00000139618.19", featuretype="transcript"):
            print(tx.id, tx.start, tx.end)
 
        for feature in db.region("chr17:43044295-43125483", featuretype="exon"):

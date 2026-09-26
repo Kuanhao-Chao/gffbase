@@ -3,10 +3,11 @@
 Usage Gallery — every public method, copy-pasteable
 ===================================================
 
-This is the cheat sheet. Every snippet below is **runnable as-is**
-against any GFFBase database. The cookbook pages walk through specific
+This is the cheat sheet. The cookbook pages walk through specific
 biological corpora; this page covers the **API surface in isolation**
 so you can grep for the method name you need and lift the snippet.
+Snippets that name an accession assume a GENCODE database, whose ids
+carry their version (``ENSG00000139618.19``, not ``ENSG00000139618``).
 
 If you only read three sections, make them:
 
@@ -32,7 +33,8 @@ If you only read three sections, make them:
 
    from gffbase import create_db
 
-   # GTF or GFF3, plain or gzipped — auto-detected from contents.
+   # GTF or GFF3, plain or gzipped (.gz, .bgz, any name) — auto-detected
+   # from contents. An input with no features raises EmptyInputError.
    db = create_db(
        "annotation.gff3.gz",     # input path
        "annotation.duckdb",      # output DB
@@ -169,15 +171,15 @@ shorthand for the two combinations that make sense together.
 .. code-block:: python
 
    # Direct children only (level=1):
-   for tx in db.children("ENSG00000139618", level=1):
+   for tx in db.children("ENSG00000139618.19", level=1):
        print(tx.id, tx.featuretype, tx.start, tx.end)
 
    # All descendants (level=None):
-   for f in db.children("ENSG00000139618", level=None):
+   for f in db.children("ENSG00000139618.19", level=None):
        pass
 
    # Filter by featuretype:
-   exons = list(db.children("ENST00000380152", featuretype="exon"))
+   exons = list(db.children("ENST00000380152.8", featuretype="exon"))
 
 .. _usage_gallery--22-parents-walk-up-the-hierarchy:
 
@@ -228,10 +230,10 @@ shorthand for the two combinations that make sense together.
 .. code-block:: python
 
    # Square-bracket lookup is the fastest single-feature access:
-   gene = db["ENSG00000139618"]   # raises FeatureNotFoundError on miss
+   gene = db["ENSG00000139618.19"]   # raises FeatureNotFoundError on miss
 
    # Membership check:
-   if "ENSG00000139618" in db:
+   if "ENSG00000139618.19" in db:
        pass
 
    # Aggregate counts:
@@ -296,7 +298,7 @@ shorthand for the two combinations that make sense together.
 
 .. code-block:: python
 
-   gene = db["ENSG00000139618"]
+   gene = db["ENSG00000139618.19"]
    # Pull every feature that overlaps this gene's footprint:
    for f in db.region(gene):
        pass
@@ -317,7 +319,7 @@ shorthand for the two combinations that make sense together.
 
 .. code-block:: python
 
-   gene = db["ENSG00000139618"]
+   gene = db["ENSG00000139618.19"]
    print(gene.seqid, gene.start, gene.end)   # chr13 32315474 32400266
    print(gene.strand, gene.frame, gene.score)
    print(gene.featuretype, gene.source)
@@ -333,7 +335,7 @@ shorthand for the two combinations that make sense together.
 .. code-block:: python
 
    # attributes is a multi-value mapping: each key maps to a list[str]
-   print(gene.attributes["gene_id"])         # ['ENSG00000139618']
+   print(gene.attributes["gene_id"])         # ['ENSG00000139618.19']
    print(gene.attributes.get("Note", []))    # safe default
 
    # Multi-value example: NCBI Dbxref carries multiple cross-refs.
@@ -358,8 +360,9 @@ shorthand for the two combinations that make sense together.
    gene.start = gene.start - 1000   # extend by 1 kb upstream
    gene.score = "0.95"
 
-   # Persist the change back to the DB:
-   db.update([gene])
+   # Persist the change: re-add it, and let "replace" swap it in (a plain
+   # update() would refuse the taken id, as gffutils does).
+   db.update([gene], merge_strategy="replace")
 
 .. _usage_gallery--44-export-to-a-gffgtf-line:
 
@@ -425,7 +428,7 @@ without ever instantiating a Python ``Feature`` object.
 .. code-block:: python
 
    # Pull every exon for 50 000 transcripts in one call.
-   transcript_ids = ["ENST00000380152", "ENST00000544455", ...]   # any size
+   transcript_ids = ["ENST00000380152.8", "ENST00000544455.6", ...]   # any size
 
    table = db.children_batched(
        transcript_ids,
@@ -638,7 +641,7 @@ gffutils writes.
 .. code-block:: python
 
    # Total exonic basepairs in a gene.
-   gene = db["ENSG00000139618"]
+   gene = db["ENSG00000139618.19"]
    total_bp = db.children_bp(gene, child_featuretype="exon")
    print(f"{total_bp:,} bp of exonic sequence")
 
@@ -743,12 +746,12 @@ a v1 database — which is only acceptable because it is structural.
    from gffbase import GFFWriter
 
    with GFFWriter("output.gff3") as w:
-       w.write_rec(db["ENSG00000139618"])
+       w.write_rec(db["ENSG00000139618.19"])
        w.write_recs(db.features_of_type("transcript", limit="chr13"))
 
        # Convenience helpers for hierarchy-walking output:
-       w.write_gene_recs(db, "ENSG00000139618")          # gene + all descendants
-       w.write_mRNA_children(db, "ENST00000380152")      # mRNA + level-1 children
+       w.write_gene_recs(db, "ENSG00000139618.19")          # gene + all descendants
+       w.write_mRNA_children(db, "ENST00000380152.8")      # mRNA + level-1 children
        w.write_exon_children(db, "exon_id_42")           # exon + level-1 children
 
 .. _usage_gallery--72-iterate-a-raw-file-without-building-a-database:
@@ -841,8 +844,10 @@ a v1 database — which is only acceptable because it is structural.
    # picks the right join order. Idempotent — cheap to call.
    db.analyze()
 
-   # Set DuckDB pragmas. Anything DuckDB rejects is silently skipped
-   # so legacy SQLite-style pragmas are safe to pass through.
+   # Set DuckDB pragmas. Names DuckDB does not have (gffutils' SQLite
+   # pragmas) are skipped, so passing those through is safe; a bad value for
+   # a real setting raises. create_db(pragmas=...) applies them to the
+   # ingest as well.
    db.set_pragmas({
        "threads": 8,
        "memory_limit": "4GB",
@@ -858,21 +863,27 @@ a v1 database — which is only acceptable because it is structural.
 .. code-block:: python
 
    # Remove features. Accepts ids, Feature objects, or another FeatureDB.
-   db.delete(["ENSG00000139618"])
-   db.delete([db["ENSG00000141510"]])      # by Feature
+   db.delete(["ENSG00000139618.19"])
+   db.delete([db["ENSG00000141510.20"]])   # by Feature
    # db.delete(other_feature_db)           # delete every id present in `other`
 
-   # Insert new features.
+   # Add features (a GFF3 database here). They go through the same pipeline
+   # as create_db: the ID attribute names each one, Parent= becomes an edge,
+   # and in a GTF database missing genes and transcripts are inferred. A
+   # taken id raises DuplicateIDError unless merge_strategy says otherwise.
    from gffbase import Feature
    new_exon = Feature(
        seqid="chr1", source="custom", featuretype="exon",
        start=100, end=200, strand="+", frame=".",
-       attributes={"ID": ["custom_exon_1"], "Parent": ["ENST00000000000"]},
+       attributes={"ID": ["custom_exon_1"], "Parent": ["ENST00000380152.8"]},
    )
    db.update([new_exon])
+   db.update("more_features.gff3")                    # a file works too
+   db.update(db.create_introns())                     # the classic gffutils use
 
-   # Wire two existing features into a parent/child edge.
-   db.add_relation("ENSG00000139618", "custom_exon_1", level=2)
+   # Wire two existing features into a parent/child edge. Relations are
+   # direct; deeper levels are derived, so level must be 1.
+   db.add_relation("ENST00000380152.8", "custom_exon_2", level=1)
 
 .. _usage_gallery--78-export_sqlite-produce-a-legacy-gffutils-readable-file:
 

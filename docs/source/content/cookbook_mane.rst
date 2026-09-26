@@ -42,9 +42,8 @@ GFFBase's normalized attribute index.
    """).fetchall()
    print(f"{len(mane_select):,} MANE_Select transcripts")
 
-The ``attributes_kv`` index on ``(key, value)`` makes this an indexed seek,
-not a full-table scan. On GENCODE v49 the query returns ~20 000 rows in
-under 100 ms.
+One query, answered by a columnar scan of the long-form ``attributes`` table
+with the filter pushed down -- no JSON is parsed.
 
 .. _cookbook_mane--2-combine-mane_select-and-mane_plus_clinical:
 
@@ -72,7 +71,7 @@ under 100 ms.
 
 .. code-block:: python
 
-   gene_id = "ENSG00000139618"  # BRCA2
+   gene_id = "ENSG00000139618.19"  # BRCA2 -- Ensembl ids here carry their version
    row = db.execute("""
        SELECT f.id
        FROM features f

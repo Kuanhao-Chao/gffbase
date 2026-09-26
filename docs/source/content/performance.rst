@@ -266,8 +266,8 @@ The rest of the ledger is qualitative, and stays that way:
 
 The memory and disk costs buy the query behavior rather than the ingest wall:
 an Arrow batch builder that stages columns before writing, a materialized
-transitive closure so hierarchy walks are indexed lookups rather than recursion,
-and a long-form attributes table so attribute search does not scan. Ingest pays
+transitive closure so a hierarchy walk is one query rather than a recursion,
+and a long-form attributes table so attribute search parses no JSON. Ingest pays
 for all three up front, which is a large part of why it does not win outright on
 the biggest files.
 

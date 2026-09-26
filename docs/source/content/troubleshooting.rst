@@ -34,14 +34,33 @@ picking one for you would give you a whole-genome answer you did not choose:
 
 See :doc:`Compatibility & strict modes <modes>`.
 
+.. _troubleshooting--emptyinputerror-no-features-in:
+
+``EmptyInputError: no features in ...``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The source yielded no feature lines at all: it is empty, holds only headers,
+comments or a FASTA section, or is not GFF3/GTF text (a binary file reads this
+way too). gffutils raises the same error. Check the path first. Since 0.2.1
+gzip is recognized by content, so a ``.bgz`` or extensionless gzip file is
+decompressed rather than read as binary; before that it silently produced an
+empty database.
+
+The same error with ``the transform rejected all N features`` means a
+``transform`` returned a false value for every record.
+
 .. _troubleshooting--gffformaterror-on-a-file-other-tools-read:
 
 ``GFFFormatError`` on a file other tools read
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You are almost certainly in ``mode="strict"``. Real annotations break the spec
-routinely; the default ``mode="compat"`` annotates violations instead of
-rejecting them. The exception carries a pointer into the file:
+You are almost certainly applying the strict rules: ``create_db(mode="strict")``,
+or the low-level ``gffbase.parser.parse_gff``, whose default is
+``validation="ncbi", strict=True``. Real annotations break the spec routinely;
+``create_db``'s default ``mode="compat"`` and ``DataIterator`` (compat since
+0.2.1) record violations in ``warnings`` instead of raising, and
+``parse_gff(path, validation="gffutils", strict=False)`` does the same. The
+exception carries a pointer into the file:
 
 .. docs-test: skip reason="illustrative: names a file the reader supplies"
 
@@ -76,8 +95,21 @@ whole-genome annotations — RefSeq 6.4–6.9, GENCODE GTF 8.5–9.2, GENCODE GF
 9.5–10.2, measured at ``validation_sample=10000`` — against 111–194 MB for
 ``gffutils``, which only ingests. Nothing here measures ingest with no
 validation at all, so read these as the cost of the whole default-shaped
-operation. DuckDB allocates a vectorized buffer pool; cap it with ``PRAGMA
-memory_limit='512MB'`` if that matters more than wall time.
+operation.
+
+Most of the ingest peak is the parser and per-record work, not DuckDB, so a
+DuckDB cap only trims it. Two settings, measured on MANE v1.5 on a 128-core
+node (3.2 GB peak with the defaults):
+
+- ``create_db(..., pragmas={"memory_limit": "512MB"})`` caps DuckDB's buffer
+  pool and spills beyond it: 2.6 GB. (Before 0.2.1 ``pragmas`` reached only the
+  returned handle, not the ingest.)
+
+- Fewer threads: DuckDB sizes its pool from every core it can see, so on a
+  many-core node ``GFFBASE_THREADS=10`` (or ``pragmas={"threads": 10}``)
+  matters more: 1.9 GB, after which the cap makes no further difference.
+
+Bounding the whole ingest is planned for 0.3.0.
 
 **Exhaustive validation** is what makes the published figures large: the numbers
 in the performance tables span 3.4–62.0 GB because those runs call
@@ -87,7 +119,7 @@ the CLI never overrides it. If you asked for exhaustive validation on a
 six-million-feature annotation, budget tens of gigabytes; otherwise you will not
 see these numbers.
 
-To cap DuckDB's own threads (and with them its memory):
+To cap DuckDB's threads for a whole script:
 
 .. code-block:: bash
 
@@ -100,9 +132,11 @@ The ingest died and left a file behind
 
 It should not have. Ingest is atomic: GFFBase writes to
 ``<dbfn>.gffbase-building.<pid>`` and only renames on success, so a failed run
-leaves the original untouched and the scratch file is removed. If you find a
-``.gffbase-building.*`` file, the process was killed hard (``SIGKILL``, power loss)
-and it is safe to delete.
+leaves the original untouched and the scratch file is removed, together with
+any spill directory DuckDB created beside it (``<scratch>.tmp/``; before 0.2.1
+that directory was left behind). If you find a ``.gffbase-building.*`` file or
+directory, the process was killed hard (``SIGKILL``, power loss) and it is safe
+to delete.
 
 Note that atomicity relies on ``os.replace`` being atomic, which holds **within
 one filesystem**. If ``dbfn`` is on a different mount than its temporary
@@ -228,10 +262,11 @@ back an empty database that reports itself as complete.
 The database is larger than the SQLite one
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected — 1.18× to 1.36× across the benchmark corpora. GFFBase stores a
-materialized transitive closure and a long-form attributes table so that
-hierarchy and attribute queries are indexed lookups instead of scans. That is
-the trade.
+Expected -- 1.18× to 1.36× across the benchmark corpora. GFFBase stores a
+materialized transitive closure, a long-form attributes table and an R-tree, so
+that a hierarchy walk is one query with no recursion, an attribute filter is a
+columnar scan rather than JSON parsing, and a spatial query uses a spatial
+index. That is the trade.
 
 ----
 
