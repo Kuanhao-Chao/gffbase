@@ -285,3 +285,23 @@ def test_a_quoted_value_is_still_accepted(tmp_path, engine):
 
     features = list(gffbase.parse_gff(str(src), engine=engine, validation="ncbi", strict=True))
     assert features[0].attributes_dict()["gene_id"] == ["G1"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), [("compat", "gffutils_derived"), ("strict", "gffbase_derived")]
+)
+def test_inferred_gtf_parents_carry_the_modes_derived_source(mode, expected):
+    """gffutils stamps inferred genes and transcripts `gffutils_derived`, and a
+    ported script filters on it. Compat mode used that spelling for introns and
+    splice sites but wrote `gffbase_derived` on inferred GTF parents, so the
+    filter found none of them."""
+    from gffbase import create_db
+
+    gtf = (
+        'chr1\tt\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
+        'chr1\tt\texon\t200\t300\t.\t+\t.\tgene_id "G1"; transcript_id "T1";\n'
+    )
+    db = create_db(gtf, ":memory:", from_string=True, mode=mode)
+    inferred = {f.featuretype: f.source for f in db.all_features() if f.featuretype != "exon"}
+    assert inferred == {"gene": expected, "transcript": expected}
+    assert {i.source for i in db.create_introns()} == {expected}

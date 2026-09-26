@@ -301,7 +301,7 @@ INSERT INTO features (id, seqid, source, featuretype, start, "end",
 SELECT
     m.resolved_id              AS id,
     m.seqid                    AS seqid,
-    'gffbase_derived'        AS source,
+    ?                          AS source,        -- DERIVED_SOURCE[mode]
     'transcript'               AS featuretype,
     MIN(f.start)               AS start,
     MAX(f."end")               AS "end",
@@ -426,7 +426,7 @@ INSERT INTO features (id, seqid, source, featuretype, start, "end",
 SELECT
     m.resolved_id              AS id,
     m.seqid                    AS seqid,
-    'gffbase_derived'        AS source,
+    ?                          AS source,        -- DERIVED_SOURCE[mode]
     'gene'                     AS featuretype,
     MIN(f.start)               AS start,
     MAX(f."end")               AS "end",

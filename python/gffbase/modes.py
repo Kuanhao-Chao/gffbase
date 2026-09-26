@@ -72,6 +72,19 @@ class ResolvedMode(NamedTuple):
         return self.on_error == ON_ERROR_RAISE
 
 
+#: `source` stamped on features gffbase derives rather than reads: introns,
+#: splice sites, and a GTF's inferred genes and transcripts.
+#:
+#: Mode-dependent on purpose. A script ported from gffutils filters on
+#: `source == "gffutils_derived"`, and compat mode exists so that script keeps
+#: working; strict mode reports honest provenance instead. GTF synthesis used
+#: to write the strict spelling in both modes, so that filter found none of
+#: the inferred parents.
+DERIVED_SOURCE = {
+    MODE_COMPAT: "gffutils_derived",
+    MODE_STRICT: "gffbase_derived",
+}
+
 #: What each mode selects.
 _MODE_DEFAULTS = {
     MODE_COMPAT: (VALIDATION_GFFUTILS, ON_ERROR_RAISE),

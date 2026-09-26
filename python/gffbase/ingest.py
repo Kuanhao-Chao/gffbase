@@ -52,7 +52,7 @@ from gffbase.exceptions import (
     SynthesisConflictError,
 )
 from gffbase.feature import ParsedFeature
-from gffbase.modes import VALIDATION_NCBI, ResolvedMode
+from gffbase.modes import DERIVED_SOURCE, MODE_COMPAT, VALIDATION_NCBI, ResolvedMode
 from gffbase.schema import (
     CLOSURE_RECURSIVE_CTE,
     COMPAT_VIEWS_SQL,
@@ -1544,7 +1544,9 @@ def _build_database(
             group_keys=(gkey, tkey),
         )
         if not disable_infer_transcripts:
-            n_synth_t = _synthesize_transcripts(con, gtf_subfeature, tkey, gkey)
+            n_synth_t = _synthesize_transcripts(
+                con, gtf_subfeature, tkey, gkey, DERIVED_SOURCE[options.mode]
+            )
         _prepare_gtf_parent_map(
             con,
             parent_type="gene",
@@ -1556,7 +1558,9 @@ def _build_database(
             group_keys=(gkey, tkey),
         )
         if not disable_infer_genes:
-            n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey)
+            n_synth_g = _synthesize_genes(
+                con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode]
+            )
         con.execute(EDGES_FROM_GTF, [tkey, gkey])
         # After the edges, deliberately -- see `resolve_synthesized_ids`.
         resolve_synthesized_ids(con, options, autoinc, fmt)
@@ -1742,13 +1746,17 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
 
 
 def _synthesize_transcripts(
-    con, subfeature: str, transcript_key: str = "transcript_id", gene_key: str = "gene_id"
+    con,
+    subfeature: str,
+    transcript_key: str = "transcript_id",
+    gene_key: str = "gene_id",
+    source: str = DERIVED_SOURCE[MODE_COMPAT],
 ) -> int:
     """Run the GROUP BY transcript synthesis. Returns rows inserted."""
     before = con.execute(
         "SELECT COUNT(*) FROM features WHERE featuretype = 'transcript'"
     ).fetchone()[0]
-    con.execute(GTF_SYNTHESIZE_TRANSCRIPTS, [transcript_key, subfeature])
+    con.execute(GTF_SYNTHESIZE_TRANSCRIPTS, [source, transcript_key, subfeature])
     after = con.execute(
         "SELECT COUNT(*) FROM features WHERE featuretype = 'transcript'"
     ).fetchone()[0]
@@ -1762,9 +1770,14 @@ def _synthesize_transcripts(
     return n
 
 
-def _synthesize_genes(con, subfeature: str, gene_key: str = "gene_id") -> int:
+def _synthesize_genes(
+    con,
+    subfeature: str,
+    gene_key: str = "gene_id",
+    source: str = DERIVED_SOURCE[MODE_COMPAT],
+) -> int:
     before = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
-    con.execute(GTF_SYNTHESIZE_GENES, [gene_key, subfeature])
+    con.execute(GTF_SYNTHESIZE_GENES, [source, gene_key, subfeature])
     after = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
     n = after - before
     # Mirror the synthesized gene_id into attributes so downstream queries
