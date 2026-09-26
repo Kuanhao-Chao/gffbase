@@ -39,6 +39,7 @@ became five.
 
 from __future__ import annotations
 
+import collections
 import re
 
 from gffbase.exceptions import AttributeStringError
@@ -64,7 +65,7 @@ from gffbase.exceptions import AttributeStringError
 _TO_QUOTE = frozenset("\n\t\r%;=&," + "".join(chr(i) for i in range(32)) + chr(127))
 
 
-class Quoter(dict):
+class Quoter(collections.defaultdict):
     """Caching percent-encoder, one character in, its encoding out.
 
     A `dict` subclass with `__missing__` rather than a function plus an

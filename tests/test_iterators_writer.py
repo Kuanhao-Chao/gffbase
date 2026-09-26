@@ -230,3 +230,20 @@ def test_url_iterator_fetches_and_cleans_up_its_temporary_file(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_write_mrna_children_takes_the_oracles_keyword(tmp_path):
+    """gffutils names the parameter `mRNA_id`; a keyword call written for it
+    raised TypeError here while the parameter was called `mrna_id`."""
+    db = create_db(str(DATA / "hierarchy.gff3"), ":memory:")
+    out = tmp_path / "t.gff3"
+    with GFFWriter(str(out)) as w:
+        w.write_mRNA_children(db, mRNA_id="t1")
+    assert "t1" in out.read_text()
+
+
+def test_peek_reads_ahead_without_consuming():
+    it = DataIterator(str(DATA / "simple.gff3"))
+    head = it.peek(1)
+    assert len(head) == 2  # gffutils' count: n + 1
+    assert [f.attributes["ID"] for f in head] == [f.attributes["ID"] for f in list(it)[:2]]
