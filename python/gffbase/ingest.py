@@ -1558,9 +1558,7 @@ def _build_database(
             group_keys=(gkey, tkey),
         )
         if not disable_infer_genes:
-            n_synth_g = _synthesize_genes(
-                con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode]
-            )
+            n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode])
         con.execute(EDGES_FROM_GTF, [tkey, gkey])
         # After the edges, deliberately -- see `resolve_synthesized_ids`.
         resolve_synthesized_ids(con, options, autoinc, fmt)
