@@ -118,6 +118,23 @@ before deriving the new ones; the oracle leaves the stale relation.
 
 [[deviation]]
 kind = "symbol"
+name = "gffbase.interface.FeatureDB.iter_by_parent_childs"
+status = "intentional"
+reason = """Honours `level`. The oracle accepts the argument and never passes it to
+`children()`, so `level=1` returns every descendant. Pinned by
+`test_iter_by_parent_childs_honours_level`."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.interface.FeatureDB.create_splice_sites"
+status = "intentional"
+reason = """Works on files where the oracle raises KeyError (intro_docs_example.gff,
+FBgn0031208.gtf, gencode-v19.gtf), and emits 2 bp dinucleotide sites typed
+by transcript position. Pinned by
+`test_create_splice_sites_works_where_the_oracle_raises`."""
+
+[[deviation]]
+kind = "symbol"
 name = "gffbase.interface.FeatureDB.all_features"
 status = "intentional"
 reason = """`order_by="score"` sorts numerically; the oracle sorts it as text.
