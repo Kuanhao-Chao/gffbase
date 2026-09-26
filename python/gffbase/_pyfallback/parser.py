@@ -79,10 +79,22 @@ def _make_error(message: str, line_no: int, kind: str):
 GFFFormatError = _gff_format_error_class()  # resolve eagerly enough for raise sites below
 
 
+#: The first two bytes of every gzip member (RFC 1952). bgzip output is a
+#: series of gzip members, so it starts with them too.
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
 def _open(path: str):
-    if path.endswith(".gz"):
-        return gzip.open(path, "rb")
-    return open(path, "rb")
+    """Open `path` for binary reading, decompressing if it is gzip.
+
+    Decided by content, not by name. Keying on a `.gz` suffix read `.bgz`,
+    `.GZ` and extensionless gzip files as text: the compressed bytes then
+    parsed as zero features and ingest built an empty database without a
+    word. `gzip.open` reads concatenated members (bgzip) to the end.
+    """
+    with open(path, "rb") as probe:
+        is_gzip = probe.read(len(_GZIP_MAGIC)) == _GZIP_MAGIC
+    return gzip.open(path, "rb") if is_gzip else open(path, "rb")
 
 
 def _decode_error(err: UnicodeDecodeError, line_no: int):

@@ -22,7 +22,7 @@
 //! sentinel.
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 
 use flate2::read::MultiGzDecoder;
@@ -73,21 +73,49 @@ pub enum FileSource {
     Stream(Box<dyn Read + Send>),
 }
 
+/// The first two bytes of every gzip member (RFC 1952). bgzip output is a
+/// series of gzip members, so it starts with them too.
+const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+
+/// Read up to `buf.len()` bytes, stopping early only at end of input.
+fn read_up_to(r: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut n = 0;
+    while n < buf.len() {
+        match r.read(&mut buf[n..]) {
+            Ok(0) => break,
+            Ok(k) => n += k,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(n)
+}
+
 impl FileSource {
+    /// Open `path`, decompressing if it is gzip.
+    ///
+    /// Decided by content, not by name. Keying on a `.gz` extension read
+    /// `.bgz`, `.GZ` and extensionless gzip files as text: the compressed
+    /// bytes then parsed as zero features and ingest built an empty database
+    /// without a word. The magic bytes are chained back in front of the rest
+    /// of the file rather than seeked over, so a pipe works as well as a file.
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let path = path.as_ref();
-        let f = File::open(path)?;
-        let is_gz = path.extension().map(|e| e == "gz").unwrap_or(false);
-        if is_gz {
+        let mut f = File::open(path.as_ref())?;
+        let mut magic = [0u8; 2];
+        let n = read_up_to(&mut f, &mut magic)?;
+        let source = Cursor::new(magic[..n].to_vec()).chain(f);
+        if n == GZIP_MAGIC.len() && magic == GZIP_MAGIC {
+            // MultiGzDecoder, not GzDecoder: it reads every member of a
+            // concatenated (bgzip) stream instead of stopping after the first.
             Ok(FileSource::Stream(Box::new(BufReader::new(
-                MultiGzDecoder::new(f),
+                MultiGzDecoder::new(BufReader::new(source)),
             ))))
         } else {
             // For plain text we read fully into memory. mmap could be a future
             // optimization but adds platform complexity; the parser is already
             // fast enough that the bottleneck moves elsewhere.
             let mut buf = Vec::new();
-            BufReader::new(f).read_to_end(&mut buf)?;
+            BufReader::new(source).read_to_end(&mut buf)?;
             Ok(FileSource::Bytes(buf))
         }
     }
@@ -533,4 +561,85 @@ fn parse_coord_strict(b: &[u8]) -> Result<Option<i64>, ()> {
         return Ok(None);
     }
     s.parse::<i64>().map(Some).map_err(|_| ())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    const TEXT: &[u8] = b"##gff-version 3\nchr1\tt\tgene\t1\t10\t.\t+\t.\tID=g1\n";
+
+    fn gz(data: &[u8]) -> Vec<u8> {
+        let mut e = GzEncoder::new(Vec::new(), Compression::default());
+        e.write_all(data).unwrap();
+        e.finish().unwrap()
+    }
+
+    /// A file in the system temp dir, removed when dropped.
+    struct TempFile(PathBuf);
+
+    impl TempFile {
+        fn new(name: &str, contents: &[u8]) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "gffbase-parser-{}-{}",
+                std::process::id(),
+                name
+            ));
+            std::fs::write(&path, contents).unwrap();
+            TempFile(path)
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn read_all(name: &str, contents: &[u8]) -> Vec<u8> {
+        let f = TempFile::new(name, contents);
+        match FileSource::open(&f.0).unwrap() {
+            FileSource::Bytes(b) => b,
+            FileSource::Stream(mut r) => {
+                let mut v = Vec::new();
+                r.read_to_end(&mut v).unwrap();
+                v
+            }
+        }
+    }
+
+    #[test]
+    fn plain_text_is_read_verbatim() {
+        assert_eq!(read_all("plain.gff3", TEXT), TEXT);
+    }
+
+    #[test]
+    fn gzip_is_detected_by_content_whatever_the_name() {
+        for name in ["a.gff3.gz", "b.gff3.bgz", "c.GFF3.GZ", "d_no_extension"] {
+            assert_eq!(read_all(name, &gz(TEXT)), TEXT, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_gz_name_on_plain_text_is_still_text() {
+        assert_eq!(read_all("mislabelled.gff3.gz", TEXT), TEXT);
+    }
+
+    #[test]
+    fn every_member_of_a_multi_member_stream_is_read() {
+        // bgzip writes a series of independent gzip members.
+        let mut data = gz(&TEXT[..16]);
+        data.extend(gz(&TEXT[16..]));
+        assert_eq!(read_all("multi.bgz", &data), TEXT);
+    }
+
+    #[test]
+    fn files_shorter_than_the_magic_are_text() {
+        assert_eq!(read_all("empty", b""), b"");
+        assert_eq!(read_all("one_byte", b"\x1f"), b"\x1f");
+    }
 }
