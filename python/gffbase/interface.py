@@ -3080,9 +3080,12 @@ class FeatureDB:
             raise ValueError("Can only specify one of `thick_featuretype` or `thin_featuretype`")
         if isinstance(feature, str):
             feature = self[feature]
-        blocks = sorted(
-            _with_coordinates(self.children(feature, featuretype=list(block_featuretype))),
-            key=lambda f: (f.start, f.end),
+        # Ordered by start in SQL, whose tiebreak is file order -- the oracle's
+        # order for two blocks sharing a start. A Python sort on
+        # `(start, end)` put the shorter of two such exons first, and the
+        # BED12 block lists came out in a different order from gffutils'.
+        blocks = _with_coordinates(
+            self.children(feature, featuretype=list(block_featuretype), order_by="start")
         )
         if feature.start is None or feature.end is None:
             raise ValueError(
@@ -3097,18 +3100,16 @@ class FeatureDB:
             # parts, and the thick span is what lies between them. Accepted and
             # silently ignored before, so `thin_featuretype=["UTR"]` returned a
             # record with the thick span covering the whole feature.
-            thin = sorted(
-                _with_coordinates(self.children(feature, featuretype=list(thin_featuretype))),
-                key=lambda f: (f.start, f.end),
+            thin = _with_coordinates(
+                self.children(feature, featuretype=list(thin_featuretype), order_by="start")
             )
             if thin:
                 thick_start, thick_end = thin[0].end, thin[-1].start - 1
             else:
                 thick_start, thick_end = feature.start, feature.end
         else:
-            thick = sorted(
-                _with_coordinates(self.children(feature, featuretype=list(thick_featuretype))),
-                key=lambda f: (f.start, f.end),
+            thick = _with_coordinates(
+                self.children(feature, featuretype=list(thick_featuretype), order_by="start")
             )
             if thick:
                 thick_start, thick_end = thick[0].start - 1, thick[-1].end
