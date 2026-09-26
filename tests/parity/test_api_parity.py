@@ -257,6 +257,112 @@ def test_callable_accepts_every_oracle_parameter(target_module, symbol, desc):
 
 
 # ---------------------------------------------------------------------------
+# Class members. A class existing is not the same as its methods existing:
+# `FeatureDB` is one symbol to the checks above and thirty to a caller.
+# ---------------------------------------------------------------------------
+
+#: Members every class has, or that describe the implementation rather than
+#: the API.
+_STRUCTURAL = {"__dict__", "__doc__", "__weakref__", "__module__", "__annotations__"}
+
+
+def _class_members():
+    for gffutils_module, info in sorted(MANIFEST["modules"].items()):
+        if not info.get("importable"):
+            continue
+        target = _gffbase_name(gffutils_module)
+        mod = _import_or_none(target)
+        if mod is None:
+            continue
+        for symbol, desc in sorted(info["symbols"].items()):
+            if desc.get("kind") != "class" or not hasattr(mod, symbol):
+                continue
+            for member, mdesc in sorted((desc.get("members") or {}).items()):
+                if member in _STRUCTURAL:
+                    continue
+                if member.startswith("_") and not member.startswith("__"):
+                    continue  # the oracle's private helpers are not API
+                yield pytest.param(target, symbol, member, mdesc, id=f"{target}.{symbol}.{member}")
+
+
+@pytest.mark.parametrize(("target_module", "cls", "member", "desc"), list(_class_members()))
+def test_class_member_exists_or_is_declared(target_module, cls, member, desc):
+    klass = getattr(importlib.import_module(target_module), cls)
+    qualified = f"{target_module}.{cls}.{member}"
+    if hasattr(klass, member):
+        return
+    # A class declared as a whole (an adapter, not a port) covers its members;
+    # so does a declaration on any class it derives from.
+    declared = [qualified] + [f"{target_module}.{base.__name__}" for base in klass.__mro__]
+    assert any(name in DEVIATIONS for name in declared), (
+        f"{qualified} is missing and not declared in deviations.toml"
+    )
+
+
+def _positional_names(params) -> list[str]:
+    return [
+        p["name"] if isinstance(p, dict) else p.name
+        for p in params
+        if (p["kind"] if isinstance(p, dict) else p.kind.name)
+        in {"POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("target_module", "cls", "member", "desc"),
+    [p for p in _class_members() if (p.values[3] or {}).get("signature")],
+)
+def test_methods_take_the_oracles_positional_order(target_module, cls, member, desc):
+    """`db.children("g1", 1)` must mean what it means in gffutils.
+
+    Accepting every parameter by name (checked above) is not enough for a
+    positional call: each positional parameter the oracle has must sit at the
+    same position here. gffbase may append parameters after them.
+    """
+    if member.startswith("__") and member.endswith("__"):
+        # Called through syntax (`a[k]`, `a[k] = v`), never with parameter
+        # names, so a name differing from the oracle's changes nothing.
+        return
+    klass = getattr(importlib.import_module(target_module), cls)
+    obj = getattr(klass, member, None)
+    if obj is None:
+        pytest.skip("absent; covered by test_class_member_exists_or_is_declared")
+    try:
+        params = list(inspect.signature(obj).parameters.values())
+    except (TypeError, ValueError):
+        pytest.skip("no introspectable signature")
+    if any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params):
+        return  # `*args` forwards every positional argument in its order
+    ours = _positional_names(params)
+    theirs = _positional_names(desc["signature"]["parameters"])
+    qualified = f"{target_module}.{cls}.{member}"
+    entry = DEVIATIONS.get(qualified)
+    if ours[: len(theirs)] != theirs and entry is not None and entry.get("kind") == "signature":
+        pytest.skip("declared signature deviation")
+    assert ours[: len(theirs)] == theirs, f"{qualified}: oracle {theirs}, ours {ours}"
+
+
+def test_every_pinned_test_exists():
+    """A deviation's "Pinned by `test_x`" must name a test that exists --
+    otherwise the pin is a claim nothing checks."""
+    import re
+
+    tests_dir = HERE.parent
+    source = "\n".join(p.read_text(encoding="utf-8") for p in tests_dir.rglob("test_*.py"))
+    defined = set(re.findall(r"^\s*def (test_\w+)", source, re.MULTILINE))
+    missing = []
+    for name, entry in DEVIATIONS.items():
+        reason = entry.get("reason", "")
+        # Only names inside a "Pinned by ..." clause: other backticked test
+        # names may be describing something else.
+        for clause in re.findall(r"Pinned\s+by\s+(.*?)(?:\.\s|\.$|$)", reason, re.DOTALL):
+            for test in re.findall(r"`(test_\w+)`", clause):
+                if test not in defined:
+                    missing.append(f"{name}: {test}")
+    assert not missing, "deviations pinned by tests that do not exist:\n  " + "\n  ".join(missing)
+
+
+# ---------------------------------------------------------------------------
 # Scoreboard. Not an assertion -- a always-visible progress readout.
 # ---------------------------------------------------------------------------
 

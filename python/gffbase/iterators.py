@@ -87,9 +87,33 @@ class _DataIterator:
                 validation="gffutils",
             )
         self._transform = transform
+        # Kept so `peek` can read the head of the source again without
+        # consuming this iterator.
+        self._source = (data, checklines, transform, force_dialect_check, from_string)
 
     def __iter__(self) -> Iterator[Feature]:
         return self
+
+    def peek(self, n: int) -> list[Feature]:
+        """The first records of the source, without consuming this iterator.
+
+        Matches gffutils, including its count: `peek(n)` returns `n + 1`
+        records, because upstream appends before it tests `i == n`.
+        """
+        data, checklines, transform, force_dialect_check, from_string = self._source
+        fresh = _DataIterator(
+            data,
+            checklines=checklines,
+            transform=transform,
+            force_dialect_check=force_dialect_check,
+            from_string=from_string,
+        )
+        out: list[Feature] = []
+        for feature in fresh:
+            out.append(feature)
+            if len(out) > n:
+                break
+        return out
 
     def __next__(self) -> Feature:
         # A loop, not a recursive `__next__()` per dropped feature: a filter
@@ -358,3 +382,7 @@ class _FeatureIterator(_BaseIterator):
     @property
     def directives(self) -> list:
         return []
+
+    def peek(self, n: int) -> list:
+        """The first `n + 1` features, as gffutils returns; nothing consumed."""
+        return list(self._features[: n + 1])

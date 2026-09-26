@@ -102,14 +102,15 @@ class GFFWriter:
         for child in db.children(gene, level=None, order_by="start"):
             self.write_rec(child)
 
-    def write_mRNA_children(self, db: FeatureDB, mrna_id: str | Feature) -> None:
+    def write_mRNA_children(self, db: FeatureDB, mRNA_id: str | Feature) -> None:  # noqa: N803
         """Write a transcript and its DIRECT children, sorted by start.
 
         Args:
             db: The `FeatureDB` to read from.
-            mrna_id: The transcript, as an id or a `Feature`.
+            mRNA_id: The transcript, as an id or a `Feature`. Named as in
+                gffutils, so a keyword call written for it works here.
         """
-        mrna = db[mrna_id] if isinstance(mrna_id, str) else mrna_id
+        mrna = db[mRNA_id] if isinstance(mRNA_id, str) else mRNA_id
         self.write_rec(mrna)
         for child in db.children(mrna, level=1, order_by="start"):
             self.write_rec(child)
