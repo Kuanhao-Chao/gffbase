@@ -527,8 +527,8 @@ def _stream_features(
     directives: list[str],
     profile: str = "ncbi",
 ):
-    """Two-pass iteration: collect the first `checklines` features and their
-    dialect observations, then continue streaming. Behaves identically when the
+    """Two-pass iteration: collect the first `checklines + 1` features and
+    their dialect observations, then continue streaming. Behaves identically when the
     file is shorter than `directives`. ``directives`` is mutated in place so
     callers can read it even if the file contains zero feature rows."""
     samples: list[dict] = []
@@ -602,7 +602,10 @@ def _stream_features(
         )
         samples.append(obs)
         buffered.append(feat)
-        if not force_dialect_check and len(buffered) >= checklines:
+        # `>`, not `>=`: gffutils' `peek(n)` appends before testing `i == n`,
+        # so it samples `checklines + 1` records. The Rust engine counts the
+        # same way.
+        if not force_dialect_check and len(buffered) > checklines:
             break
 
     dialect = merge_dialects(samples)
