@@ -51,13 +51,11 @@ from gffbase.feature import Feature, db_row_projection, feature_from_row
 from gffbase.modes import (
     DERIVED_SOURCE,
     MODE_COMPAT,
-    MODE_STRICT,
     ON_ERROR_RAISE,
     VALIDATION_GFFUTILS,
     VALIDATION_NCBI,
 )
 from gffbase.schema import SCHEMA_VERSION
-
 
 _log = logging.getLogger("gffbase.interface")
 
