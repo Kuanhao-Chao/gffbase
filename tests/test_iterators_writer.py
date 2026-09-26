@@ -190,7 +190,7 @@ def test_transform_is_applied_to_in_memory_features():
     drop = sorted(kinds)[0]
 
     kept = list(
-        DataIterator(original, transform=lambda f: False if f.featuretype == drop else None)
+        DataIterator(original, transform=lambda f: False if f.featuretype == drop else f)
     )
     assert kept, "transform dropped everything; pick a different featuretype"
     assert all(f.featuretype != drop for f in kept)

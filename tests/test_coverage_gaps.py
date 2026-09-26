@@ -733,23 +733,22 @@ def test_iterator_transform_returns_feature_replaces_original():
     assert all(f.seqid == "chrREPLACED" for f in feats)
 
 
-def test_iterator_transform_returns_none_keeps_original():
-    """`iterators.py` branch 79→81 (False path) — transform returning
-    `None` means "no opinion": keep the original feature unchanged."""
+def test_iterator_transform_returning_none_drops_the_feature():
+    """gffutils' documented contract: a transform returns a feature, or "a
+    value that evaluates to False" to skip it. `None` is such a value, and
+    `create_db(transform=...)` already dropped on it. `DataIterator` used to
+    treat `None` as "keep the original", so a ported filter filtered nothing."""
     from gffbase import DataIterator
 
-    def no_op_transform(_feat):
-        return None
+    it = DataIterator(str(DATA / "hierarchy.gff3"), transform=lambda _feat: None)
+    assert list(it) == []
 
-    it = DataIterator(
-        str(DATA / "hierarchy.gff3"),
-        transform=no_op_transform,
-    )
-    feats = list(it)
-    # Original chr1 features are returned unmodified — the transform
-    # returning None must NOT replace them with a sentinel.
-    assert len(feats) > 0
-    assert all(f.seqid == "chr1" for f in feats)
+
+def test_iterator_transform_returning_true_keeps_the_original():
+    from gffbase import DataIterator
+
+    kept = list(DataIterator(str(DATA / "hierarchy.gff3"), transform=lambda _feat: True))
+    assert kept == list(DataIterator(str(DATA / "hierarchy.gff3")))
 
 
 def test_region_string_with_trailing_colon_no_coords():
