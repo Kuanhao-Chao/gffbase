@@ -607,6 +607,11 @@ def _inv12_attributes_reparse(con, sample: int | None):
     """
     from gffbase.feature import _LazyAttributes
 
+    # Re-parse the way ingest parsed: a compat database stripped the quotes
+    # around whole GFF3 values (gffutils' reading), a strict one kept them.
+    row = con.execute("SELECT value FROM meta WHERE key = 'validation'").fetchone()
+    compat_quotes = row is None or row[0] != "ncbi"
+
     predicate = "attributes_blob IS NOT NULL AND is_synthetic = FALSE"
     eligible_sql = f"SELECT id, file_order FROM features WHERE {predicate} ORDER BY file_order"
     eligible = int(con.execute(f"SELECT COUNT(*) FROM features WHERE {predicate}").fetchone()[0])
@@ -641,7 +646,11 @@ def _inv12_attributes_reparse(con, sample: int | None):
         # the key. That difference is the schema's, not a parser bug, so it is
         # normalized away here; without this, four upstream fixtures reported
         # a violation for behaviour that is exactly right.
-        reparsed = {k: list(v) for k, v in _LazyAttributes(blob=current_blob).items() if v}
+        reparsed = {
+            k: list(v)
+            for k, v in _LazyAttributes(blob=current_blob, compat_quotes=compat_quotes).items()
+            if v
+        }
         if reparsed != stored:
             offenders.append((current_id, current_seg_idx, stored, reparsed))
 
