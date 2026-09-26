@@ -111,3 +111,18 @@ def apply_settings(con: duckdb.DuckDBPyConnection, settings: dict) -> None:
             continue
         # `name` is echoed from the catalog, so it cannot carry syntax.
         con.execute(f"SET {name} = {_sql_literal(value)}")
+
+
+def in_transaction(con: duckdb.DuckDBPyConnection) -> bool:
+    """True if `con` is inside an explicit transaction.
+
+    DuckDB exposes no such flag, and probing with `BEGIN` is not an option: a
+    failed statement inside a transaction aborts it, so the probe would
+    destroy the caller's transaction it was meant to respect. Instead: in
+    autocommit mode every statement runs in a transaction of its own, so two
+    consecutive `txid_current()` calls differ; inside an explicit transaction
+    they return the same id.
+    """
+    first = con.execute("SELECT txid_current()").fetchone()
+    second = con.execute("SELECT txid_current()").fetchone()
+    return first is not None and second is not None and first[0] == second[0]
