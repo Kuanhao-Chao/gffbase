@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import duckdb
 import pytest
-from gffbase import FeatureDB, SchemaVersionError, create_db
+from gffbase import EmptyInputError, FeatureDB, SchemaVersionError, create_db
 from gffbase.ingest import _TMP_SUFFIX
 from gffbase.schema import DDL
 
@@ -199,15 +199,26 @@ def test_the_refusal_says_what_to_do_about_it(tmp_path):
 
 
 def test_a_genuinely_empty_database_still_opens(tmp_path):
-    """A source file with no features is not an error, and its database has
-    metadata -- which is precisely what distinguishes it from an interrupted
-    build."""
-    src = _write(tmp_path, "##gff-version 3\n", "empty.gff3")
+    """A database with no features but with metadata is complete -- the
+    metadata is precisely what distinguishes it from an interrupted build.
+
+    An empty *source* can no longer produce one (it raises EmptyInputError,
+    as gffutils does), so this empties a real database instead."""
+    src = _write(tmp_path, "##gff-version 3\nchr1\tt\tgene\t1\t9\t.\t+\t.\tID=g\n", "one.gff3")
     out = tmp_path / "empty.duckdb"
-    create_db(src, str(out)).conn.close()
+    with create_db(src, str(out)) as db:
+        db.delete("g")
     db = FeatureDB(str(out))
     assert list(db.all_features()) == []
     assert db._schema_version == 2
+
+
+def test_an_empty_source_leaves_no_database_behind(tmp_path):
+    src = _write(tmp_path, "##gff-version 3\n", "empty.gff3")
+    out = tmp_path / "empty.duckdb"
+    with pytest.raises(EmptyInputError):
+        create_db(src, str(out))
+    assert not out.exists()
 
 
 def test_a_v1_database_is_still_recognised_not_called_incomplete(tmp_path):
