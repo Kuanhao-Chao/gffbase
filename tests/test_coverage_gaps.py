@@ -601,12 +601,20 @@ def test_gffwriter_write_exon_children_with_real_child(tmp_path):
 
 
 def test_ingest_empty_flush_short_circuit(tmp_path):
-    """`ingest.flush_into` line 201 — early-return when the builder has no
-    rows. Trigger by ingesting a header-only GFF3 (no feature lines)."""
-    src = tmp_path / "headers_only.gff3"
-    src.write_text("##gff-version 3\n##source rs\n")
-    con, stats = from_file(str(src))
-    assert stats.n_features_raw == 0
+    """`ingest.flush_into` — early-return when the builder has no rows.
+
+    A header-only file used to reach it, but now raises `EmptyInputError`
+    before the final flush. A feature count that is an exact multiple of the
+    batch size reaches it instead: the last in-loop flush empties the
+    builder, so the final one has nothing to write."""
+    src = tmp_path / "exact_batches.gff3"
+    lines = ["##gff-version 3\n"]
+    for i in range(4):
+        lines.append(f"chr1\trs\tfeat\t{i * 10 + 1}\t{i * 10 + 5}\t.\t+\t.\tID=f{i}\n")
+    src.write_text("".join(lines))
+    con, stats = from_file(str(src), batch_size=2)
+    assert stats.n_features_raw == 4
+    assert con.execute("SELECT count(*) FROM features").fetchone()[0] == 4
 
 
 def test_ingest_mid_loop_batch_flush(tmp_path):

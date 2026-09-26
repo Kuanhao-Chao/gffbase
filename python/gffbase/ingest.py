@@ -43,6 +43,7 @@ from gffbase._options import (
 from gffbase._serialize import encode_value
 from gffbase.exceptions import (
     DuplicateIDError,
+    EmptyInputError,
     MultipartConstraintError,
     SynthesisConflictError,
 )
@@ -1379,6 +1380,21 @@ def _build_database(
         builder.append(fid, feat, file_order, raw_id, occ, origin)
         if len(builder) >= batch_size:
             builder.flush_into(con)
+
+    # gffutils raises here too. A database with no features is never what a
+    # caller wanted, and building one silently hid three real mistakes: the
+    # wrong file (empty, or headers and FASTA only), a gzip stream the reader
+    # did not recognize, and a transform that rejected every record.
+    if n_raw == 0:
+        source = "the input" if options.from_string else repr(os.fspath(path))
+        raise EmptyInputError(
+            f"no features in {source}: it is empty, or holds only comments, "
+            "directives or FASTA, or is not GFF3/GTF text at all"
+        )
+    if n_raw == n_skipped and transform is not None:
+        raise EmptyInputError(
+            f"the transform rejected all {n_raw} features, so there is nothing to store"
+        )
     builder.flush_into(con)
 
     if deferred:
