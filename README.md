@@ -46,8 +46,8 @@ from gffbase import create_db
 # Ingest a GTF or GFF3 — format auto-detected, gzip transparent.
 with create_db("gencode.v49.basic.annotation.gtf.gz", "gencode.duckdb") as db:
 
-    # Walk one gene's hierarchy.
-    for tx in db.children("ENSG00000139618", level=1, featuretype="transcript"):
+    # Walk one gene's hierarchy. GENCODE ids carry their version.
+    for tx in db.children("ENSG00000139618.19", level=1, featuretype="transcript"):
         print(tx.id, tx.start, tx.end)
 
     # Overlap query, routed to the per-seqid R-tree.

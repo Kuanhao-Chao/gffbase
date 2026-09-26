@@ -102,8 +102,8 @@ contract and GFFBase keeps it, because column 9 genuinely permits repeats
    # ['gene1', 'tx1']
 
 ``level=1`` means direct children only; ``level=None`` means the whole subtree.
-GFFBase materializes a transitive-closure table at ingest, so ``level=None`` is a
-single indexed lookup rather than a recursive walk.
+GFFBase materializes a transitive-closure table at ingest, so ``level=None`` is
+one query against that table rather than a recursive walk.
 
 ----
 
