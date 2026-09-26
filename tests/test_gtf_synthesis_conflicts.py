@@ -391,3 +391,13 @@ def test_an_authored_feature_of_another_type_still_blocks_synthesis(tmp_path):
 
     with pytest.raises(SynthesisConflictError, match=r"transcript.*T1.*already used"):
         create_db(str(_write(tmp_path, text)), ":memory:", id_spec=id_spec)
+
+
+@pytest.mark.parametrize("strategy", ["error", "warning", "merge", "replace", "create_unique"])
+def test_the_ucsc_convention_is_skipped_under_every_strategy(tmp_path, strategy):
+    """gffutils merges an inferred feature into an inferred incumbent whatever
+    the merge_strategy. `create_unique` used to invent a suffixed gene `X_1`."""
+    db = create_db(str(_write(tmp_path, SELF_NAMED_GTF)), ":memory:", merge_strategy=strategy)
+    assert db.conn.execute(
+        "SELECT featuretype, id FROM features ORDER BY featuretype, id"
+    ).fetchall() == [("exon", "exon_1"), ("transcript", "X")]

@@ -418,7 +418,13 @@ def _unwrap_transformed(result, original, dialect: dict | None = None):
                 for key, values in edited.items()
                 for idx, value in enumerate(values)
             ]
-            inner.attributes_blob = _reconstruct(edited, dialect or {"fmt": "gff3"}).encode("utf-8")
+            render = dict(dialect or {"fmt": "gff3"})
+            if render.get("fmt") == "gtf":
+                # A GTF value is never comma-split on reading, so a joined
+                # `WormPep "a,b"` would come back as ONE value. Repeating the
+                # key is the GTF way to say "two values" and reads back as two.
+                render["repeated keys"] = True
+            inner.attributes_blob = _reconstruct(edited, render).encode("utf-8")
         return inner
     if isinstance(result, Feature):
         items = {k: (v if isinstance(v, list) else [v]) for k, v in result.attributes.items()}
@@ -1005,28 +1011,36 @@ def _prepare_gtf_parent_map(
             continue
         authored_ids = {location[5] for location in locations if location[3]}
         raw_id_collision = synthesize_missing and raw_id in taken and raw_id not in authored_ids
-        if raw_id_collision and merge_strategy != "create_unique":
-            occupied_type, occupied_is_synthetic = con.execute(
+        occupied = (
+            con.execute(
                 "SELECT featuretype, is_synthetic FROM features WHERE id = ?", [raw_id]
             ).fetchone()
-            # `gene_id "X"; transcript_id "X"` is the UCSC knownGene
-            # convention, not an ambiguity: one locus, one identifier reused
-            # across two levels. Transcripts are resolved before genes, so by
-            # the time the gene pass runs, the id is held by a transcript THIS
-            # INGEST JUST INVENTED from the very same line -- and refusing to
-            # continue means refusing the whole file. Two upstream fixtures and
-            # every GTF corpus tripped it.
-            #
-            # The oracle's rule, measured rather than assumed: keep the inner
-            # parent, skip the outer one. Children stay attached to the
-            # transcript; there is simply no gene level.
-            #
-            # An AUTHORED occupant is a genuinely different feature that the
-            # source named itself, usually at another locus, so it still
-            # raises. Skipping there would silently detach that parent's
-            # children from the hierarchy.
-            if occupied_is_synthetic:
-                continue
+            if raw_id_collision
+            else None
+        )
+        # `gene_id "X"; transcript_id "X"` is the UCSC knownGene convention,
+        # not an ambiguity: one locus, one identifier reused across two
+        # levels. Transcripts are resolved before genes, so by the time the
+        # gene pass runs, the id is held by a transcript THIS INGEST JUST
+        # INVENTED from the very same line -- and refusing to continue means
+        # refusing the whole file. Two upstream fixtures and every GTF corpus
+        # tripped it.
+        #
+        # The oracle's rule, measured rather than assumed: keep the inner
+        # parent, skip the outer one, under EVERY merge_strategy -- gffutils
+        # merges an inferred feature into an inferred incumbent whatever the
+        # strategy, so `create_unique` used to invent a suffixed gene (`X_1`)
+        # the oracle never creates. Children stay attached to the transcript;
+        # there is simply no gene level.
+        if occupied is not None and occupied[1]:
+            continue
+        # An AUTHORED occupant is a genuinely different feature that the
+        # source named itself, usually at another locus, so it still raises
+        # (or, under create_unique, splits below). Skipping there would
+        # silently detach that parent's children from the hierarchy.
+        if raw_id_collision and merge_strategy != "create_unique":
+            assert occupied is not None
+            occupied_type = occupied[0]
             raise SynthesisConflictError(
                 f"cannot synthesize {parent_type} {raw_id!r}: that ID is already used "
                 f'by featuretype {occupied_type!r}. Use merge_strategy="create_unique" '

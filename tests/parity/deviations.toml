@@ -176,7 +176,17 @@ against the grouping value, so the inferred parent ends up disconnected. With
 an `id_spec` that names the same keys the two agree. `text_factory` warns when
 set, since it only configures sqlite3. Pinned by
 `test_gtf_gene_key_groups_transcripts_into_genes` and
-`test_matches_gffutils_when_the_id_spec_names_the_keys`."""
+`test_matches_gffutils_when_the_id_spec_names_the_keys`.
+
+Under non-default options (tests/parity/test_options_differential.py, where
+each is an xfail with its reason): `force_dialect_check=True` loads where the
+oracle raises TypeError on every file; a transform over rows without
+coordinates loads where the oracle's `if feature:` crashes in `__len__`; with
+`disable_infer_transcripts=True` and no authored transcripts, a child is not
+linked to its gene (the oracle records a level-2 relation from `gene_id`;
+gffbase stores direct relations only); an id_spec callable that names an
+inferred transcript after its own exon keeps the transcript under a generated
+id instead of merging it away."""
 
 [[deviation]]
 kind = "symbol"
