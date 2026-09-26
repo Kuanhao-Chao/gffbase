@@ -266,20 +266,39 @@ constraints: `Methodology <https://khchao.com/gffbase/content/methodology.html>`
 
 .. list-table::
    :header-rows: 1
-   :widths: 50 50
+   :widths: 50 25 25
 
-   * - Single-call workload
-     - Versus legacy
-   * - Spatial overlap (``db.region(...)``)
-     - substantially lower latency — gffbase has a spatial index, ``gffutils`` has none
-   * - ``db.children(id, level=1)`` indexed lookup
-     - comparable
+   * - Single-call workload (MANE v1.5, median per call)
+     - gffbase 0.2.1
+     - ``gffutils`` 0.14
+   * - ``db.region(seqid, start, end)``, 10 kb window
+     - ~2 ms
+     - ~3.5 ms
+   * - ``db[id]``
+     - ~0.6 ms
+     - ~0.02 ms
+   * - ``db.children(id, level=1)``
+     - ~5 ms
+     - ~0.04 ms
+   * - ``db.children(id)`` (all descendants)
+     - ~10 ms
+     - ~0.55 ms
    * - ``db.children_batched(ids, format="arrow")``
-     - one query, no Python ``Feature`` objects — see below
+     - one query for all ids, no Python ``Feature`` objects
+     - not available
 
-Your existing ``gffutils`` script gets the ingest, spatial and attribute-query
-wins the moment you swap the import. To unlock the batched-extraction win, see
-the warning at the top of this page.
+Every single-row call is a DuckDB query, and DuckDB answers it by scanning a
+column with the filter pushed down rather than walking a B-tree, so a
+per-feature Python loop over ``children()`` or ``db[id]`` is one to two orders
+of magnitude slower than it is on SQLite. Spatial queries are the exception.
+Bring the loop into one query -- ``children_batched``, ``region_batched``, or
+SQL through ``db.execute`` -- and the comparison reverses. Faster single-row
+calls are the query-path work planned for 0.3.0.
+
+Your existing ``gffutils`` script gets the spatial and whole-table query wins
+the moment you swap the import, and its per-feature loops get slower. To turn
+those loops into the batched-extraction win, see the warning at the top of this
+page.
 
 ----
 
@@ -368,8 +387,8 @@ JSON out of that column, switch to querying the normalized
    SELECT a.value FROM attributes a
    WHERE a.feature_id = ? AND a.key = 'gene_biotype';
 
-This is also faster — ``attributes_kv`` indexes ``(key, value)``, so
-attribute filters become indexed seeks.
+As one query this is fast: DuckDB scans the ``key`` and ``value`` columns with
+the filter pushed down, and no JSON is parsed.
 
 ----
 
@@ -404,8 +423,8 @@ file with ``gffutils.FeatureDB("legacy_compatible.sqlite")``.
 
 - **Disk size**: GFFBase databases are 1.18× to 1.36× larger than legacy
   SQLite across the benchmark corpora -- the price of materializing the
-  transitive closure and the R-tree, which is what turns hierarchy and spatial
-  queries into indexed lookups.
+  transitive closure and the R-tree, which is what lets a hierarchy walk run as
+  one query with no recursion and a spatial query use a real spatial index.
   Current measurements: `Performance <https://khchao.com/gffbase/content/performance.html>`__.
 
 - **Peak RSS**: substantially higher -- 3.4–62.0 GB against 111–194 MB across

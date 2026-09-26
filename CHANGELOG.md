@@ -5,6 +5,135 @@ All notable changes to GFFBase are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-09-26
+
+A correctness release. Each fix was reproduced against 0.2.0 first and lands
+with a regression test that fails there. Several were silent: the result looked
+right and was not.
+
+### Fixed
+
+- **A query inside a feature loop ended the loop early, without an error.**
+  Every feature iterator streamed on the shared DuckDB connection, and a
+  connection holds one result set, so `db.children(gene)` inside
+  `for gene in db.features_of_type("gene")` -- the canonical gffutils loop --
+  stopped the outer loop at its first 10,000-row chunk: 10,000 of 25,000 genes
+  visited. A partly consumed inner iterator made the outer one restart forever.
+  `create_introns`, `create_splice_sites` and `iter_by_parent_childs` nest this
+  way internally and were truncated too. Each stream now has its own cursor
+  (reused from a small pool, so the cost is within noise), and resuming an
+  iterator after `close()` raises `ClosedDatabaseError`.
+- **`update()` lost the hierarchy -- and the ids.** It appended rows directly:
+  the `ID` attribute was ignored (the introns of `db.update(db.create_introns())`
+  became `intron_6` instead of `e1-e2`), no edges were written so `children()`
+  never saw a new row, a duplicate id was stored rather than refused, GTF
+  genes and transcripts were not inferred, and a new seqid was banded on top of
+  the first chromosome. `update()` now runs the new data through the
+  `create_db` pipeline with the database's dialect and autoincrement counters,
+  reconciles it with the existing rows by `merge_strategy`, and derives edges
+  in both directions. It accepts a path, text with `from_string=True`, another
+  `FeatureDB` or an iterable of features, is atomic, and validates a strict
+  database before committing.
+- **Input with no features built an empty database.** An empty file, headers
+  and comments only, a FASTA file, or binary data each gave a valid database
+  with zero features. `create_db` now raises `EmptyInputError`, as gffutils
+  does, and also when a `transform` rejects every record.
+- **gzip was recognized by file extension.** A `.bgz` file (bgzip's usual
+  name), a `.GZ` file or gzip without an extension was read as text and loaded
+  as zero features. Both engines now check the gzip magic bytes and read every
+  member of a bgzip stream; plain text named `.gz` is read as text.
+- **The Rust engine stopped dialect sampling at the first bad record.** A GTF
+  whose first line was malformed was detected as GFF3, and the gene/transcript
+  hierarchy was silently never built. Rust now skips the record and keeps
+  sampling, as the Python engine does.
+- **Quoted GFF3 values read differently in `Feature.attributes` than at
+  ingest.** For `ID="g001"` the stored id was `g001` but
+  `attributes["ID"]` said `"g001"`, `str(feature)` after reading attributes
+  doubled the quotes (`ID=""g001""`), and the database failed its own full
+  validation. Features from a compat database now read column 9 with the rule
+  ingest used, and `feature_from_line` strips whole-value quotes as gffutils
+  does.
+- **`DataIterator` refused files that `create_db` reads.** It parsed with the
+  strict NCBI rules, so a quoted value or a non-numeric score raised
+  `GFFFormatError`. It now reads with the compat rules and reports problems in
+  a new `warnings` property.
+- **Six `create_db` parameters were accepted and ignored.** `gtf_transcript_key`
+  and `gtf_gene_key` were hard-coded to `transcript_id` / `gene_id`; `dialect=`
+  changed nothing; `verbose=True` printed nothing (so `gffbase create` was
+  silent); `text_factory` and `default_encoding` said nowhere that they cannot
+  apply to DuckDB. The keys now group the inferred hierarchy, `dialect=` decides
+  GTF vs GFF3 handling, `verbose` reports progress on stderr, and the two
+  sqlite3-only options warn when set.
+- **`create_db(pragmas=...)` never reached the ingest.** The documented way to
+  bound ingest memory, `pragmas={"memory_limit": "2GB"}`, applied only to the
+  handle returned afterwards. It is now applied to the ingest connection.
+- **A failed ingest left DuckDB's spill directory behind.** `{db}.tmp` is a
+  directory and was passed to `unlink` like a file, which fails silently; a failed
+  ingest that had spilled kept its spill files. It is now removed.
+- **Inferred GTF genes and transcripts carried the strict `source` label in
+  compat mode.** gffutils stamps them `gffutils_derived`, and compat mode
+  already did for introns and splice sites; a ported filter on that label found
+  none of the inferred parents.
+
+### Changed
+
+Behaviour a script may notice. Each change brings gffbase in line with
+gffutils or with its own documentation.
+
+- `create_db` raises `EmptyInputError` for input with no features instead of
+  returning an empty database.
+- `update()` raises `DuplicateIDError` for a new feature whose id is taken,
+  unless `merge_strategy` says otherwise; write an edited feature back with
+  `db.update([feature], merge_strategy="replace")`. An unknown keyword raises
+  `TypeError`.
+- A `DataIterator` transform that returns `None` (or any false value) drops the
+  feature, as gffutils documents; it used to keep it. `True` keeps the original.
+- `DataIterator` records malformed records in `warnings` instead of raising.
+- `checklines` samples `checklines + 1` records, as gffutils' `peek` does, in
+  both engines; `checklines=0` samples one.
+- `add_relation(level=...)` with a level other than 1 raises `ValueError`.
+  gffbase stores direct relations and derives deeper levels, so a level-2
+  relation used to read back as a direct parent.
+- Inferred GTF genes and transcripts have `source` `gffutils_derived` under
+  `mode="compat"` (still `gffbase_derived` under `"strict"`).
+- After `update()` gives an inferred GTF transcript or gene new children, its
+  extent grows to enclose them; gffutils keeps the old extent (declared in
+  `tests/parity/deviations.toml`).
+
+### Testing and CI
+
+- The coverage exclusion `\.\.\.` matched any line containing three dots, and
+  a matching line that opens a block excludes the whole block -- 237 lines of
+  `ingest.py`, all of GTF parent resolution among them, were never measured. It
+  now matches only a bare `...` body.
+- `tests/test_database_signature.py` compares against the gffutils oracle, so it
+  skipped everywhere the oracle was absent and ran in no CI job. The parity job
+  now runs it.
+- GitHub issue #1 (three malformed rows `parse_gff(strict=True)` accepted in
+  0.1.0, fixed in 0.2.0) is pinned in both engines by
+  `tests/test_issue_1_strict_rows.py`.
+
+### Documentation
+
+- The RefSeq cookbook's ingest example raised `DuplicateIDError` with the
+  defaults; it now chooses a reading of the split CDS. Its chromosome section
+  iterated `chromosome` rows RefSeq does not have (the per-sequence rows are
+  `region`, and genes are not their children), and its "memory stays flat"
+  claim is replaced by measured numbers.
+- GENCODE and MANE ids carry their version (`ENSG00000139618.19`); the README,
+  the landing page, the cookbooks and the usage gallery used unversioned ids
+  that match nothing. GENCODE v49 has 6,068,892 rows and needs no inferred
+  parents; the cookbook said "~6.5 M incl. synth parents".
+- "Indexed lookup" and "indexed seek" claims for hierarchy and attribute queries
+  are gone: DuckDB answers them with filtered column scans. The migration guide
+  now gives measured per-call latencies against gffutils -- `region()` is faster,
+  single-row `children()` and `db[id]` are one to two orders of magnitude
+  slower -- instead of "comparable".
+- The modes page no longer says compat renames split-CDS lines by default (the
+  default `merge_strategy="error"` raises), and troubleshooting covers
+  `EmptyInputError`, where `GFFFormatError` comes from, and what actually bounds
+  ingest memory.
+
 ## [0.2.0] — 2026-09-11
 
 0.2.0rc1 was published to TestPyPI as the release rehearsal of this same
@@ -1460,5 +1589,6 @@ the security advisory.
 
 Initial public release.
 
+[0.2.1]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Kuanhao-Chao/gffbase/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kuanhao-Chao/gffbase/releases/tag/v0.1.0
