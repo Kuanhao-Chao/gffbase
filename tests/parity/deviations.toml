@@ -102,6 +102,22 @@ docs/source/content/advisory_sql_injection.rst). Pinned by
 
 [[deviation]]
 kind = "symbol"
+name = "gffbase.interface.FeatureDB.update"
+status = "intentional"
+reason = """Same ids, relations and GTF inference as the oracle, with four
+differences. (1) An inferred GTF transcript or gene grows to enclose children
+the update gives it; the oracle keeps the old extent, so the parent stops
+covering its own child and `region()` over the new exon misses its gene.
+(2) `merge_strategy="replace"` drops the replaced row's old `Parent` edges
+before deriving the new ones; the oracle leaves the stale relation.
+(3) An unknown keyword raises `TypeError`; the oracle's creator swallows it.
+(4) `make_backup` writes no `.bak`. Pinned by
+`test_gtf_exons_join_existing_and_inferred_transcripts`,
+`test_merge_strategy_replace_swaps_the_row_and_its_parent_edge`,
+`test_an_unknown_keyword_is_refused` and `test_update_matches_gffutils`."""
+
+[[deviation]]
+kind = "symbol"
 name = "gffbase.interface.FeatureDB.all_features"
 status = "intentional"
 reason = """`order_by="score"` sorts numerically; the oracle sorts it as text.

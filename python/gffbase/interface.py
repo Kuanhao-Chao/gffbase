@@ -52,6 +52,7 @@ from gffbase.modes import (
     MODE_STRICT,
     ON_ERROR_RAISE,
     VALIDATION_GFFUTILS,
+    VALIDATION_NCBI,
 )
 from gffbase.schema import SCHEMA_VERSION
 
@@ -2314,44 +2315,131 @@ class FeatureDB:
             self.conn.execute("DELETE FROM meta WHERE key = ?", [key])
             self.conn.execute("INSERT INTO meta (key, value) VALUES (?, ?)", [key, value])
 
-    def update(self, data: Iterable, make_backup: bool = True, **kwargs) -> FeatureDB:
-        """Add features to an existing database.
+    def update(self, data, make_backup: bool = True, **kwargs) -> FeatureDB:
+        """Add features to an existing database, as `create_db` would have.
 
-        Appends to `features`, `attributes` and `edges`, then rebuilds the
-        transitive closure and re-reads the corpus statistics the relational
-        dispatcher routes on.
+        The new data goes through the same pipeline as `create_db`, with this
+        database's dialect: ids come from `id_spec` (the `ID` attribute for
+        GFF3, `gene_id`/`transcript_id` for GTF genes and transcripts, an
+        autoincremented `<featuretype>_<n>` otherwise), `Parent` attributes
+        become edges, and a GTF's missing genes and transcripts are inferred.
+        A new row whose id is already in the database is resolved by
+        `merge_strategy`, which defaults to raising `DuplicateIDError`. The
+        transitive closure is then rebuilt.
 
         Args:
-            data: An iterable of `Feature` or `ParsedFeature` objects, or
-                another `FeatureDB` whose features are copied in.
-            make_backup: Accepted for gffutils compatibility and currently
-                ignored; no `.bak` is written.
+            data: A GFF3/GTF path, the text itself with `from_string=True`,
+                another `FeatureDB`, or an iterable of `Feature` /
+                `ParsedFeature` objects. Nothing to add returns immediately.
+            make_backup: Accepted for gffutils compatibility and ignored; no
+                `.bak` is written.
+            **kwargs: The `create_db` options that apply to new data:
+                `id_spec`, `merge_strategy`, `transform`,
+                `force_merge_fields`, `checklines`, `force_dialect_check`,
+                `from_string`, `disable_infer_genes`,
+                `disable_infer_transcripts`, `infer_gene_extent`,
+                `gtf_transcript_key`, `gtf_gene_key`, `gtf_subfeature` and
+                `verbose`. As gffutils warns, pass the same inference options
+                the database was created with.
 
         Returns:
             `self`, so calls can be chained.
 
         Raises:
             ReadOnlyError: The database was opened with `read_only=True`.
-            TypeError: An item is neither a `Feature` nor a `ParsedFeature`.
+            DuplicateIDError: A new feature's id is taken and
+                `merge_strategy="error"` (the default).
+            TypeError: An unknown keyword, or an item that is neither a
+                `Feature` nor a `ParsedFeature`.
 
         Example::
 
             introns = list(db.create_introns())
             db.update(introns)
         """
+        from gffbase import _update
+        from gffbase._options import IngestOptions
+
         self._require_writable("update")
-        # Minimal update: accept an iterable of Feature objects and
-        # append them to features + attributes + edges, then refresh closure.
+        unknown = sorted(set(kwargs) - _update.UPDATE_KWARGS)
+        if unknown:
+            raise TypeError(f"update() got unexpected keyword argument(s): {unknown}")
+        if self._v1_shim:
+            raise SchemaVersionError(
+                f"update() needs a schema v2 database and {self.dbfn} is v1. Upgrade it "
+                "with gffbase.migrate.migrate_v1_to_v2(), or reopen with upgrade='auto'."
+            )
+        options = IngestOptions(
+            **kwargs,
+            dialect=None if kwargs.get("force_dialect_check") else dict(self.dialect),
+            mode=self.mode,
+            validation=self.validation,
+            on_error=self.on_error,
+        )
+        path, cleanup = _update.source_path(data, options.from_string)
+        if path is None:
+            return self
+        try:
+            autoinc = dict(self.conn.execute("SELECT base, n FROM autoincrements").fetchall())
+            stage = _update.stage(path, options, autoinc)
+        finally:
+            cleanup()
+        if stage is None:
+            return self
+        # All or nothing. A failure part-way -- a constraint, a full disk, an
+        # interrupt -- must not leave half an update behind. `BEGIN` fails
+        # when a caller-supplied connection is already inside a transaction;
+        # the caller owns that one, so its commit or rollback decides.
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            began = True
+        except duckdb.TransactionException:
+            began = False
+        saved = (self._closure_max_depth, self._n_multipart, dict(self._seqid_y_map))
+        try:
+            _update.merge(self, stage, options)
+            self._rebuild_closure()
+            self._refresh_depth_meta()
+            if options.resolved_mode.validation == VALIDATION_NCBI:
+                # A strict database promises it passes validation; an update
+                # must not quietly break that.
+                from gffbase.validate import validate_db
+
+                validate_db(self.conn, level="fast", raise_on_error=True)
+        except BaseException:
+            if began:
+                self.conn.execute("ROLLBACK")
+                # The in-memory state was refreshed from rows that no longer
+                # exist.
+                self._closure_max_depth, self._n_multipart, self._seqid_y_map = saved
+            raise
+        else:
+            if began:
+                self.conn.execute("COMMIT")
+        finally:
+            stage.close()
+        return self
+
+    def _append_features(self, data: Iterable) -> FeatureDB:
+        """Write features under the ids they already carry.
+
+        gffutils' private `_insert` stores `feature.id` as it stands and adds
+        no relations; `merge_all` depends on that, because it names each
+        merged feature itself and links the components explicitly. `update()`
+        derives ids from `id_spec` instead, so it cannot serve here.
+        """
+        self._require_writable("_insert")
         from gffbase.feature import ParsedFeature
         from gffbase.ingest import _ArrowBatchBuilder
 
-        # The builder needs the seqid_to_y dict so it can stamp
-        # seqid_y (and bbox, when the R-tree is live) inline. Reuse the map
-        # the FeatureDB already loaded from `seqid_map`.
-        builder = _ArrowBatchBuilder(
-            self._seqid_y_map,
-            has_spatial=bool(self._rtree_built),
-        )
+        # The builder stamps seqid_y (and bbox, when the R-tree is live)
+        # inline from this map, and gives an unseen seqid the next band. Read
+        # it from `seqid_map` rather than `_seqid_y_map`, which is only loaded
+        # when there is an R-tree -- otherwise a new seqid was banded from
+        # zero, on top of the first chromosome.
+        seqid_map = dict(self.conn.execute("SELECT seqid, seqid_y FROM seqid_map").fetchall())
+        known = set(seqid_map)
+        builder = _ArrowBatchBuilder(seqid_map, has_spatial=bool(self._rtree_built))
         order = scalar_or(self.conn, "SELECT COALESCE(MAX(file_order), 0) FROM features", 0)
 
         if isinstance(data, FeatureDB):
@@ -2386,13 +2474,16 @@ class FeatureDB:
                     f"{pf.featuretype}_{order}",
                 )
             else:
-                raise TypeError(f"update() does not accept {type(feat)!r}")
+                raise TypeError(f"_insert() does not accept {type(feat)!r}")
             builder.append(fid, pf, order)
         builder.flush_into(self.conn)
-        # Rebuild from edges (cheap on small updates), then re-read the
-        # statistics the dispatcher routes on -- an update can deepen the
-        # hierarchy or introduce the first multipart feature, and both were
-        # previously left at whatever they were when the handle opened.
+        new_bands = [(k, v) for k, v in seqid_map.items() if k not in known]
+        if new_bands:
+            self.conn.executemany("INSERT INTO seqid_map (seqid, seqid_y) VALUES (?, ?)", new_bands)
+        if self._rtree_built:
+            self._seqid_y_map = seqid_map
+        # Rebuild from edges, then re-read the statistics the dispatcher routes
+        # on -- an insert can introduce the first multipart feature.
         self._rebuild_closure()
         self._refresh_depth_meta()
         return self
@@ -2457,10 +2548,10 @@ class FeatureDB:
         """Write one NEW feature into the database.
 
         The oracle's private seam, reproduced because `merge_all` needs it and
-        because a successor is expected to have an equivalent. Delegates to
-        `update`, which owns the Arrow batch machinery.
+        because a successor is expected to have an equivalent. Like the
+        oracle's, it keeps `feature.id` and adds no relations.
         """
-        return self.update([feature])
+        return self._append_features([feature])
 
     def _write_back(self, feature: Feature) -> None:
         """Persist edits to a feature that is ALREADY in the database.
@@ -2760,8 +2851,8 @@ class FeatureDB:
                 )
                 if merged.children
             ]
-            # One batched `update`, not `_insert` per feature. `_insert`
-            # delegates to `update`, and every `update` ends by rebuilding the
+            # One batched append, not `_insert` per feature. `_insert`
+            # delegates to `_append_features`, which ends by rebuilding the
             # transitive closure -- a DELETE plus a recursive CTE over the
             # whole `edges` table -- and re-reading the corpus depth
             # statistics. Doing that once per merged feature made `merge_all`
@@ -2770,7 +2861,7 @@ class FeatureDB:
             # The `add_relations` call a few lines below already avoids
             # exactly this, and says so; the insert loop above it did not.
             if merged_in_group:
-                self.update(merged_in_group, make_backup=False)
+                self._append_features(merged_in_group)
                 result.extend(merged_in_group)
 
             if exclude_components:

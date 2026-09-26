@@ -41,6 +41,7 @@ from gffbase._options import (
     _FeatureAdapter,
 )
 from gffbase._serialize import encode_value
+from gffbase.dialect import normalize_dialect
 from gffbase.exceptions import (
     DuplicateIDError,
     EmptyInputError,
@@ -1238,6 +1239,8 @@ def _build_database(
     gtf_subfeature: str = "exon",
     engine: str | None = "auto",
     build_rtree: bool = True,
+    autoinc_seed: dict | None = None,
+    validate: bool = True,
 ) -> tuple[duckdb.DuckDBPyConnection, IngestStats]:
     """Ingest a GFF3 or GTF file into a DuckDB database.
 
@@ -1247,6 +1250,13 @@ def _build_database(
     `options` carries the full `create_db` policy (id_spec, merge_strategy,
     transform, ...). The individual keyword arguments are the older, narrower
     interface and are folded into `options` when it is not supplied.
+
+    `autoinc_seed` starts the autoincrement counters somewhere other than
+    zero. `FeatureDB.update` stages new features through this function and
+    passes the target database's counters, so an id generated here cannot
+    reissue one the target already holds. It also passes `validate=False`:
+    a staged fragment is not a database in its own right (its `Parent`s live
+    in the target), so the strict-mode check runs on the target instead.
     """
     if options is None:
         options = IngestOptions(
@@ -1291,7 +1301,7 @@ def _build_database(
     # Autoincrement counters, keyed by base. gffutils keeps the same table:
     # `<featuretype>_<n>` for a feature whose id_spec yields nothing, and
     # `<id>_<n>` for a `create_unique` collision.
-    autoinc: dict = {}
+    autoinc: dict = dict(autoinc_seed or {})
     seen_ids: dict = {}
     duplicate_pairs: list = []  # (original_id, new_id) for the duplicates table
     # Rows held back for a post-load pass. Only `merge` and `replace` need
@@ -1319,7 +1329,11 @@ def _build_database(
             # one, which the Python engine does on first yield -- so this is
             # resolved on the first record and then reused, rather than paying
             # a Rust/Python boundary crossing per row.
-            _fmt_cache = _dialect_fmt_safe(it)
+            _fmt_cache = (
+                options.dialect.get("fmt", "gff3")
+                if options.dialect is not None
+                else _dialect_fmt_safe(it)
+            )
             resolver = options.resolver_for(_fmt_cache)
 
         if transform is not None:
@@ -1429,7 +1443,10 @@ def _build_database(
     # stamp a synthesized row's seqid_y and bbox.
     _persist_seqid_map(con, seqid_to_y)
 
-    dialect = it.dialect()
+    # An explicit `dialect=` replaces inference, as in gffutils: it decides
+    # GTF vs GFF3 handling and is what gets stored and used for rendering.
+    # Attribute parsing stays per-line either way.
+    dialect = normalize_dialect(options.dialect) if options.dialect is not None else it.dialect()
     directives = list(it.directives())
     fmt = (dialect or {}).get("fmt", "gff3")
 
@@ -1565,7 +1582,7 @@ def _build_database(
     # returned by `region()`, with nothing raised anywhere. Compat mode does
     # not run this: it exists to load whatever gffutils loads, and several of
     # these invariants describe structure a tolerated file will not have.
-    if options.resolved_mode.validation == VALIDATION_NCBI:
+    if validate and options.resolved_mode.validation == VALIDATION_NCBI:
         from gffbase.validate import validate_db
 
         validate_db(con, level="fast", raise_on_error=True)

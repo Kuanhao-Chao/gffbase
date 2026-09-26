@@ -294,6 +294,12 @@ class IngestOptions:
 
         if self.force_dialect_check and self.dialect is not None:
             raise ValueError("force_dialect_check is True, but a dialect is provided")
+        if self.dialect is not None:
+            # Complete it now, so a bad dialect is reported before any work
+            # and a partial one (`{"fmt": "gtf"}`) is usable downstream.
+            from gffbase.dialect import normalize_dialect
+
+            self.dialect = normalize_dialect(self.dialect)
 
         if self.checklines < 0:
             raise ValueError(f"checklines must be >= 0; got {self.checklines}")
