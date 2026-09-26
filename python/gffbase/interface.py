@@ -805,6 +805,8 @@ class FeatureDB:
             keep_order=self.keep_order,
             sort_attribute_values=self.sort_attribute_values,
             segments=segments,
+            # Read column 9 the way this database's ingest did.
+            compat_quotes=self.validation == VALIDATION_GFFUTILS,
         )
 
     def __getitem__(self, key) -> Feature:
