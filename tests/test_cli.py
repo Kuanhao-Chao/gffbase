@@ -555,3 +555,45 @@ def test_stats_reports_discontinuous_features(tmp_path, capsys):
 
     assert main(["stats", out]) == 0
     assert "discontinuous features" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Errors are reported, not traced
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["create", "{missing}"], "FileNotFoundError"),
+        (["create", "{empty}"], "EmptyInputError"),
+        (["create", "{bad}", "--mode", "strict"], "GFFFormatError"),
+    ],
+    ids=["missing_file", "empty_file", "malformed_strict"],
+)
+def test_a_user_error_is_one_line_and_exit_1(tmp_path, capsys, monkeypatch, argv, expected):
+    """A malformed file, a missing path or an empty input is the user's to fix,
+    and the CLI says so in one line. It used to print a traceback."""
+    monkeypatch.delenv("GFFBASE_TRACEBACK", raising=False)
+    (tmp_path / "empty.gff3").write_text("##gff-version 3\n")
+    (tmp_path / "bad.gff3").write_text("chr1\tt\tgene\tX\t9\t.\t+\t.\tID=g\n")
+    paths = {
+        "missing": str(tmp_path / "nope.gff3"),
+        "empty": str(tmp_path / "empty.gff3"),
+        "bad": str(tmp_path / "bad.gff3"),
+    }
+    argv = [a.format(**paths) for a in argv]
+    argv += ["--output", str(tmp_path / "out.duckdb")]
+    assert main(argv) == 1
+    err = capsys.readouterr().err
+    assert f"gffbase create: {expected}:" in err
+    assert "Traceback" not in err
+
+
+def test_the_traceback_is_there_when_asked_for(tmp_path, monkeypatch):
+    monkeypatch.setenv("GFFBASE_TRACEBACK", "1")
+    (tmp_path / "empty.gff3").write_text("##gff-version 3\n")
+    from gffbase.exceptions import EmptyInputError
+
+    with pytest.raises(EmptyInputError):
+        main(["create", str(tmp_path / "empty.gff3"), "--output", str(tmp_path / "o.duckdb")])

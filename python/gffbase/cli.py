@@ -428,13 +428,51 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+#: Set to show the full traceback for an error the CLI would otherwise report
+#: in one line.
+TRACEBACK_ENV = "GFFBASE_TRACEBACK"
+
+
+def _user_errors() -> tuple[type[BaseException], ...]:
+    """Errors that describe the input or the environment, not a gffbase bug.
+
+    Every gffbase error subclasses `ValueError` (or is `FeatureNotFoundError`),
+    as does the native `GFFFormatError`; `OSError` covers a missing or
+    unreadable file; `duckdb.IOException` a database another process holds.
+    """
+    import duckdb
+
+    from gffbase.exceptions import FeatureNotFoundError
+
+    return (ValueError, FeatureNotFoundError, OSError, duckdb.IOException)
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Run the CLI. A user error prints one line and exits 1.
+
+    It used to print a Python traceback -- for a malformed line, an existing
+    output file, a locked database -- which buries the one line that says what
+    to fix. `GFFBASE_TRACEBACK=1` restores the traceback; an unexpected
+    exception (a gffbase bug) always shows it.
+    """
+    import os
+
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
         parser.print_help()
         return 2
-    return args.func(args)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        print("gffbase: interrupted", file=sys.stderr)
+        return 130
+    except _user_errors() as exc:
+        if os.environ.get(TRACEBACK_ENV, "").lower() in ("1", "true", "yes"):
+            raise
+        name = type(exc).__name__
+        print(f"gffbase {args.command}: {name}: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover
