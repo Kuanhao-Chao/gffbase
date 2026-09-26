@@ -393,16 +393,49 @@ _MERGE_COMPARE_FIELDS = (
 )
 
 
-def _unwrap_transformed(result, original):
+def _unwrap_transformed(result, original, dialect: dict | None = None):
     """Return the ParsedFeature a transform callback produced.
 
     gffutils transforms mutate and return the Feature they were handed. Ours
     are handed a `_FeatureAdapter` view, so unwrap it back to the underlying
-    ParsedFeature; anything else is returned as-is so a transform may also
-    build a feature from scratch.
+    ParsedFeature, carrying any attribute edits into it: the long-form pairs
+    and a re-rendered column 9. Those edits used to be dropped, so a transform
+    that renamed a gene stored the old name and reported nothing.
+
+    A gffbase `Feature` built from scratch is converted; anything else is
+    returned as-is.
     """
+    from gffbase.feature import Feature
+
     inner = getattr(result, "_parsed", None)
-    return inner if inner is not None else (result if result is not original else original)
+    if inner is not None:
+        edited = result.edited_attributes()
+        if edited is not None:
+            from gffbase._serialize import _reconstruct
+
+            inner.attributes_pairs = [
+                (key, value, idx)
+                for key, values in edited.items()
+                for idx, value in enumerate(values)
+            ]
+            inner.attributes_blob = _reconstruct(edited, dialect or {"fmt": "gff3"}).encode("utf-8")
+        return inner
+    if isinstance(result, Feature):
+        items = {k: (v if isinstance(v, list) else [v]) for k, v in result.attributes.items()}
+        return ParsedFeature(
+            seqid=result.seqid,
+            source=result.source,
+            featuretype=result.featuretype,
+            start=result.start,
+            end=result.end,
+            score=result.score,
+            strand=result.strand,
+            frame=result.frame,
+            attributes_blob=result._format_attributes().encode("utf-8"),
+            attributes_pairs=[(k, v, i) for k, vs in items.items() for i, v in enumerate(vs)],
+            extra=list(result.extra),
+        )
+    return result if result is not original else original
 
 
 # ---------------------------------------------------------------------------
@@ -1367,6 +1400,7 @@ def _build_database(
     # parser commits to a dialect during the peek phase, so the value is
     # stable from the first yielded record onward.
     _fmt_cache: str | None = None
+    _dialect_cache: dict = {"fmt": "gff3"}
     resolver = None
     strategy = options.merge_strategy
     transform = options.transform
@@ -1386,22 +1420,19 @@ def _build_database(
             # one, which the Python engine does on first yield -- so this is
             # resolved on the first record and then reused, rather than paying
             # a Rust/Python boundary crossing per row.
-            _fmt_cache = (
-                options.dialect.get("fmt", "gff3")
-                if options.dialect is not None
-                else _dialect_fmt_safe(it)
-            )
+            _dialect_cache = options.dialect if options.dialect is not None else _dialect_safe(it)
+            _fmt_cache = _dialect_cache.get("fmt", "gff3")
             resolver = options.resolver_for(_fmt_cache)
 
         if transform is not None:
             # gffutils semantics: the transform may return a replacement
             # feature, or anything falsy to drop the record entirely.
-            result = transform(_FeatureAdapter(feat))
+            result = transform(_FeatureAdapter(feat, _dialect_cache))
             if not result:
                 n_skipped += 1
                 continue
             if result is not True:
-                feat = _unwrap_transformed(result, feat)
+                feat = _unwrap_transformed(result, feat, _dialect_cache)
 
         fid, origin = resolver.resolve(feat, autoinc)
         # `(raw_id, occ)` is the schema-v2 surrogate identity: the id column 9
@@ -1698,17 +1729,15 @@ def _build_database(
 # ---------------------------------------------------------------------------
 
 
-def _dialect_fmt_safe(it) -> str:
-    """The Rust iterator commits to a dialect after the peek phase. The
-    Python fallback only sets it after the first record yields. Both are
-    populated by the time we land in this function on the first feature."""
+def _dialect_safe(it) -> dict:
+    """The parser's committed dialect, or the GFF3 default if it has none."""
     try:
         d = it.dialect()
         if d:
-            return d.get("fmt", "gff3")
+            return dict(d)
     except Exception:
         pass
-    return "gff3"
+    return {"fmt": "gff3"}
 
 
 def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
