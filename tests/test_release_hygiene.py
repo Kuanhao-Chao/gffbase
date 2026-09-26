@@ -222,14 +222,14 @@ def test_secondary_version_literals_agree(filename, pattern):
 
 
 def test_the_release_version_is_canonical_and_stable():
-    """0.2.0 is a stable release: canonical PEP 440, no pre- or dev-release part,
+    """The release is stable: canonical PEP 440, no pre- or dev-release part,
     and spelled the way `release.yml`'s `vMAJOR.MINOR.PATCH` tag grammar expects.
     It replaced the candidate check that pinned `0.2.0rc1`.
     """
     from packaging.version import Version
 
     version = Version(gffbase.__version__)
-    assert str(version) == gffbase.__version__ == "0.2.0"
+    assert str(version) == gffbase.__version__ == "0.2.1"
     assert not version.is_prerelease and not version.is_devrelease
 
 
