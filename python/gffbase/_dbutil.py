@@ -24,9 +24,12 @@ make the no-row case explicit.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import duckdb
+
+_log = logging.getLogger("gffbase")
 
 
 def scalar(con: duckdb.DuckDBPyConnection, sql: str, params: list | None = None) -> Any:
@@ -60,3 +63,51 @@ def scalar_or(
     if result is None or result[0] is None:
         return default
     return result[0]
+
+
+def _sql_literal(value) -> str:
+    """Render a Python scalar as a DuckDB literal.
+
+    `SET`/`PRAGMA` take no bind parameters, so a setting's value has to be
+    written into the statement text. This is the one place that is allowed to
+    happen, and it happens by construction rather than by interpolation:
+    booleans and numbers have no syntax to escape, and a string is
+    single-quoted with its own quotes doubled, which is the only escape SQL
+    string literals have.
+    """
+    if isinstance(value, bool):
+        # Before the int branch: bool is a subclass of int, and DuckDB spells
+        # its booleans `true`/`false`, not `1`/`0`.
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError(f"cannot use {value!r} as a setting value")
+        return repr(value)
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def apply_settings(con: duckdb.DuckDBPyConnection, settings: dict) -> None:
+    """Apply DuckDB settings, skipping names DuckDB does not have.
+
+    Legacy callers pass `constants.default_pragmas` -- `synchronous`,
+    `journal_mode`, `main.page_size`, `main.cache_size` -- none of which
+    DuckDB has. Those are skipped, which is what makes a gffutils script run
+    here unchanged.
+
+    Names are matched against DuckDB's own settings catalog and values
+    rendered by `_sql_literal`, so nothing a caller supplies reaches the
+    parser as syntax (see docs/source/content/advisory_sql_injection.rst).
+    Matching the live catalog rather than a hardcoded list tracks whatever
+    DuckDB build is installed.
+    """
+    known = {row[0] for row in con.execute("SELECT name FROM duckdb_settings()").fetchall()}
+    for key, value in settings.items():
+        name = str(key)
+        if name not in known:
+            _log.debug("skipping setting %r: not a DuckDB setting", name)
+            continue
+        # `name` is echoed from the catalog, so it cannot carry syntax.
+        con.execute(f"SET {name} = {_sql_literal(value)}")

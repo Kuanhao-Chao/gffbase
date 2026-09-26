@@ -40,7 +40,7 @@ from typing import Any, Union
 
 import duckdb
 
-from gffbase._dbutil import scalar, scalar_or
+from gffbase._dbutil import apply_settings, scalar, scalar_or
 from gffbase.exceptions import (
     ClosedDatabaseError,
     FeatureNotFoundError,
@@ -209,30 +209,6 @@ def _order_clause(order_by, reverse: bool, qualifier: str = "") -> str:
             parts.append(f"{q}file_order ASC")
         parts.append(f"{q}id ASC")
     return ", ".join(parts)
-
-
-def _sql_literal(value) -> str:
-    """Render a Python scalar as a DuckDB literal.
-
-    `SET`/`PRAGMA` take no bind parameters, so a setting's value has to be
-    written into the statement text. This is the one place that is allowed to
-    happen, and it happens by construction rather than by interpolation:
-    booleans and numbers have no syntax to escape, and a string is
-    single-quoted with its own quotes doubled, which is the only escape SQL
-    string literals have.
-    """
-    if isinstance(value, bool):
-        # Before the int branch: bool is a subclass of int, and DuckDB spells
-        # its booleans `true`/`false`, not `1`/`0`.
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if value != value or value in (float("inf"), float("-inf")):
-            raise ValueError(f"cannot use {value!r} as a setting value")
-        return repr(value)
-    text = str(value).replace("'", "''")
-    return f"'{text}'"
 
 
 #: Sentinel for "this feature merged with nothing".
@@ -3340,18 +3316,7 @@ class FeatureDB:
         tracks whatever DuckDB build is installed, instead of going stale and
         rejecting settings a newer version added.
         """
-        known = {
-            row[0] for row in self.conn.execute("SELECT name FROM duckdb_settings()").fetchall()
-        }
-        for k, v in pragmas.items():
-            name = str(k)
-            if name not in known:
-                # Not a DuckDB setting. Previously this was indistinguishable
-                # from "DuckDB rejected the value"; now it is a decision.
-                _log.debug("set_pragmas: skipping %r, not a DuckDB setting", name)
-                continue
-            # `name` is echoed from the catalog, so it cannot carry syntax.
-            self.conn.execute(f"SET {name} = {_sql_literal(v)}")
+        apply_settings(self.conn, pragmas)
 
     # ------------------------------------------------------------------
     # Internal: row → Feature streaming

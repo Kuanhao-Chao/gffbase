@@ -36,7 +36,7 @@ import duckdb
 import pyarrow as pa
 
 from gffbase import parser as _parser
-from gffbase._dbutil import scalar
+from gffbase._dbutil import apply_settings, scalar
 from gffbase._options import (
     IdSpecResolver,
     IngestOptions,
@@ -1315,7 +1315,7 @@ def _build_database(
     # scratch path it will rename from. Existence and `force` are decided
     # there, so that an ingest which fails never touches the real target.
     con = duckdb.connect(dbfn)
-    _apply_pragmas(con)
+    _apply_pragmas(con, options.pragmas)
     con.execute(DDL)
 
     # Load the spatial extension UPFRONT (it used to be lazy, after bulk
@@ -1699,7 +1699,16 @@ def _dialect_fmt_safe(it) -> str:
     return "gff3"
 
 
-def _apply_pragmas(con: duckdb.DuckDBPyConnection):
+def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
+    """Configure the ingest connection.
+
+    `pragmas` is `create_db(pragmas=...)`. It used to reach only the handle
+    returned after ingest had finished, so the documented way to bound ingest
+    memory -- `pragmas={"memory_limit": "2GB"}` -- could not work: the
+    ingest itself ran with DuckDB's default of 80% of RAM. Applied last, so an
+    explicit `threads` wins over `GFFBASE_THREADS`. SQLite-only names are
+    skipped, as `FeatureDB.set_pragmas` skips them.
+    """
     # DuckDB's defaults are excellent; we only nudge threads.
     #
     # `GFFUTILS2_THREADS` is the old name, from before the project was called
@@ -1718,6 +1727,8 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection):
         con.execute("PRAGMA disable_progress_bar")
     except duckdb.Error:
         pass
+    if pragmas:
+        apply_settings(con, pragmas)
 
 
 def _synthesize_transcripts(
