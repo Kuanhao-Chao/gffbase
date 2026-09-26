@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shutil
 import sys
 import time
 from dataclasses import dataclass
@@ -1203,8 +1204,17 @@ _TMP_SUFFIX = ".gffbase-building"
 
 
 def _remove_quietly(path: str) -> None:
-    """Delete `path` and any DuckDB sidecar, ignoring what is not there."""
+    """Delete `path` and any DuckDB sidecar, ignoring what is not there.
+
+    `{path}.tmp` is where DuckDB spills when an operation outgrows memory,
+    and it is a directory. It used to be `unlink`ed like the others, which
+    fails on a directory -- silently, here -- so an ingest that spilled and
+    then failed left its spill files behind, possibly gigabytes of them.
+    """
     for candidate in (path, f"{path}.wal", f"{path}.tmp"):
+        if os.path.isdir(candidate) and not os.path.islink(candidate):
+            shutil.rmtree(candidate, ignore_errors=True)
+            continue
         try:
             os.unlink(candidate)
         except OSError:
