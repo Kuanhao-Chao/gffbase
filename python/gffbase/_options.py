@@ -357,5 +357,13 @@ class IngestOptions:
             return True
         return any(
             spec.get(featuretype) != attribute
-            for featuretype, attribute in DEFAULT_ID_SPEC_GTF.items()
+            for featuretype, attribute in self.gtf_group_keys().items()
         )
+
+    def gtf_group_keys(self) -> dict[str, str]:
+        """The attribute each inferred GTF parent is grouped on, by type.
+
+        A synthesized row is named after the value it was grouped on, so it
+        already satisfies an `id_spec` that names the same attribute.
+        """
+        return {"gene": self.gtf_gene_key, "transcript": self.gtf_transcript_key}

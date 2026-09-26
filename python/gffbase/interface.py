@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Union
 
@@ -286,6 +287,37 @@ def _require_feature_id(obj) -> str:
     return fid
 
 
+_SQLITE_ONLY_WARNED: set[str] = set()
+
+
+def _warn_if_sqlite_only(text_factory, default_encoding) -> None:
+    """Say, once per process, that a sqlite3-only option has no effect.
+
+    gffutils hands `text_factory` to sqlite3 and uses `default_encoding` to
+    decode byte strings out of it. DuckDB stores and returns UTF-8 `str`, so
+    neither has anything to act on; accepting a non-default value silently
+    would let a caller believe it had.
+    """
+    for name, value, default in (
+        ("text_factory", text_factory, str),
+        ("default_encoding", default_encoding, "utf-8"),
+    ):
+        is_default = (
+            value is default
+            if name == "text_factory"
+            else str(value).lower().replace("_", "-") in ("utf-8", "utf8")
+        )
+        if value is None or is_default or name in _SQLITE_ONLY_WARNED:
+            continue
+        _SQLITE_ONLY_WARNED.add(name)
+        warnings.warn(
+            f"{name}={value!r} has no effect in gffbase: it configures gffutils' "
+            "sqlite3 connection, and DuckDB always stores and returns UTF-8 str.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
 class FeatureDB:
     """Drop-in successor to ``gffutils.FeatureDB``."""
 
@@ -328,6 +360,7 @@ class FeatureDB:
             upgrade = "never"
         self._upgrade = upgrade
         self.default_encoding = default_encoding
+        _warn_if_sqlite_only(text_factory, default_encoding)
         #: Specification violations tolerated while building this database.
         #: Populated under `mode="compat"`; empty for a reopened database,
         #: which has no record of how it was built.
@@ -2519,6 +2552,17 @@ class FeatureDB:
         necessary.
         """
         self._require_writable("add_relations")
+        if level != 1:
+            # gffutils stores the level on the relation row. gffbase stores
+            # direct edges only and derives every deeper level from them, so
+            # a level-2 relation written here would read back as a direct
+            # parent -- `children(level=1)` returning a grandchild. It was
+            # accepted and ignored, which did exactly that.
+            raise ValueError(
+                f"add_relation(level={level!r}): gffbase stores direct parent-child "
+                "relations and derives deeper levels from them. Add the relations "
+                "between adjacent levels (level=1) instead."
+            )
         pairs = list(pairs)
         if not pairs:
             return self

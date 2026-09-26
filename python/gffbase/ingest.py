@@ -25,8 +25,11 @@ or pure SQL.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
+import sys
+import time
 from dataclasses import dataclass
 
 import duckdb
@@ -35,7 +38,6 @@ import pyarrow as pa
 from gffbase import parser as _parser
 from gffbase._dbutil import scalar
 from gffbase._options import (
-    DEFAULT_ID_SPEC_GTF,
     IdSpecResolver,
     IngestOptions,
     _FeatureAdapter,
@@ -68,6 +70,40 @@ from gffbase.schema import (
 )
 
 _log = logging.getLogger("gffbase.ingest")
+
+#: How often, in records, `verbose` reports parsing progress.
+_PROGRESS_EVERY = 1_000_000
+
+
+@contextlib.contextmanager
+def _verbose_logging(verbose):
+    """Make ingest's progress messages visible for the duration of one call.
+
+    gffutils' `verbose=True` reports progress on stderr and `"debug"` adds
+    detail; gffbase accepted the flag and ignored it, so the CLI's `create`,
+    which asks for progress unless `--quiet`, printed nothing. The logger's
+    level is raised only for this call, and a stderr handler is attached only
+    when nothing in the logging tree would otherwise show the messages, so an
+    application's own logging configuration is respected rather than doubled.
+    """
+    if not verbose:
+        yield
+        return
+    level = logging.DEBUG if verbose == "debug" else logging.INFO
+    old_level = _log.level
+    handler = None
+    if not _log.hasHandlers():
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("gffbase: %(message)s"))
+        _log.addHandler(handler)
+    _log.setLevel(level)
+    try:
+        yield
+    finally:
+        _log.setLevel(old_level)
+        if handler is not None:
+            _log.removeHandler(handler)
+
 
 DEFAULT_BATCH_SIZE = 50_000
 DEFAULT_MAX_DEPTH = 8
@@ -743,7 +779,7 @@ def resolve_synthesized_ids(con, options, autoinc: dict, fmt: str) -> int:
     # the caller actually asked for, and which the file contains.
     spec = options.id_spec_for(fmt)
     if isinstance(spec, dict):
-        for featuretype, group_key in DEFAULT_ID_SPEC_GTF.items():
+        for featuretype, group_key in options.gtf_group_keys().items():
             wanted = spec.get(featuretype)
             if isinstance(wanted, str) and wanted != group_key:
                 con.execute(
@@ -848,6 +884,7 @@ def _prepare_gtf_parent_map(
     merge_strategy: str,
     autoinc: dict[str, int],
     synthesize_missing: bool,
+    group_keys: tuple[str, str] = ("gene_id", "transcript_id"),
 ) -> None:
     """Resolve every inferred GTF parent to one genomic location.
 
@@ -895,7 +932,7 @@ def _prepare_gtf_parent_map(
     reserved = {
         row[0]
         for row in con.execute(
-            "SELECT DISTINCT value FROM attributes WHERE key IN ('gene_id', 'transcript_id')"
+            "SELECT DISTINCT value FROM attributes WHERE key IN (?, ?)", list(group_keys)
         ).fetchall()
     }
     taken = {row[0] for row in con.execute("SELECT id FROM features").fetchall()}
@@ -1197,7 +1234,11 @@ def from_file(
     """
     options = kwargs.get("options")
     force = options.force if options is not None else kwargs.get("force", False)
+    with _verbose_logging(options.verbose if options is not None else False):
+        return _from_file(path, dbfn, force, kwargs)
 
+
+def _from_file(path: str, dbfn: str, force: bool, kwargs: dict):
     if dbfn == ":memory:":
         return _build_database(path, dbfn, **kwargs)
 
@@ -1320,10 +1361,16 @@ def _build_database(
     strategy = options.merge_strategy
     transform = options.transform
     fuse_multipart = options.fuses_multipart
+    started = time.perf_counter()
+    report = _log.isEnabledFor(logging.INFO)
+    if report:
+        _log.info("parsing %s", "the input" if options.from_string else path)
 
     for feat in it:
         file_order += 1
         n_raw += 1
+        if report and not n_raw % _PROGRESS_EVERY:
+            _log.info("%d records parsed (%.0f s)", n_raw, time.perf_counter() - started)
         if resolver is None:
             # The dialect is only knowable once the parser has committed to
             # one, which the Python engine does on first yield -- so this is
@@ -1410,6 +1457,13 @@ def _build_database(
             f"the transform rejected all {n_raw} features, so there is nothing to store"
         )
     builder.flush_into(con)
+    if report:
+        _log.info(
+            "%d records parsed, %d skipped (%.0f s)",
+            n_raw,
+            n_skipped,
+            time.perf_counter() - started,
+        )
 
     if deferred:
         duplicate_pairs.extend(
@@ -1462,30 +1516,38 @@ def _build_database(
     n_synth_g = 0
 
     if fmt == "gtf":
+        _log.info("inferring GTF transcripts and genes")
+        # The attributes that group children under a parent. gffutils'
+        # `gtf_transcript_key` / `gtf_gene_key`; they were accepted and
+        # ignored, every statement below naming `transcript_id` / `gene_id`
+        # literally. Bound as parameters, never interpolated.
+        tkey, gkey = options.gtf_transcript_key, options.gtf_gene_key
         _create_gtf_parent_map(con)
         _prepare_gtf_parent_map(
             con,
             parent_type="transcript",
-            attribute="transcript_id",
+            attribute=tkey,
             child_types=(gtf_subfeature,),
             merge_strategy=options.merge_strategy,
             autoinc=autoinc,
             synthesize_missing=not disable_infer_transcripts,
+            group_keys=(gkey, tkey),
         )
         if not disable_infer_transcripts:
-            n_synth_t = _synthesize_transcripts(con, gtf_subfeature)
+            n_synth_t = _synthesize_transcripts(con, gtf_subfeature, tkey, gkey)
         _prepare_gtf_parent_map(
             con,
             parent_type="gene",
-            attribute="gene_id",
+            attribute=gkey,
             child_types=("transcript", gtf_subfeature),
             merge_strategy=options.merge_strategy,
             autoinc=autoinc,
             synthesize_missing=not disable_infer_genes,
+            group_keys=(gkey, tkey),
         )
         if not disable_infer_genes:
-            n_synth_g = _synthesize_genes(con, gtf_subfeature)
-        con.execute(EDGES_FROM_GTF)
+            n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey)
+        con.execute(EDGES_FROM_GTF, [tkey, gkey])
         # After the edges, deliberately -- see `resolve_synthesized_ids`.
         resolve_synthesized_ids(con, options, autoinc, fmt)
         # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
@@ -1527,6 +1589,7 @@ def _build_database(
         con.unregister("__staging_autoinc")
 
     # Closure via recursive CTE.
+    _log.info("building the transitive closure (depth <= %d)", max_depth)
     con.execute(CLOSURE_RECURSIVE_CTE, [max_depth])
 
     # A cyclic `Parent` graph is malformed GFF3. The walk above no longer
@@ -1549,6 +1612,7 @@ def _build_database(
         )
 
     # Indexes — only after all data is materialized.
+    _log.info("building indexes")
     con.execute(POST_LOAD_INDEXES)
 
     # Optional R-tree. When spatial is loaded, this is a
@@ -1556,6 +1620,7 @@ def _build_database(
     # inline during the Arrow batch INSERTs (no UPDATE pass).
     rtree_built = False
     if has_spatial:
+        _log.info("building the R-tree")
         rtree_built = _finalize_rtree(con)
 
     # SQLite-compat views (must run after closure has been populated).
@@ -1591,6 +1656,13 @@ def _build_database(
     n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
     n_edges = scalar(con, "SELECT COUNT(*) FROM edges")
     n_closure = scalar(con, "SELECT COUNT(*) FROM closure")
+    if report:
+        _log.info(
+            "done: %d features, %d edges in %.1f s",
+            scalar(con, "SELECT COUNT(*) FROM features"),
+            n_edges,
+            time.perf_counter() - started,
+        )
 
     return con, IngestStats(
         n_features_raw=n_raw,
@@ -1648,12 +1720,14 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection):
         pass
 
 
-def _synthesize_transcripts(con, subfeature: str) -> int:
+def _synthesize_transcripts(
+    con, subfeature: str, transcript_key: str = "transcript_id", gene_key: str = "gene_id"
+) -> int:
     """Run the GROUP BY transcript synthesis. Returns rows inserted."""
     before = con.execute(
         "SELECT COUNT(*) FROM features WHERE featuretype = 'transcript'"
     ).fetchone()[0]
-    con.execute(GTF_SYNTHESIZE_TRANSCRIPTS, [subfeature])
+    con.execute(GTF_SYNTHESIZE_TRANSCRIPTS, [transcript_key, subfeature])
     after = con.execute(
         "SELECT COUNT(*) FROM features WHERE featuretype = 'transcript'"
     ).fetchone()[0]
@@ -1662,14 +1736,14 @@ def _synthesize_transcripts(con, subfeature: str) -> int:
     # them a self-referential transcript_id attribute, then propagate the
     # gene_id from the children. The propagation joins attributes directly,
     # so no temporary edge inserts are needed (duplicate-edge-free).
-    con.execute(GTF_SYNTHESIZE_TRANSCRIPT_ATTRS)
-    con.execute(GTF_PROPAGATE_GENE_ID)
+    con.execute(GTF_SYNTHESIZE_TRANSCRIPT_ATTRS, [transcript_key])
+    con.execute(GTF_PROPAGATE_GENE_ID, [transcript_key, gene_key, gene_key])
     return n
 
 
-def _synthesize_genes(con, subfeature: str) -> int:
+def _synthesize_genes(con, subfeature: str, gene_key: str = "gene_id") -> int:
     before = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
-    con.execute(GTF_SYNTHESIZE_GENES, [subfeature])
+    con.execute(GTF_SYNTHESIZE_GENES, [gene_key, subfeature])
     after = con.execute("SELECT COUNT(*) FROM features WHERE featuretype = 'gene'").fetchone()[0]
     n = after - before
     # Mirror the synthesized gene_id into attributes so downstream queries
@@ -1677,10 +1751,11 @@ def _synthesize_genes(con, subfeature: str) -> int:
     con.execute(
         """
         INSERT INTO attributes (feature_id, key, value, idx)
-        SELECT f.id, 'gene_id', f.id, 0
+        SELECT f.id, ?, f.id, 0
         FROM features f
         WHERE f.featuretype = 'gene' AND f.is_synthetic = TRUE
-        """
+        """,
+        [gene_key],
     )
     return n
 
