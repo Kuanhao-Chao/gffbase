@@ -135,6 +135,21 @@ by transcript position. Pinned by
 
 [[deviation]]
 kind = "symbol"
+name = "gffbase.iterators._FileIterator.open_function"
+status = "excluded"
+reason = """The oracle's internal file opener for its own line reader. gffbase reads
+through its parser (gzip by content in both engines), so there is no opener to
+expose; `peek`, the method callers actually use, is implemented."""
+
+[[deviation]]
+kind = "symbol"
+name = "gffbase.iterators._UrlIterator.open_function"
+status = "excluded"
+reason = """As `_FileIterator.open_function`: the URL iterator downloads to a
+temporary file and reads it through the parser."""
+
+[[deviation]]
+kind = "symbol"
 name = "gffbase.interface.FeatureDB.all_features"
 status = "intentional"
 reason = """`order_by="score"` sorts numerically; the oracle sorts it as text.
