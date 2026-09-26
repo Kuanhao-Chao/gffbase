@@ -3,7 +3,7 @@
 Roadmap
 =======
 
-0.2.0 is released. The items below are follow-up work for later releases, not
+0.2.1 is released. The items below are follow-up work for later releases, not
 promises about any particular one.
 
 .. _roadmap--priority-1-memory-and-trust:

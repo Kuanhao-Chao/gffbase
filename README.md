@@ -32,9 +32,10 @@ Universal `abi3` wheels: one binary per platform covers CPython 3.10 through
 3.14, and no Rust toolchain is needed. Source and development builds are in the
 [installation guide](https://khchao.com/gffbase/content/installation.html).
 
-> **0.2.0 is the current release.** It fixes two SQL injection vulnerabilities
-> in 0.1.0 — see the [security advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg) —
-> and it contains breaking changes, listed in the
+> **0.2.1 is the current release** — correctness fixes to 0.2.0, several of
+> which silently lost data; upgrade. Coming from 0.1.0, 0.2.x also fixes two SQL
+> injection vulnerabilities ([advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg))
+> and has breaking changes. Both are in the
 > [changelog](https://github.com/Kuanhao-Chao/gffbase/blob/main/CHANGELOG.md).
 
 ## Quick start
@@ -187,7 +188,7 @@ If GFFBase contributes to your research, please cite it:
   title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
              DuckDB-backed storage engine and zero-copy PyArrow interface},
   year    = 2026,
-  version = {0.2.0},
+  version = {0.2.1},
   url     = {https://github.com/Kuanhao-Chao/gffbase},
 }
 ```

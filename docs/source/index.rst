@@ -165,8 +165,10 @@ Install
 
 .. note::
 
-   This site documents gffbase 0.2.0, released 2026-09-11. Upgrading from 0.1.0
-   fixes two SQL injection vulnerabilities; see the
+   This site documents gffbase 0.2.1, released 2026-09-26: correctness fixes
+   to 0.2.0, several of which silently lost data (see the
+   :doc:`changelog <content/changelog>`). Upgrading from 0.1.0 also fixes two
+   SQL injection vulnerabilities; see the
    :doc:`security advisory <content/advisory_sql_injection>`.
 
 Quick start
