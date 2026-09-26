@@ -188,10 +188,14 @@ impl RecordIter {
         let saved_warnings = self.warnings.len();
 
         let mut samples: Vec<Dialect> = Vec::new();
+        // `checklines + 1`, not `checklines`: gffutils' `peek(n)` appends
+        // before testing `i == n`, so it samples one record more than it
+        // says -- and `checklines=0` still samples one. The Python engine
+        // counts the same way.
         let limit = if opts.force_dialect_check {
             usize::MAX
         } else {
-            opts.checklines
+            opts.checklines.saturating_add(1)
         };
         while samples.len() < limit {
             match self.next_raw_record() {
@@ -203,7 +207,13 @@ impl RecordIter {
                         samples.push(obs);
                     }
                 }
-                Some(Err(_)) => break,
+                // Skip it and keep sampling, as the Python engine does. This
+                // used to `break`, so one malformed line near the top of a
+                // GTF left no samples, the dialect defaulted to GFF3, and the
+                // whole gene/transcript hierarchy was silently never built.
+                // The record is not lost: iteration re-reads it after the
+                // reset below and raises or records it there.
+                Some(Err(_)) => continue,
                 None => break,
             }
         }
