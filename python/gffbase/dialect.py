@@ -81,3 +81,29 @@ def merge_dialects(samples: list[dict]) -> dict:
                 order.append(key)
     out["order"] = order
     return out
+
+
+def normalize_dialect(dialect: dict) -> dict:
+    """A complete dialect from a possibly partial one.
+
+    `create_db(dialect={"fmt": "gtf"})` is a reasonable thing to write, and
+    everything downstream (rendering, the stored `meta` row) expects every
+    key. Missing keys take the default; a GTF gets GTF's key/value separator.
+    """
+    if not isinstance(dialect, dict):
+        raise TypeError(f"dialect must be a dict; got {type(dialect).__name__}")
+    fmt = dialect.get("fmt", "gff3")
+    if fmt not in ("gff3", "gtf"):
+        raise ValueError(f"dialect['fmt'] must be 'gff3' or 'gtf'; got {fmt!r}")
+    out = default_dialect()
+    if fmt == "gtf":
+        out.update(
+            {
+                "keyval separator": " ",
+                "field separator": "; ",
+                "quoted GFF2 values": True,
+                "trailing semicolon": True,
+            }
+        )
+    out.update(dialect)
+    return out
