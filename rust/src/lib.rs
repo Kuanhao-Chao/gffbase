@@ -30,7 +30,7 @@
 //! is the raw col-9 bytes for byte-faithful round-trip.
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyIOError, PyValueError};
+use pyo3::exceptions::{PyFileNotFoundError, PyIOError, PyPermissionError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
@@ -79,6 +79,19 @@ fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
 }
 
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
+/// The Python exception for a failed open, matching what `open()` raises in
+/// the pure-Python engine: a missing file is `FileNotFoundError`, a refused
+/// one `PermissionError`. Both used to arrive as a bare `OSError`, so the two
+/// engines raised different types for the same mistake.
+fn open_error(path: &str, e: std::io::Error) -> PyErr {
+    let message = format!("could not open {}: {}", path, e);
+    match e.kind() {
+        std::io::ErrorKind::NotFound => PyFileNotFoundError::new_err(message),
+        std::io::ErrorKind::PermissionDenied => PyPermissionError::new_err(message),
+        _ => PyIOError::new_err(message),
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (path, checklines=10, force_dialect_check=false, force_gff=false, strict=true, validation="ncbi", ignore_url_escape_characters=false))]
 // Keep the established Python-callable arguments flat; grouping them would
@@ -102,8 +115,7 @@ fn parse_file(
         profile: parse_profile(validation)?,
         decode_url_escapes: !ignore_url_escape_characters,
     };
-    let source = FileSource::open(path)
-        .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
+    let source = FileSource::open(path).map_err(|e| open_error(path, e))?;
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
     let py_iter = PyRecordIterator { inner: Some(iter) };
@@ -145,8 +157,7 @@ fn parse_bytes(
 #[pyfunction]
 #[pyo3(signature = (path, checklines=10))]
 fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<Py<PyAny>> {
-    let source = FileSource::open(path)
-        .map_err(|e| PyIOError::new_err(format!("could not open {}: {}", path, e)))?;
+    let source = FileSource::open(path).map_err(|e| open_error(path, e))?;
     let opts = ParseOptions {
         checklines,
         force_dialect_check: false,

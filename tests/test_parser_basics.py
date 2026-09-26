@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import pytest
 from gffbase import detect_dialect, parse_gff
 
 
@@ -96,3 +97,12 @@ def test_blob_round_trip(gff3_path, engine):
     # the literal attribute string.
     expected = b"ID=gene1;Name=alpha;Note=hello%20world"
     assert feats[0].attributes_blob == expected
+
+
+def test_a_missing_file_is_file_not_found_in_both_engines(tmp_path, engine):
+    """The Rust engine raised a bare `OSError` where `open()` in the Python
+    engine raises `FileNotFoundError`; the two now agree."""
+    from gffbase.parser import parse_gff
+
+    with pytest.raises(FileNotFoundError, match="nope.gff3"):
+        list(parse_gff(str(tmp_path / "nope.gff3"), engine=engine))
