@@ -291,7 +291,11 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
-    "\\.\\.\\.",
+    # A bare `...` body (a Protocol or overload stub) -- and nothing else.
+    # This was `\.\.\.`, which matches ANY line containing three dots; a
+    # matching line that opens a block excludes the whole block, so it hid
+    # real code, all of `ingest.py`'s GTF parent resolution among it.
+    "^\\s*\\.\\.\\.$",
     # Defensive fallbacks that depend on the host environment — the
     # Rust extension may not be built; an optional package may not be
     # installed; a temp-file cleanup may race with the OS. These are

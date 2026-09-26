@@ -288,6 +288,13 @@ jobs:
       - name: Differential suite
         run: pytest -m parity -q
 
+      # The benchmark correctness signature compares gffbase with the oracle,
+      # so it skips wherever gffutils is absent -- which was every other job,
+      # and it is not marked `parity`, so it ran nowhere. This is the job with
+      # the oracle installed.
+      - name: Database-signature contract
+        run: pytest -q tests/test_database_signature.py
+
   # ------------------------------------------------------------------------
   # Sdist build smoke test — confirms `python -m build --sdist` produces a
   # tarball that contains the Rust crate (so PyPI users can rebuild).
