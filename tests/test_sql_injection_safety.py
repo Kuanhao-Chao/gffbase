@@ -69,7 +69,8 @@ from __future__ import annotations
 import duckdb
 import pytest
 from gffbase import create_db
-from gffbase.interface import _ORDER_BY_COLUMNS, FeatureDB, _sql_literal
+from gffbase._dbutil import _sql_literal
+from gffbase.interface import _ORDER_BY_COLUMNS, FeatureDB
 
 SRC = """##gff-version 3
 chr2\trs\tgene\t50\t99\t.\t+\t.\tID=g2
