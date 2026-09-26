@@ -26,11 +26,41 @@ import os
 from collections.abc import Iterator
 
 from gffbase import parser as _parser
-from gffbase.feature import Feature, ParsedFeature
+from gffbase.feature import Feature, ParsedFeature, _with_quote_rule
+
+
+#: A transform's return value that drops the feature. gffutils documents "a
+#: value that evaluates to False", and `create_db(transform=...)` already
+#: drops on it; `DataIterator` used to keep the feature on `None`, so a
+#: ported filter written as `lambda f: f if keep(f) else None` filtered
+#: nothing. `True` keeps the original, as ingest does.
+_SKIP = object()
+
+
+def _apply_transform(transform, feature):
+    """The feature to yield after `transform`, or `_SKIP`."""
+    out = transform(feature)
+    if out is True:
+        return feature
+    if isinstance(out, Feature):
+        # Tested first: a Feature with no coordinates has length 0, so its
+        # truthiness says nothing about whether the caller meant to drop it.
+        return out
+    if not out:
+        return _SKIP
+    return out
 
 
 class _DataIterator:
-    """Public iterator. Exposes ``.dialect`` and ``.directives`` like legacy."""
+    """Public iterator. Exposes ``.dialect`` and ``.directives`` like legacy.
+
+    Reads with the same rules as `create_db` in compat mode: a record gffutils
+    would load is yielded (a violation is recorded in `warnings`, not
+    raised), a line that cannot be parsed at all is skipped and recorded, and
+    a GFF3 value wholly in quotes is read without them. It used to apply the
+    strict NCBI profile, so it refused files that `create_db` loads and that
+    `gffutils.DataIterator` reads -- `ID="g001"` among them.
+    """
 
     def __init__(
         self,
@@ -46,12 +76,16 @@ class _DataIterator:
                 data.encode("utf-8") if isinstance(data, str) else data,
                 checklines=checklines,
                 force_dialect_check=force_dialect_check,
+                strict=False,
+                validation="gffutils",
             )
         else:
             self._inner = _parser.parse_gff(
                 data,
                 checklines=checklines,
                 force_dialect_check=force_dialect_check,
+                strict=False,
+                validation="gffutils",
             )
         self._transform = transform
 
@@ -59,27 +93,39 @@ class _DataIterator:
         return self
 
     def __next__(self) -> Feature:
-        pf: ParsedFeature = next(self._inner)
-        feat = Feature(
-            seqid=pf.seqid,
-            source=pf.source,
-            featuretype=pf.featuretype,
-            start=pf.start,
-            end=pf.end,
-            score=pf.score,
-            strand=pf.strand,
-            frame=pf.frame,
-            attributes=pf.attributes_blob,
-            extra=("\t".join(pf.extra)) if pf.extra else None,
-            dialect=self._inner.dialect() or {"fmt": "gff3"},
-        )
-        if self._transform is not None:
-            out = self._transform(feat)
-            if out is False:
-                return self.__next__()
-            if out is not None:
-                feat = out
-        return feat
+        # A loop, not a recursive `__next__()` per dropped feature: a filter
+        # that drops a few thousand records in a row used to hit the
+        # recursion limit.
+        while True:
+            pf: ParsedFeature = next(self._inner)
+            feat = _with_quote_rule(
+                Feature(
+                    seqid=pf.seqid,
+                    source=pf.source,
+                    featuretype=pf.featuretype,
+                    start=pf.start,
+                    end=pf.end,
+                    score=pf.score,
+                    strand=pf.strand,
+                    frame=pf.frame,
+                    attributes=pf.attributes_blob,
+                    extra=("\t".join(pf.extra)) if pf.extra else None,
+                    dialect=self._inner.dialect() or {"fmt": "gff3"},
+                ),
+                True,
+            )
+            if self._transform is None:
+                return feat
+            out = _apply_transform(self._transform, feat)
+            if out is not _SKIP:
+                return out
+
+    @property
+    def warnings(self) -> list[dict]:
+        """Records that broke a rule or could not be parsed, as `create_db`
+        reports them in `FeatureDB.warnings`: dicts with `line_no`, `kind` and
+        `message`. Complete once iteration has finished."""
+        return list(getattr(self._inner, "warnings", []) or [])
 
     @property
     def dialect(self) -> dict:
@@ -296,10 +342,9 @@ class _FeatureIterator(_BaseIterator):
             self._pos += 1
             if self._transform is None:
                 return feature
-            out = self._transform(feature)
-            if out is False:
-                continue  # the transform's way of saying "drop this one"
-            return feature if out is None else out
+            out = _apply_transform(self._transform, feature)
+            if out is not _SKIP:
+                return out
 
     # Properties, matching `_DataIterator`. These were written as methods and
     # the resulting mypy override error was silenced with a `type: ignore`,
