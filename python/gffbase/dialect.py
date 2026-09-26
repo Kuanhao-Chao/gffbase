@@ -36,41 +36,50 @@ def default_dialect() -> dict:
     }
 
 
+#: The dialect keys decided by vote. `order` is not one of them: it is the
+#: union of every sample's keys in first-appearance order.
+_VOTED_KEYS = (
+    "fmt",
+    "field separator",
+    "keyval separator",
+    "multival separator",
+    "leading semicolon",
+    "trailing semicolon",
+    "quoted GFF2 values",
+    "repeated keys",
+    "semicolon in quotes",
+)
+
+
 def merge_dialects(samples: list[dict]) -> dict:
-    """Reconcile per-line dialect observations into one. OR for booleans,
-    plurality vote for separators, first-appearance order for keys."""
+    """Reconcile per-line dialect observations into one, as gffutils'
+    `helpers._choose_dialect` does.
+
+    Every key is decided by its own vote; a line weighs as much as it has
+    distinct attributes; a tie goes to the value seen first. This used to be a
+    plain majority for the format and an OR over the flags -- so one quoted
+    line re-quoted a whole file on output, and an attribute-less line (a
+    five-column row) could outvote a real one.
+
+    The tally is an insertion-ordered dict rather than a `set`: iteration order
+    of a set of strings depends on PYTHONHASHSEED, so a tie resolved through
+    one picked a different winner on different runs, and the separator chosen
+    here is the one a feature is re-serialized with. (The Rust engine had the
+    same defect via HashMap iteration order; both are fixed the same way.)
+    """
     if not samples:
         return default_dialect()
 
-    n_gtf = sum(1 for s in samples if s.get("fmt") == "gtf")
-    fmt = "gtf" if n_gtf > len(samples) - n_gtf else "gff3"
-    keyval = " " if fmt == "gtf" else "="
-
-    # Plurality vote, ties broken by first appearance.
-    #
-    # `max(set(...), key=...)` looks equivalent but is not: iteration order of
-    # a `set` of strings depends on PYTHONHASHSEED, which is randomized per
-    # process, so a tie resolved this way picks a different winner on
-    # different runs -- and the separator chosen here is the one used when a
-    # feature is re-serialized. The same file could round-trip to different
-    # text run to run. Counting over the ordered list keeps the result a
-    # function of the input alone. (The Rust engine had the same defect via
-    # HashMap iteration order; both are fixed the same way.)
-    field_seps = [s.get("field separator", ";") for s in samples]
-    field_sep = max(dict.fromkeys(field_seps), key=field_seps.count)
-
+    defaults = default_dialect()
     out = default_dialect()
-    out["fmt"] = fmt
-    out["keyval separator"] = keyval
-    out["field separator"] = field_sep
-    for k in (
-        "leading semicolon",
-        "trailing semicolon",
-        "quoted GFF2 values",
-        "repeated keys",
-        "semicolon in quotes",
-    ):
-        out[k] = any(s.get(k, False) for s in samples)
+    for key in _VOTED_KEYS:
+        tally: dict = {}
+        for sample in samples:
+            value = sample.get(key, defaults[key])
+            tally[value] = tally.get(value, 0) + len(sample.get("order", ()))
+        # `max` returns the first maximum it meets, and dicts keep insertion
+        # order, so a tie goes to the first-seen value.
+        out[key] = max(tally, key=tally.__getitem__)
 
     seen = set()
     order: list[str] = []

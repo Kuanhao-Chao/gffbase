@@ -63,63 +63,59 @@ impl Dialect {
     }
 }
 
-/// Reconcile per-line observations into a single dialect. `samples` is one
-/// Dialect per peeked line; we pick the dominant format and combine flags.
+/// Reconcile per-line observations into a single dialect, the way gffutils'
+/// `helpers._choose_dialect` does: every key is decided by its own vote, a
+/// line weighs as much as it has distinct attributes, and a tie goes to the
+/// value seen first.
+///
+/// This used to be a plain majority for the format and an OR over the flags.
+/// The OR made one quoted line re-quote a whole file on output, and the
+/// unweighted count let an attribute-less line (a 5-column row, say) outvote
+/// a real one -- both differences from gffutils on files that load the same.
+///
+/// Tallies are insertion-ordered vectors, not a HashMap: a `HashMap`'s
+/// per-process seed resolved ties differently on every run, which once made
+/// dialect inference -- and therefore re-serialization -- nondeterministic.
 pub fn choose(samples: &[Dialect]) -> Dialect {
     if samples.is_empty() {
         return Dialect::default();
     }
-    let n_gtf = samples.iter().filter(|d| d.fmt == Format::Gtf).count();
-    let n_gff3 = samples.len() - n_gtf;
-    let fmt = if n_gtf > n_gff3 {
-        Format::Gtf
-    } else {
-        Format::Gff3
-    };
 
-    // For each flag, take the OR — if *any* line had a trailing semicolon,
-    // the file has trailing semicolons. Mirrors gffutils' weighted-vote outcome
-    // closely enough for round-trip purposes.
-    let mut chosen = Dialect {
-        fmt,
-        keyval_separator: if fmt == Format::Gtf { ' ' } else { '=' },
-        ..Default::default()
-    };
-    for s in samples {
-        chosen.leading_semicolon |= s.leading_semicolon;
-        chosen.trailing_semicolon |= s.trailing_semicolon;
-        chosen.quoted_gff2_values |= s.quoted_gff2_values;
-        chosen.repeated_keys |= s.repeated_keys;
-        chosen.semicolon_in_quotes |= s.semicolon_in_quotes;
-    }
-    // Field separator: pick the most common, breaking ties by first
-    // appearance.
-    //
-    // This deliberately does NOT tally into a HashMap. Rust's HashMap is
-    // seeded from a per-process RandomState, so iterating one to find a
-    // maximum resolves ties differently on every run -- which made dialect
-    // inference nondeterministic, and with it the separator used when a
-    // feature is re-serialized. The same input file could round-trip to
-    // different text on different runs. An insertion-ordered tally makes the
-    // outcome a function of the input alone.
-    let mut counts: Vec<(&str, usize)> = Vec::new();
-    for s in samples {
-        let sep = s.field_separator.as_str();
-        match counts.iter_mut().find(|(k, _)| *k == sep) {
-            Some((_, c)) => *c += 1,
-            None => counts.push((sep, 1)),
+    fn vote<T: PartialEq + Clone>(samples: &[Dialect], get: impl Fn(&Dialect) -> T) -> T {
+        let mut tally: Vec<(T, usize)> = Vec::new();
+        for s in samples {
+            let value = get(s);
+            let weight = s.order.len();
+            match tally.iter_mut().find(|(k, _)| *k == value) {
+                Some((_, count)) => *count += weight,
+                None => tally.push((value, weight)),
+            }
         }
+        // The first maximum: `>` rather than `>=` keeps the earliest value on
+        // a tie, which is what a stable descending sort (gffutils) does.
+        let mut best = 0;
+        for (i, (_, count)) in tally.iter().enumerate().skip(1) {
+            if *count > tally[best].1 {
+                best = i;
+            }
+        }
+        tally.swap_remove(best).0
     }
-    chosen.field_separator = counts
-        .into_iter()
-        // `max_by_key` keeps the LAST maximum, so compare on count alone and
-        // reverse the scan to keep the FIRST-seen separator on a tie.
-        .rev()
-        .max_by_key(|(_, c)| *c)
-        .map(|(k, _)| k.to_string())
-        .unwrap_or_else(|| ";".into());
 
-    // Build attribute key order from first appearance across samples.
+    let mut chosen = Dialect {
+        fmt: vote(samples, |d| d.fmt),
+        field_separator: vote(samples, |d| d.field_separator.clone()),
+        keyval_separator: vote(samples, |d| d.keyval_separator),
+        multival_separator: vote(samples, |d| d.multival_separator),
+        leading_semicolon: vote(samples, |d| d.leading_semicolon),
+        trailing_semicolon: vote(samples, |d| d.trailing_semicolon),
+        quoted_gff2_values: vote(samples, |d| d.quoted_gff2_values),
+        repeated_keys: vote(samples, |d| d.repeated_keys),
+        semicolon_in_quotes: vote(samples, |d| d.semicolon_in_quotes),
+        order: Vec::new(),
+    };
+
+    // Attribute key order: first appearance across samples, as gffutils.
     let mut seen = std::collections::HashSet::new();
     for s in samples {
         for k in &s.order {

@@ -125,16 +125,16 @@ _DIALECT_INFERENCE = (
 )
 
 
-_DIALECT_VOTE_WEIGHTING = (
-    "Dialect vote weighting differs. The oracle weights each sampled line by "
-    "its number of attributes -- 'more complex attribute strings are more "
-    "likely to be informative' (helpers._choose_dialect) -- so a six-attribute "
-    "CDS line observing `; ` outvotes a one-attribute gene line observing `;`. "
-    "gffbase gives every sampled line equal weight and breaks the resulting "
-    "tie by first appearance, landing on `;`. The separator is then used when "
-    "a feature is re-serialized, so the rendered text differs. Both are now "
-    "deterministic (see tests/test_dialect_determinism.py); matching the "
-    "oracle additionally requires adopting its weighting."
+#: Retained for the record, like `_LOST_ESCAPING_FIXED`: this xfailed
+#: `gms2_example.gff3` in two tests until 0.3.0 adopted the oracle's vote.
+_DIALECT_VOTE_WEIGHTING_FIXED = (
+    "FIXED. The oracle weights each sampled line by its number of attributes "
+    "-- 'more complex attribute strings are more likely to be informative' "
+    "(helpers._choose_dialect) -- so a six-attribute CDS line observing `; ` "
+    "outvotes a one-attribute gene line observing `;`. gffbase gave every "
+    "sampled line equal weight, landed on `;`, and re-serialized with it. Both "
+    "engines now run the oracle's per-key weighted vote "
+    "(`dialect.merge_dialects`, `dialect::choose`)."
 )
 
 _EMPTY_VALUE_RENDERING = (
@@ -400,7 +400,6 @@ def test_untouched_features_serialize_identically(name):
 _NORMALIZED_KNOWN = {
     "wormbase_gff2.txt": _DIALECT_INFERENCE,
     "wormbase_gff2_alt.txt": _DIALECT_INFERENCE,
-    "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
     "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
 }
 
@@ -441,7 +440,6 @@ _SERIALIZE_READ_KNOWN = {
     "FBgn0031208.gff": _ATTR_KEY_WHITESPACE,
     "wormbase_gff2.txt": _ATTR_KEY_WHITESPACE,
     "wormbase_gff2_alt.txt": _ATTR_KEY_WHITESPACE,
-    "gms2_example.gff3": _DIALECT_VOTE_WEIGHTING,
     # Three fixtures used to sit here and now pass:
     #
     # `keyval_sep_in_attrs.gff` and `nonascii` under _LOST_ESCAPING --
