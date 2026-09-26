@@ -138,7 +138,8 @@ def parse_gff(
     validation: str = "ncbi",
     engine: str | None = "auto",
 ) -> _Iterator:
-    """Parse a GFF3/GTF file (plain text or ``.gz``).
+    """Parse a GFF3/GTF file, plain text or gzip (recognized by content, so
+    ``.bgz`` and extensionless files work; bgzip's multiple members are read).
 
     Returns an iterator of ``ParsedFeature`` plus ``.dialect()``,
     ``.directives()`` and ``.warnings`` accessors.
