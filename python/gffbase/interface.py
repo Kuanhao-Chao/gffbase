@@ -311,6 +311,8 @@ class FeatureDB:
         self._closed = False
         self._owns_conn = False
         self._seg_cursor: duckdb.DuckDBPyConnection | None = None
+        self._stream_cursors: set[duckdb.DuckDBPyConnection] = set()
+        self._idle_cursors: list[duckdb.DuckDBPyConnection] = []
         self._read_only = bool(read_only)
 
         if upgrade not in ("auto", "never", "error"):
@@ -724,15 +726,24 @@ class FeatureDB:
     def close(self) -> None:
         """Release the DuckDB connection. Idempotent.
 
-        The lazily-created segment cursor is closed whether or not the
-        connection is owned -- gffbase created it via `conn.cursor()`, so
-        gffbase closes it. The connection itself is closed only when this
+        The lazily-created segment cursor and the cursor behind every
+        suspended feature iterator are closed whether or not the connection is
+        owned -- gffbase created them via `conn.cursor()`, so gffbase closes
+        them. Resuming such an iterator afterwards raises
+        `ClosedDatabaseError`. The connection itself is closed only when this
         handle opened it: a caller who passed their own connection in still
         holds it afterwards.
         """
         if self._closed:
             return
         self._closed = True
+        for cur in [*self._stream_cursors, *self._idle_cursors]:
+            try:
+                cur.close()
+            except duckdb.Error:  # pragma: no cover - already dead
+                pass
+        self._stream_cursors.clear()
+        self._idle_cursors.clear()
         if self._seg_cursor is not None:
             try:
                 self._seg_cursor.close()
@@ -3213,6 +3224,9 @@ class FeatureDB:
     #: segments are prefetched.
     _CHUNK = 10_000
 
+    #: Finished stream cursors kept open for reuse (see `_yield_features`).
+    _MAX_IDLE_CURSORS = 4
+
     def _segment_cursor(self):
         """A cursor of our own for segment prefetches.
 
@@ -3258,17 +3272,65 @@ class FeatureDB:
             out.setdefault(row[0], []).append(row)
         return out
 
+    def _require_stream_open(self) -> None:
+        if self._closed:
+            raise ClosedDatabaseError(
+                "iteration resumed on a closed FeatureDB: close() released the "
+                "connection this iterator was reading from. Finish the loop before "
+                "closing, or materialize it with list() first."
+            )
+
     def _yield_features(self, sql: str, params: list) -> Iterator[Feature]:
+        """Stream `Feature` objects for `sql`, `_CHUNK` rows per round trip.
+
+        Every stream runs on a cursor of its own. A DuckDB connection holds
+        ONE result set, so streaming on `self.conn` meant that any query issued
+        while the generator was suspended -- `db.children(gene)` inside
+        `for gene in db.features_of_type("gene")`, the canonical gffutils
+        loop, or a second iterator advanced alternately with this one --
+        discarded the rows not yet fetched, and the loop ended at its first
+        chunk boundary without raising. `create_introns`,
+        `create_splice_sites` and `iter_by_parent_childs` nest that way
+        internally and were truncated too.
+
+        `cursor()` opens an independent connection to the same database. It
+        is cheap to open (~8 us) but its first query pays ~60 us of warm-up,
+        about 2 % of a `children()` call, so a finished stream hands its
+        cursor to a small free list instead of closing it. The hand-back
+        happens in `finally`, which runs on exhaustion, on `break` (the
+        generator is closed) and when an abandoned generator is collected;
+        `close()` closes every cursor, busy or idle. One consequence: a
+        stream does not see writes made on `self.conn` inside an explicit,
+        uncommitted transaction. gffbase opens one only in `migrate`, which
+        does not stream.
+        """
         self._require_open("query")
-        cur = self.conn.execute(sql, params)
-        # `_n_multipart` is read once at open. At zero -- every GTF corpus, all
-        # of GENCODE, every database migrated from v1 -- this whole path costs
-        # one attribute test per chunk of 10 000 rows.
-        multipart = bool(self._n_multipart)
-        while True:
-            rows = cur.fetchmany(self._CHUNK)
-            if not rows:
-                return
-            segments = self._prefetch_segments([r[0] for r in rows]) if multipart else {}
-            for row in rows:
-                yield self._build_feature(row, segments.get(row[0]))
+        cur = self._idle_cursors.pop() if self._idle_cursors else self.conn.cursor()
+        self._stream_cursors.add(cur)
+        try:
+            cur.execute(sql, params)
+            # `_n_multipart` is read once at open. At zero -- every GTF corpus,
+            # all of GENCODE, every database migrated from v1 -- this whole
+            # path costs one attribute test per chunk of 10 000 rows.
+            multipart = bool(self._n_multipart)
+            while True:
+                self._require_stream_open()
+                rows = cur.fetchmany(self._CHUNK)
+                if not rows:
+                    return
+                segments = self._prefetch_segments([r[0] for r in rows]) if multipart else {}
+                for row in rows:
+                    # A chunk already in memory must not outlive close() either.
+                    self._require_stream_open()
+                    yield self._build_feature(row, segments.get(row[0]))
+        finally:
+            self._stream_cursors.discard(cur)
+            if not self._closed and len(self._idle_cursors) < self._MAX_IDLE_CURSORS:
+                # A pending result set, if the loop stopped early, is simply
+                # discarded by the cursor's next execute().
+                self._idle_cursors.append(cur)
+            else:
+                try:
+                    cur.close()
+                except duckdb.Error:  # pragma: no cover - connection already gone
+                    pass
