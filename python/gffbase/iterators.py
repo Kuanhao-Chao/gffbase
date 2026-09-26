@@ -28,7 +28,6 @@ from collections.abc import Iterator
 from gffbase import parser as _parser
 from gffbase.feature import Feature, ParsedFeature, _with_quote_rule
 
-
 #: A transform's return value that drops the feature. gffutils documents "a
 #: value that evaluates to False", and `create_db(transform=...)` already
 #: drops on it; `DataIterator` used to keep the feature on `None`, so a

@@ -18,7 +18,8 @@
 
 The parameter list, its order, and the defaults all match gffutils, so calls
 written against it -- including positional ones -- work unchanged. Every
-parameter is honoured; none is accepted and ignored.
+parameter is honoured, except `text_factory`, which only configures gffutils'
+sqlite3 connection and warns when set; none is silently ignored.
 """
 
 from __future__ import annotations
@@ -98,7 +99,9 @@ def create_db(
     force :
         Overwrite ``dbfn`` if it exists. Without it, an existing file raises.
     verbose :
-        Progress reporting. ``"debug"`` selects DEBUG level.
+        Report progress on stderr, stage by stage (``"debug"`` adds detail),
+        through the ``gffbase.ingest`` logger. An application that configures
+        logging itself receives the messages through its own handlers.
     checklines :
         Lines sampled to infer the dialect.
     merge_strategy :
@@ -107,7 +110,11 @@ def create_db(
     transform :
         Callable applied to each feature. Returning anything falsy drops it.
     gtf_transcript_key, gtf_gene_key, gtf_subfeature :
-        Attribute names used to reconstruct GTF hierarchy.
+        How a GTF's hierarchy is reconstructed: children are grouped into
+        transcripts by ``gtf_transcript_key`` and transcripts into genes by
+        ``gtf_gene_key``; inferred transcripts span their ``gtf_subfeature``
+        rows. An inferred parent is then named by ``id_spec`` (by default its
+        ``transcript_id`` / ``gene_id``, carried over from its children).
     force_gff :
         Skip format autodetection and treat the input as GFF.
     force_dialect_check :
@@ -118,7 +125,9 @@ def create_db(
     keep_order :
         Preserve attribute order when features are rendered.
     text_factory :
-        Text coercion applied to values read back out.
+        Accepted for gffutils compatibility. It configures gffutils' sqlite3
+        connection and has no effect here -- DuckDB always returns UTF-8
+        ``str`` -- so a non-default value warns once.
     force_merge_fields :
         With ``merge_strategy="merge"``, fields allowed to differ and be
         combined. ``start``/``end`` are rejected: they must stay numeric.
@@ -127,7 +136,9 @@ def create_db(
     sort_attribute_values :
         Sort attribute values when features are rendered.
     dialect :
-        Explicit dialect, bypassing inference.
+        Explicit dialect, bypassing inference: it decides GTF vs GFF3 handling
+        and how features render. A partial dict (``{"fmt": "gtf"}``) is
+        completed with that format's defaults.
     infer_gene_extent :
         Deprecated. ``False`` sets both ``disable_infer_*`` flags.
     disable_infer_genes, disable_infer_transcripts :

@@ -267,7 +267,7 @@ LEFT JOIN __gtf_parent_map m
       AND m.raw_id = a.value
       AND m.seqid = f.seqid
       AND m.strand IS NOT DISTINCT FROM f.strand
-WHERE a.key = 'transcript_id'
+WHERE a.key = ?                                  -- gtf_transcript_key
   AND f.featuretype NOT IN ('gene', 'transcript')
   AND COALESCE(m.resolved_id, a.value) <> f.id
   AND EXISTS (SELECT 1 FROM features p
@@ -282,7 +282,7 @@ LEFT JOIN __gtf_parent_map m
       AND m.raw_id = a.value
       AND m.seqid = f.seqid
       AND m.strand IS NOT DISTINCT FROM f.strand
-WHERE a.key = 'gene_id'
+WHERE a.key = ?                                  -- gtf_gene_key
   AND f.featuretype = 'transcript'
   AND COALESCE(m.resolved_id, a.value) <> f.id
   AND EXISTS (SELECT 1 FROM features p
@@ -318,7 +318,7 @@ SELECT
     -- together.
     m.raw_id                   AS raw_id
 FROM features f
-JOIN attributes a ON a.feature_id = f.id AND a.key = 'transcript_id'
+JOIN attributes a ON a.feature_id = f.id AND a.key = ?   -- gtf_transcript_key
 JOIN __gtf_parent_map m
   ON m.parent_type = 'transcript'
  AND m.raw_id = a.value
@@ -333,7 +333,7 @@ GROUP BY m.resolved_id, m.raw_id, m.seqid, m.strand, m.first_file_order;
 #     subsequent gene synthesis sees them.
 GTF_SYNTHESIZE_TRANSCRIPT_ATTRS = """
 INSERT INTO attributes (feature_id, key, value, idx)
-SELECT f.id, 'transcript_id', m.resolved_id, 0
+SELECT f.id, ?, m.resolved_id, 0                -- gtf_transcript_key
 FROM features f
 JOIN __gtf_parent_map m
   ON m.parent_type = 'transcript' AND m.resolved_id = f.id
@@ -361,8 +361,8 @@ WITH pairs AS (
      AND m.raw_id = tid.value
      AND m.seqid = child.seqid
      AND m.strand IS NOT DISTINCT FROM child.strand
-    WHERE tid.key = 'transcript_id'
-      AND gid.key = 'gene_id'
+    WHERE tid.key = ?                            -- gtf_transcript_key
+      AND gid.key = ?                            -- gtf_gene_key
     GROUP BY m.resolved_id, gid.value
 ),
 ranked AS (
@@ -371,7 +371,7 @@ ranked AS (
         ROW_NUMBER() OVER (PARTITION BY transcript_id ORDER BY cnt DESC, gene_id) AS rn
     FROM pairs
 )
-SELECT t.id, 'gene_id', r.gene_id, 0
+SELECT t.id, ?, r.gene_id, 0                    -- gtf_gene_key
 FROM features t
 JOIN ranked r ON r.transcript_id = t.id AND r.rn = 1
 WHERE t.featuretype = 'transcript' AND t.is_synthetic = TRUE;
@@ -443,7 +443,7 @@ SELECT
     -- together.
     m.raw_id                   AS raw_id
 FROM features f
-JOIN attributes a ON a.feature_id = f.id AND a.key = 'gene_id'
+JOIN attributes a ON a.feature_id = f.id AND a.key = ?   -- gtf_gene_key
 JOIN __gtf_parent_map m
   ON m.parent_type = 'gene'
  AND m.raw_id = a.value
