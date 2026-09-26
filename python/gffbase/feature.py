@@ -175,18 +175,24 @@ class _LazyAttributes(MutableMapping):
     unless someone reads them.
     """
 
-    __slots__ = ("_d", "_blob", "_dialect_fmt", "_parsed")
+    __slots__ = ("_d", "_blob", "_dialect_fmt", "_parsed", "_compat_quotes")
 
     def __init__(
         self,
         initial: Mapping | list[tuple[str, str, int]] | None = None,
         blob: bytes | None = None,
         dialect_fmt: str = "gff3",
+        compat_quotes: bool = False,
     ):
         self._d: dict = {}
         self._blob = blob
         self._dialect_fmt = dialect_fmt
         self._parsed = False
+        # gffutils' reading of `key="value"` in GFF3: the quotes enclose the
+        # value rather than belong to it. Compat-mode ingest strips them, so
+        # a blob from a compat database has to be read the same way -- else
+        # the stored id is `g001` while `attributes["ID"]` says `"g001"`.
+        self._compat_quotes = compat_quotes
         if initial is not None:
             self._ingest(initial)
             self._parsed = True
@@ -226,7 +232,7 @@ class _LazyAttributes(MutableMapping):
         from gffbase._pyfallback.attributes import parse_attributes
 
         text = self._blob.decode("utf-8", errors="replace")
-        pairs, _obs = parse_attributes(text)
+        pairs, _obs = parse_attributes(text, compat_whole_value_quotes=self._compat_quotes)
         for k, v, _idx in pairs:
             self._d.setdefault(k, []).append(v)
         _drop_lone_empty_values(self._d)
@@ -486,6 +492,7 @@ class Feature:
             scratch = _LazyAttributes(
                 blob=blob,
                 dialect_fmt=(self.dialect or {}).get("fmt", "gff3"),
+                compat_quotes=self.attributes._compat_quotes,
             )
             source = scratch
         else:
@@ -845,6 +852,7 @@ def feature_from_row(
     keep_order: bool = False,
     sort_attribute_values: bool = False,
     segments=None,
+    compat_quotes: bool = False,
 ) -> Feature:
     """Build a ``Feature`` from a DuckDB row tuple. Lazy in attributes.
 
@@ -857,6 +865,9 @@ def feature_from_row(
     a `MultipartFeature` instead. Presence of those rows IS the test: only a
     discontinuous feature has any, so no extra column is needed in the
     projection, which is also what keeps a v1 database readable.
+
+    `compat_quotes` reads column 9 as compat-mode ingest did, stripping the
+    quotes around a whole GFF3 value; see `_LazyAttributes`.
     """
     (
         fid,
@@ -885,16 +896,19 @@ def feature_from_row(
         "sort_attribute_values": sort_attribute_values,
     }
     if not segments:
-        return Feature(
-            start=start,
-            end=end,
-            score=score,
-            strand=strand,
-            frame=frame if frame is not None else ".",
-            attributes=blob if blob is not None else None,
-            extra=extra_blob if extra_blob else None,
-            file_order=file_order,
-            **shared,
+        return _with_quote_rule(
+            Feature(
+                start=start,
+                end=end,
+                score=score,
+                strand=strand,
+                frame=frame if frame is not None else ".",
+                attributes=blob if blob is not None else None,
+                extra=extra_blob if extra_blob else None,
+                file_order=file_order,
+                **shared,
+            ),
+            compat_quotes,
         )
 
     # `seqid`, `source`, `featuretype` and `strand` are invariant across
@@ -903,17 +917,20 @@ def feature_from_row(
     # phase and column 9. That is what makes `str(segment)` reproduce the
     # input line byte for byte.
     parts = [
-        FeatureSegment(
-            start=seg_start,
-            end=seg_end,
-            score=seg_score if seg_score is not None else ".",
-            strand=strand,
-            frame=seg_frame if seg_frame is not None else ".",
-            attributes=bytes(seg_blob) if seg_blob is not None else None,
-            extra=seg_extra if seg_extra else None,
-            file_order=seg_order,
-            seg_idx=seg_idx,
-            **shared,
+        _with_quote_rule(
+            FeatureSegment(
+                start=seg_start,
+                end=seg_end,
+                score=seg_score if seg_score is not None else ".",
+                strand=strand,
+                frame=seg_frame if seg_frame is not None else ".",
+                attributes=bytes(seg_blob) if seg_blob is not None else None,
+                extra=seg_extra if seg_extra else None,
+                file_order=seg_order,
+                seg_idx=seg_idx,
+                **shared,
+            ),
+            compat_quotes,
         )
         for (
             _fid,
@@ -927,19 +944,30 @@ def feature_from_row(
             seg_order,
         ) in segments
     ]
-    return MultipartFeature(
-        start=start,
-        end=end,
-        score=score,
-        strand=strand,
-        frame=frame if frame is not None else ".",
-        attributes=blob if blob is not None else None,
-        extra=extra_blob if extra_blob else None,
-        file_order=file_order,
-        n_segments=len(parts),
-        segments=parts,
-        **shared,
+    return _with_quote_rule(
+        MultipartFeature(
+            start=start,
+            end=end,
+            score=score,
+            strand=strand,
+            frame=frame if frame is not None else ".",
+            attributes=blob if blob is not None else None,
+            extra=extra_blob if extra_blob else None,
+            file_order=file_order,
+            n_segments=len(parts),
+            segments=parts,
+            **shared,
+        ),
+        compat_quotes,
     )
+
+
+def _with_quote_rule(feature, compat_quotes: bool):
+    """Apply compat quote reading to a feature whose attributes are unread."""
+    attrs = feature.attributes
+    if compat_quotes and isinstance(attrs, _LazyAttributes) and not attrs._parsed:
+        attrs._compat_quotes = True
+    return feature
 
 
 #: Integer index -> field name, backing `Feature[0]`. Same mapping as
@@ -981,7 +1009,9 @@ def feature_from_line(line: str, dialect=None, strict: bool = True, keep_order: 
         fields = line.rstrip("\n\r").split("\t")
 
     attr_string = fields[8] if len(fields) > 8 else ""
-    pairs, observed = parse_attributes(attr_string)
+    # gffutils reads `ID="g001"` as the value g001 in quotes, and re-quotes on
+    # output because the dialect records quoted values.
+    pairs, observed = parse_attributes(attr_string, compat_whole_value_quotes=True)
     if dialect is None:
         dialect = {**default_dialect(), **observed}
 
