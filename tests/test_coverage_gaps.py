@@ -536,24 +536,24 @@ def test_create_db_kwargs_pass_through_to_keep_tempfiles_skip():
 
 
 def test_dialect_safe_falls_back_when_iterator_lacks_attribute():
-    """ingest._dialect_fmt_safe handles iterators whose .dialect() raises."""
-    from gffbase.ingest import _dialect_fmt_safe
+    """ingest._dialect_safe handles iterators whose .dialect() raises."""
+    from gffbase.ingest import _dialect_safe
 
     class BadIt:
         def dialect(self):
             raise RuntimeError("nope")
 
-    assert _dialect_fmt_safe(BadIt()) == "gff3"
+    assert _dialect_safe(BadIt()) == {"fmt": "gff3"}
 
 
 def test_dialect_safe_returns_default_when_dialect_is_falsy():
-    from gffbase.ingest import _dialect_fmt_safe
+    from gffbase.ingest import _dialect_safe
 
     class EmptyIt:
         def dialect(self):
             return None
 
-    assert _dialect_fmt_safe(EmptyIt()) == "gff3"
+    assert _dialect_safe(EmptyIt()) == {"fmt": "gff3"}
 
 
 def test_export_sqlite_force_overwrite_existing(tmp_path):

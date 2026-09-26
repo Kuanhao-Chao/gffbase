@@ -58,23 +58,41 @@ _AUTOINCREMENT_PREFIX = "autoincrement:"
 
 
 class _FeatureAdapter:
-    """Minimal gffutils-``Feature``-shaped view over a ``ParsedFeature``.
+    """gffutils-``Feature``-shaped view over a ``ParsedFeature``.
 
-    A user-supplied ``id_spec`` callable is written against gffutils, so it
-    expects ``f.attributes[key]`` to return a *list* and the nine GFF columns
-    to be plain attributes. Building a full :class:`~gffbase.feature.Feature`
-    for every row would cost a dict materialization per line at GENCODE scale,
-    so this is constructed only when the id_spec actually contains a callable.
+    ``transform`` and callable ``id_spec`` functions are written against
+    gffutils, so they expect ``f.attributes[key]`` to be a *list*, the nine
+    GFF columns to be plain attributes, and the rest of the gffutils surface:
+    ``f.id`` (``None`` -- the id is assigned after the callable runs),
+    ``f.chrom`` / ``f.stop``, ``f.dialect``, ``len(f)``, ``str(f)``,
+    ``f[key] = value``. Building a full :class:`~gffbase.feature.Feature` per
+    row would cost a dict materialization per line at GENCODE scale, so this
+    is built only when a callable actually runs.
+
+    Attribute edits are kept: the first read of ``attributes`` snapshots it,
+    and ingest (`ingest._unwrap_transformed`) writes a changed mapping back
+    into the record. They used to be discarded -- a transform renaming a gene
+    or adding a key returned "success" and stored the original.
     """
 
-    __slots__ = ("_parsed", "_attributes")
+    __slots__ = ("_parsed", "_attributes", "_snapshot", "_id", "_dialect")
 
     _parsed: Any
     _attributes: dict[str, list[str]] | None
+    _snapshot: dict[str, list[str]] | None
+    _id: Any
+    _dialect: dict | None
 
-    def __init__(self, parsed):
+    _OWN = frozenset(__slots__)
+    #: gffutils' names for two columns.
+    _ALIASES = {"chrom": "seqid", "stop": "end"}
+
+    def __init__(self, parsed, dialect: dict | None = None):
         object.__setattr__(self, "_parsed", parsed)
         object.__setattr__(self, "_attributes", None)
+        object.__setattr__(self, "_snapshot", None)
+        object.__setattr__(self, "_id", None)
+        object.__setattr__(self, "_dialect", dialect)
 
     def __getattr__(self, name):
         # Only reached when normal lookup fails, i.e. for the wrapped
@@ -88,23 +106,103 @@ class _FeatureAdapter:
         then `return f` -- so the adapter has to be writable, not just
         readable, or every such transform dies with AttributeError.
         """
-        if name in ("_parsed", "_attributes"):
+        if name in self._OWN:
             object.__setattr__(self, name, value)
+        elif name == "id":
+            # gffutils assigns the id from `id_spec` after the transform, so
+            # setting it here has no effect there either; it is kept only so
+            # the transform can read back what it wrote.
+            object.__setattr__(self, "_id", value)
+        elif name == "attributes":
+            object.__setattr__(self, "_attributes", self._normalize(value))
+            if self._snapshot is None:
+                object.__setattr__(self, "_snapshot", self._pairs_dict())
         else:
-            setattr(self._parsed, name, value)
+            setattr(self._parsed, self._ALIASES.get(name, name), value)
+
+    def __bool__(self) -> bool:
+        # `__len__` below is the feature's length; without this a feature
+        # with no coordinates would be falsy, and ingest reads a falsy
+        # transform result as "drop this record".
+        return True
+
+    def __len__(self) -> int:
+        start, end = self._parsed.start, self._parsed.end
+        return 0 if start is None or end is None else end - start + 1
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def dialect(self) -> dict:
+        return dict(self._dialect) if self._dialect else {"fmt": "gff3"}
+
+    @property
+    def chrom(self) -> str:
+        return self._parsed.seqid
+
+    @property
+    def stop(self):
+        return self._parsed.end
+
+    def _pairs_dict(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for key, value, _idx in self._parsed.attributes_pairs:
+            out.setdefault(key, []).append(value)
+        _drop_lone_empty_values(out)
+        return out
+
+    @staticmethod
+    def _normalize(mapping) -> dict[str, list[str]]:
+        # gffutils' Attributes wraps a bare value in a list on assignment.
+        return {
+            k: list(v) if isinstance(v, list | tuple) else [v] for k, v in dict(mapping).items()
+        }
 
     @property
     def attributes(self) -> dict[str, list[str]]:
         if self._attributes is None:
-            out: dict[str, list[str]] = {}
-            for key, value, _idx in self._parsed.attributes_pairs:
-                out.setdefault(key, []).append(value)
-            _drop_lone_empty_values(out)
-            self._attributes = out
-        return self._attributes
+            object.__setattr__(self, "_attributes", self._pairs_dict())
+            object.__setattr__(self, "_snapshot", self._pairs_dict())
+        return self._attributes  # type: ignore[return-value]
+
+    def edited_attributes(self) -> dict[str, list[str]] | None:
+        """The attribute mapping if the callable changed it, else None."""
+        if self._attributes is None:
+            return None
+        current = self._normalize(self._attributes)
+        return None if current == self._snapshot else current
 
     def __getitem__(self, key):
         return self.attributes[key]
+
+    def __setitem__(self, key, value) -> None:
+        self.attributes[key] = list(value) if isinstance(value, list | tuple) else [value]
+
+    def __str__(self) -> str:
+        from gffbase._serialize import _reconstruct
+
+        edited = self.edited_attributes()
+        col9 = (
+            self._parsed.attributes_blob.decode("utf-8", errors="replace")
+            if edited is None
+            else _reconstruct(edited, self.dialect)
+        )
+        p = self._parsed
+        cols = [
+            p.seqid,
+            p.source,
+            p.featuretype,
+            "." if p.start is None else str(p.start),
+            "." if p.end is None else str(p.end),
+            p.score,
+            p.strand,
+            p.frame,
+            col9,
+            *p.extra,
+        ]
+        return "\t".join(cols)
 
 
 def _is_callable(obj: Any) -> bool:
