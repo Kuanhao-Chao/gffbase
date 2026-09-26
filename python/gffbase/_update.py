@@ -182,17 +182,18 @@ def source_path(data, from_string: bool) -> tuple[str | None, Callable[[], None]
 
 def stage(path: str, options, autoinc: dict) -> duckdb.DuckDBPyConnection | None:
     """Ingest `path` into a scratch database. None if it holds no features."""
-    from gffbase.ingest import _build_database
+    from gffbase.ingest import _build_database, _verbose_logging
 
     try:
-        con, _stats = _build_database(
-            path,
-            ":memory:",
-            options=options,
-            build_rtree=False,
-            autoinc_seed=autoinc,
-            validate=False,
-        )
+        with _verbose_logging(options.verbose):
+            con, _stats = _build_database(
+                path,
+                ":memory:",
+                options=options,
+                build_rtree=False,
+                autoinc_seed=autoinc,
+                validate=False,
+            )
     except EmptyInputError:
         # gffutils returns early when the new data is empty; there is
         # nothing to add, which is not an error for an update.

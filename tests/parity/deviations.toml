@@ -166,7 +166,17 @@ Every pragma in that dict is SQLite-only and none exists in DuckDB, so
 defaulting to it would mean every `create_db` call began by discarding four
 settings. Passing it explicitly still works and still skips them. gffbase also
 adds `mode` and `on_multipart_conflict`, which the oracle has no equivalent
-for."""
+for.
+
+Behaviour: with a non-default `gtf_gene_key` / `gtf_transcript_key` and the
+default `id_spec`, an inferred parent takes the id the spec names (its
+`gene_id` / `transcript_id`, carried over from its children) and stays linked
+to them. The oracle gives it an autoincremented id and records its relations
+against the grouping value, so the inferred parent ends up disconnected. With
+an `id_spec` that names the same keys the two agree. `text_factory` warns when
+set, since it only configures sqlite3. Pinned by
+`test_gtf_gene_key_groups_transcripts_into_genes` and
+`test_matches_gffutils_when_the_id_spec_names_the_keys`."""
 
 [[deviation]]
 kind = "symbol"
