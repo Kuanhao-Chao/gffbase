@@ -49,6 +49,7 @@ from gffbase.exceptions import (
 )
 from gffbase.feature import Feature, db_row_projection, feature_from_row
 from gffbase.modes import (
+    DERIVED_SOURCE,
     MODE_COMPAT,
     MODE_STRICT,
     ON_ERROR_RAISE,
@@ -57,16 +58,6 @@ from gffbase.modes import (
 )
 from gffbase.schema import SCHEMA_VERSION
 
-#: `source` stamped on features gffbase derives rather than reads.
-#:
-#: Mode-dependent on purpose. A script ported from gffutils filters on
-#: `source == "gffutils_derived"`, and compat mode exists so that script keeps
-#: working; strict mode reports honest provenance instead. The GTF-synthesis
-#: path in `schema.py` writes the strict spelling.
-DERIVED_SOURCE = {
-    MODE_COMPAT: "gffutils_derived",
-    MODE_STRICT: "gffbase_derived",
-}
 
 _log = logging.getLogger("gffbase.interface")
 
