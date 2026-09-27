@@ -31,6 +31,10 @@ Files land in ``benchmarks/data/``:
   * ``MANE.GRCh38.v1.5.ensembl_genomic.gff.gz`` — MANE v1.5 (Ensembl IDs).
   * ``chess3.1.3.GRCh38.gff.gz`` — CHESS 3.1.3 (latest GitHub release).
 
+``--extended`` also fetches the robustness corpora (``EXTENDED_CORPORA``:
+Ensembl mouse, NCBI *E. coli*, FlyBase, WormBase, UCSC GTFs, a Liftoff
+annotation) into ``benchmarks/data/extended/`` -- about 1.9 GB.
+
 Idempotent: an existing file is skipped only after byte-size, SHA-256, and
 gzip CRC verification against the canonical registry.
 """
@@ -47,7 +51,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from benchmarks.common import verify_corpus
-from benchmarks.corpora import BY_FILENAME, CORPORA
+from benchmarks.corpora import BY_FILENAME, CORPORA, EXTENDED_CORPORA, corpus_path
 
 DATA = ROOT / "benchmarks" / "data"
 
@@ -61,9 +65,9 @@ def _human(n: int) -> str:
 
 
 def fetch(name: str, url: str, *, force: bool = False) -> Path:
-    DATA.mkdir(parents=True, exist_ok=True)
-    dst = DATA / name
     expected = BY_FILENAME[name]
+    dst = corpus_path(expected)
+    dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() and not force:
         verified = verify_corpus(
             dst,
@@ -116,6 +120,11 @@ def main() -> None:
         help="restrict to one or more corpora (repeatable). "
         "`gencode` is shorthand for both `gencode-gtf` and `gencode-gff3`.",
     )
+    ap.add_argument(
+        "--extended",
+        action="store_true",
+        help="also fetch the extended robustness corpora (~1.9 GB) into benchmarks/data/extended/",
+    )
     args = ap.parse_args()
 
     selected = set(args.only or ["gencode", "refseq", "mane", "chess"])
@@ -124,6 +133,9 @@ def main() -> None:
         selected.discard("gencode")
     for corpus in CORPORA:
         if corpus["key"] in selected:
+            fetch(str(corpus["filename"]), str(corpus["url"]), force=args.force)
+    if args.extended:
+        for corpus in EXTENDED_CORPORA:
             fetch(str(corpus["filename"]), str(corpus["url"]), force=args.force)
     print("\nAll requested corpora present in:", DATA, flush=True)
 

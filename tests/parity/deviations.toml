@@ -231,7 +231,9 @@ authored transcript with no `gene_id` takes the gene its children name.
 Noisy lines (tests/test_noisy_input.py): a UTF-8 byte-order mark is not part
 of the first seqid (the oracle: `\ufeffchr1`); a whitespace-only line is blank
 (the oracle: a feature with seqid `   ` and id `._1`); `.` in column 9 means no
-attributes (the oracle: a key named `.`, written back as `. ""`); in compat
+attributes (the oracle: a key named `.`, written back as `. ""`);
+`Parent=a,` keeps the value list `['a', '']` but makes no edge to an empty
+parent (the oracle records the relation `('', child)`); in compat
 mode, spaces around a spaced `=` are not part of the key or value (the oracle:
 key `ID `, value ` g1`, so the id is lost). Identifiers: when `create_unique`
 or `merge` renames a duplicate, and when an id is generated, gffbase skips
