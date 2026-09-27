@@ -5,7 +5,7 @@ Installation
 
 .. note::
 
-   **This documentation describes gffbase 0.2.1**
+   **This documentation describes gffbase 0.3.0**
 
    Verify ``gffbase.__version__`` after installing. Upgrading from 0.1.0 fixes two
    SQL injection vulnerabilities and includes breaking changes; read the

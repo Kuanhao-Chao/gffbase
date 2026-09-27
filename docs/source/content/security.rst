@@ -14,17 +14,19 @@ Supported versions
 
    * - Version
      - Supported
-   * - 0.2.1
+   * - 0.3.0
      - ✅ Current release
+   * - 0.2.1
+     - ✅ Supported
    * - 0.2.0
-     - ✅ Supported; upgrade to 0.2.1 for its correctness fixes
+     - ⚠️ Silently loses data in cases fixed in 0.2.1; upgrade
    * - 0.1.0
-     - ⚠️ Affected by two SQL injection vulnerabilities; upgrade to 0.2.1
+     - ⚠️ Affected by two SQL injection vulnerabilities; upgrade to 0.3.0
    * - < 0.1
      - ❌
 
 0.1.0 carries two SQL injection vulnerabilities, fixed in 0.2.0 and not
-backported (`GHSA-5f5g-g3v5-prrg <https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg>`__). Upgrade to 0.2.1, or if you cannot
+backported (`GHSA-5f5g-g3v5-prrg <https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg>`__). Upgrade to 0.3.0, or if you cannot
 yet, apply the mitigations in the
 :doc:`SQL injection advisory <advisory_sql_injection>`. 0.1.1 was prepared but
 never published.

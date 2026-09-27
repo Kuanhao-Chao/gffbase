@@ -8,10 +8,10 @@ All notable changes to GFFBase are documented here.
 The format follows `Keep a Changelog <https://keepachangelog.com/en/1.1.0/>`__, and
 this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.html>`__.
 
-.. _changelog--unreleased:
+.. _changelog--030:
 
-Unreleased
-----------
+`0.3.0 <https://github.com/Kuanhao-Chao/gffbase/compare/v0.2.1...v0.3.0>`__ — 2026-09-27
+----------------------------------------------------------------------------------------
 
 A performance and robustness release: ingest rebuilt around a streaming Rust
 producer, relation queries rewritten around what DuckDB can index, loops over
@@ -19,7 +19,7 @@ a live stream prefetched, and the noisy files real annotation sources publish
 read as they were meant. Every change to what a query returns is declared in
 ``tests/parity/deviations.toml``.
 
-.. _changelog--unreleased-performance:
+.. _changelog--030-performance:
 
 Performance
 ~~~~~~~~~~~
@@ -60,7 +60,7 @@ Performance
 - **DuckDB uses at most 8 threads** for ingest and for a handle opened on a
   file (``GFFBASE_THREADS`` overrides): more bought no time and cost memory.
 
-.. _changelog--unreleased-fixed:
+.. _changelog--030-fixed:
 
 Fixed
 ~~~~~
@@ -102,7 +102,7 @@ Fixed
   convention no longer invents a suffixed gene under ``create_unique``;
   a transform's edit to a multi-valued GTF key repeats the key.
 
-.. _changelog--unreleased-changed:
+.. _changelog--030-changed:
 
 Changed
 ~~~~~~~
@@ -115,7 +115,7 @@ Changed
 - **The ingest connection's DuckDB memory limit** is managed by gffbase unless
   ``pragmas`` sets one; the connection handed back uses DuckDB's default.
 
-.. _changelog--unreleased-added:
+.. _changelog--030-added:
 
 Added
 ~~~~~
@@ -130,7 +130,7 @@ Added
   fetched by ``download_corpora.py --extended``, and tested by
   ``tests/test_corpus_extended.py``.
 
-.. _changelog--unreleased-testing-and-ci:
+.. _changelog--030-testing-and-ci:
 
 Testing and CI
 ~~~~~~~~~~~~~~

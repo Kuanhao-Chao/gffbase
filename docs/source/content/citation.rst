@@ -8,7 +8,7 @@ If gffbase contributes to your research, please cite it.
 ..
 
    Chao, K.-H. (2026). *GFFBase: Rust-accelerated GFF3/GTF parser with a
-   DuckDB-backed storage engine and zero-copy PyArrow interface* (Version 0.2.1)
+   DuckDB-backed storage engine and zero-copy PyArrow interface* (Version 0.3.0)
    [Computer software]. https://github.com/Kuanhao-Chao/gffbase
 
 .. _citation--bibtex:
@@ -23,7 +23,7 @@ BibTeX
      title   = {{GFFBase}: Rust-accelerated GFF3/GTF parser with a
                 DuckDB-backed storage engine and zero-copy PyArrow interface},
      year    = 2026,
-     version = {0.2.1},
+     version = {0.3.0},
      url     = {https://github.com/Kuanhao-Chao/gffbase},
    }
 
