@@ -53,8 +53,8 @@ def _campaign(tmp_path: Path) -> dict[str, object]:
         # environment has to hand the CONSUMER a path it can stat.
         "candidate": {
             "wheel": {
-                "name": "gffbase-0.2.0rc1.whl",
-                "path": "/staged/wheels/gffbase-0.2.0rc1.whl",
+                "name": "gffbase-0.3.0.whl",
+                "path": "/staged/wheels/gffbase-0.3.0.whl",
                 "sha256": "a" * 64,
             }
         },
@@ -88,8 +88,8 @@ def test_schema_release_and_binding_constants_are_exact() -> None:
     assert model.RESULTS_SCHEMA == "campaign-results-v2"
     assert model.INDEX_SCHEMA == "results-index-v2"
     assert model.SIGNATURE_SCHEMA == "database-signature-v3"
-    assert model.PUBLIC_VERSION == "0.2.0rc1"
-    assert model.CARGO_VERSION == "0.2.0-rc.1"
+    assert model.PUBLIC_VERSION == "0.3.0"
+    assert model.CARGO_VERSION == "0.3.0"
     assert model.binding_parameters() == {
         "legacy_timeout": 5400,
         "gffbase_timeout": 3600,
@@ -408,7 +408,7 @@ def test_worker_environment_is_bounded_and_ambient_secret_free(tmp_path: Path) -
     assert env["GFFBASE_THREADS"] == env["GFFUTILS2_THREADS"] == "1"
     # The path, not the name: the consumer stats it. See
     # `test_the_candidate_wheel_is_passed_as_a_usable_path`.
-    assert env["GFFBASE_BENCH_WHEEL"] == "/staged/wheels/gffbase-0.2.0rc1.whl"
+    assert env["GFFBASE_BENCH_WHEEL"] == "/staged/wheels/gffbase-0.3.0.whl"
     assert env["GFFBASE_BENCH_WHEEL_SHA256"] == "a" * 64
     assert env["GFFBASE_BENCH_OUT"] == str((tmp_path / "attempt" / "scratch").resolve())
     assert "PYTHONPATH" not in env

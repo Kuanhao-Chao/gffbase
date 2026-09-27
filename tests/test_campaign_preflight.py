@@ -518,18 +518,18 @@ def test_input_verification_is_descriptor_bound_and_rejects_aliases(tmp_path: Pa
 
 
 def test_candidate_wheel_is_hashed_from_a_no_follow_snapshot(tmp_path: Path) -> None:
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_x86_64.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
-            "gffbase-0.2.0rc1.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: gffbase\nVersion: 0.2.0rc1\n",
+            "gffbase-0.3.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: gffbase\nVersion: 0.3.0\n",
         )
     identity = preflight.verify_candidate_wheel(wheel)
 
     assert identity["path"] == str(wheel)
     assert identity["bytes"] == wheel.stat().st_size
     assert identity["sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest()
-    alias = tmp_path / "gffbase-0.2.0rc1-cp311-abi3-manylinux_x86_64.whl"
+    alias = tmp_path / "gffbase-0.3.0-cp311-abi3-manylinux_x86_64.whl"
     alias.symlink_to(wheel)
     with pytest.raises(model.CampaignError, match="symlink"):
         preflight.verify_candidate_wheel(alias)

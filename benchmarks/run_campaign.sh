@@ -37,9 +37,9 @@ set -euo pipefail
 
 REPO=/ccb/salz3/kh.chao/gffbase
 STAGE=/ccb/salz3/kh.chao/.gffbase-tmp
-RUN_ID="${RUN_ID:-linux-$(date +%Y%m%d)-v020rc1}"
+RUN_ID="${RUN_ID:-linux-$(date +%Y%m%d)-v030}"
 CAMPAIGN_ROOT="${CAMPAIGN_ROOT:-/srv/nvme1/$USER/gffbase-campaign}"
-WHEEL="$STAGE/wheels/gffbase-0.2.0rc1-cp310-abi3-linux_x86_64.whl"
+WHEEL="$STAGE/wheels/gffbase-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl"
 PRIMARY="$STAGE/conda_primary/bin/python3.11"
 GFFBASE_010="$STAGE/conda_gffbase010/bin/python3.11"
 GFFUTILS_013="$STAGE/conda_gffutils013/bin/python3.11"
