@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import shutil
 import sys
 import time
@@ -434,16 +435,28 @@ class _NativeRows:
 
     def __init__(self, producer):
         self.producer = producer
+        self._finished: tuple | None = None
+
+    def finish(self) -> None:
+        """Keep what is asked of the parser later, and let the producer go.
+
+        Its id map holds every id in the file -- about 0.5 GB for GENCODE --
+        and nothing after the load needs it; held, it sat through the key,
+        closure and index builds, the steps that need memory most.
+        """
+        p = self.producer
+        self._finished = (p.dialect(), list(p.directives()), list(p.warnings()))
+        self.producer = None
 
     def dialect(self) -> dict:
-        return self.producer.dialect()
+        return self._finished[0] if self._finished else self.producer.dialect()
 
     def directives(self) -> list:
-        return list(self.producer.directives())
+        return self._finished[1] if self._finished else list(self.producer.directives())
 
     @property
     def warnings(self) -> list[dict]:
-        return list(self.producer.warnings())
+        return self._finished[2] if self._finished else list(self.producer.warnings())
 
 
 def _native_producer(it, options, batch_size: int, autoinc: dict):
@@ -474,20 +487,33 @@ def _native_producer(it, options, batch_size: int, autoinc: dict):
     return _NativeRows(producer), dialect, fmt
 
 
+_BYTES_TYPES = {
+    "str": pa.string(),
+    "bin": pa.binary(),
+    "large_str": pa.large_string(),
+    "large_bin": pa.large_binary(),
+}
+
+
+def _buffer(owned) -> pa.Buffer:
+    """A pyarrow buffer over memory the producer filled, without a copy;
+    `owned` stays alive as long as any array uses it."""
+    return pa.foreign_buffer(owned.address, owned.size, base=owned)
+
+
 def _column(spec, length: int) -> pa.Array:
     """One column from the producer's buffers."""
     kind = spec[0]
-    if kind in ("str", "bin"):
-        typ = pa.large_string() if kind == "str" else pa.large_binary()
+    if kind in _BYTES_TYPES:
         return pa.Array.from_buffers(
-            typ, length, [None, pa.py_buffer(spec[1]), pa.py_buffer(spec[2])]
+            _BYTES_TYPES[kind], length, [None, _buffer(spec[1]), _buffer(spec[2])]
         )
     if kind == "i64":
-        validity = None if spec[2] is None else pa.py_buffer(spec[2])
+        validity = None if spec[2] is None else _buffer(spec[2])
         return pa.Array.from_buffers(
-            pa.int64(), length, [validity, pa.py_buffer(spec[1])], null_count=spec[3]
+            pa.int64(), length, [validity, _buffer(spec[1])], null_count=spec[3]
         )
-    return pa.Array.from_buffers(pa.int32(), length, [None, pa.py_buffer(spec[1])])
+    return pa.Array.from_buffers(pa.int32(), length, [None, _buffer(spec[1])])
 
 
 def _tables_from_producer(batch: dict) -> tuple[pa.Table, pa.Table]:
@@ -502,10 +528,19 @@ def _tables_from_producer(batch: dict) -> tuple[pa.Table, pa.Table]:
             for name in _ArrowBatchBuilder.FEATURES_SCHEMA.names
         }
     )
+    # `feature_id` and `key` arrive dictionary-encoded -- row numbers into the
+    # batch's own `id` column, and indices into its handful of keys -- which
+    # DuckDB reads as fast as spelled-out strings, in a fraction of the memory.
+    keys_spec = batch["a_keys"]
+    n_keys = keys_spec[1].size // (4 if keys_spec[0] == "str" else 8) - 1
     attrs = pa.table(
         {
-            "feature_id": _column(batch["a_feature_id"], m),
-            "key": _column(batch["a_key"], m),
+            "feature_id": pa.DictionaryArray.from_arrays(
+                _column(batch["a_feature_row"], m), feats["id"].chunk(0)
+            ),
+            "key": pa.DictionaryArray.from_arrays(
+                _column(batch["a_key"], m), _column(keys_spec, n_keys)
+            ),
             "value": _column(batch["a_value"], m),
             "idx": _column(batch["a_idx"], m),
         }
@@ -1595,6 +1630,7 @@ def _build_database(
     clock = _StageClock()
     con = duckdb.connect(dbfn)
     _apply_pragmas(con, options.pragmas)
+    budget = _MemoryBudget(con, dbfn, options.pragmas)
     con.execute(DDL)
 
     # Load the spatial extension UPFRONT (it used to be lazy, after bulk
@@ -1671,6 +1707,9 @@ def _build_database(
             )
             for fid in batch["dropped"]:
                 _log.warning("Duplicate lines in file for id '%s'; ignoring all but the first", fid)
+            # Before the next batch is built, not after: holding this one
+            # through the next call kept two batches alive at the peak.
+            del batch, feats, attrs
             n_raw = producer.counts()[0]
             if report and n_raw // _PROGRESS_EVERY > logged:
                 logged = n_raw // _PROGRESS_EVERY
@@ -1679,6 +1718,8 @@ def _build_database(
         autoinc.clear()
         autoinc.update(producer.autoincrements())
         seqid_to_y.update(producer.seqid_map())
+        del producer
+        it.finish()
 
     for feat in records:
         file_order += 1
@@ -1792,7 +1833,7 @@ def _build_database(
 
     # Before anything looks a feature up by id: the merge/replace pass below
     # does, row by row.
-    _add_features_primary_key(con)
+    budget.run(_add_features_primary_key, con)
     clock.mark("primary_key")
     if report:
         _log.info(
@@ -1943,7 +1984,7 @@ def _build_database(
 
     # Closure via recursive CTE.
     _log.info("building the transitive closure (depth <= %d)", max_depth)
-    build_closure(con, max_depth)
+    budget.run(build_closure, con, max_depth)
     clock.mark("closure")
 
     # A cyclic `Parent` graph is malformed GFF3. The walk above no longer
@@ -1968,7 +2009,7 @@ def _build_database(
 
     # Indexes — only after all data is materialized.
     _log.info("building indexes")
-    con.execute(POST_LOAD_INDEXES)
+    budget.run(con.execute, POST_LOAD_INDEXES)
     clock.mark("indexes")
 
     # Optional R-tree. When spatial is loaded, this is a
@@ -1977,7 +2018,7 @@ def _build_database(
     rtree_built = False
     if has_spatial:
         _log.info("building the R-tree")
-        rtree_built = _finalize_rtree(con)
+        rtree_built = budget.run(_finalize_rtree, con)
         clock.mark("rtree")
 
     # SQLite-compat views (must run after closure has been populated).
@@ -2015,6 +2056,7 @@ def _build_database(
     n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
     n_edges = scalar(con, "SELECT COUNT(*) FROM edges")
     n_closure = scalar(con, "SELECT COUNT(*) FROM closure")
+    budget.release()
     clock.mark("stats")
     if report:
         _log.info(
@@ -2072,6 +2114,78 @@ def _dialect_safe(it) -> dict:
     except Exception:
         pass
     return {"fmt": "gff3"}
+
+
+#: DuckDB's memory limit while ingesting into a file, unless `pragmas` sets
+#: one. DuckDB's own default is 80 % of RAM and, under no pressure, it keeps
+#: every block it writes: GENCODE GFF3 peaked at 5.4 GB of RSS by default, in
+#: the same time as under a limit. The load itself runs in this much; the
+#: steps after it that need more (a primary key over millions of ids) get
+#: it -- see `_MemoryBudget`.
+INGEST_MEMORY_LIMIT = 512 << 20
+
+_SIZE_UNITS = {
+    "B": 1,
+    "KB": 10**3,
+    "MB": 10**6,
+    "GB": 10**9,
+    "TB": 10**12,
+    "KIB": 2**10,
+    "MIB": 2**20,
+    "GIB": 2**30,
+    "TIB": 2**40,
+    "PIB": 2**50,
+}
+
+
+def _setting_bytes(text: str) -> int | None:
+    """A DuckDB size setting as it reports it (`'805.7 GiB'`), in bytes."""
+    match = re.fullmatch(r"\s*([0-9.]+)\s*([A-Za-z]+)\s*", str(text))
+    if not match or match.group(2).upper() not in _SIZE_UNITS:
+        return None
+    return int(float(match.group(1)) * _SIZE_UNITS[match.group(2).upper()])
+
+
+class _MemoryBudget:
+    """DuckDB's memory limit during ingest: small, raised only on demand.
+
+    Starts at `INGEST_MEMORY_LIMIT`. A step that runs out is retried with the
+    limit doubled, up to DuckDB's own default: the primary key over FlyBase's
+    31.8 M ids needs about 2 GB, so a fixed limit small enough for GENCODE
+    would fail there. Only steps that leave nothing behind when they fail go
+    through `run`. Inactive for an in-memory database -- its tables cannot be
+    evicted, so a limit below their size can only fail -- and when `pragmas`
+    sets `memory_limit`: the caller has decided. `release` hands the
+    connection back with DuckDB's own limit, for the queries that follow.
+    """
+
+    def __init__(self, con, dbfn: str, pragmas: dict | None):
+        self.con = con
+        chosen = any(str(key).lower() == "memory_limit" for key in (pragmas or {}))
+        current = con.execute("SELECT current_setting('memory_limit')").fetchone()[0]
+        self.ceiling = _setting_bytes(current) or 0
+        self.limit = INGEST_MEMORY_LIMIT
+        self.active = dbfn != ":memory:" and not chosen and self.limit < self.ceiling
+        if self.active:
+            self._set(self.limit)
+
+    def _set(self, limit: int) -> None:
+        self.con.execute(f"SET memory_limit = '{int(limit)}B'")
+
+    def run(self, fn, *args):
+        while True:
+            try:
+                return fn(*args)
+            except duckdb.OutOfMemoryException:
+                if not self.active or self.limit >= self.ceiling:
+                    raise
+                self.limit = min(self.limit * 2, self.ceiling)
+                self._set(self.limit)
+                _log.info("raising DuckDB's memory limit to %.1f GiB", self.limit / 2**30)
+
+    def release(self) -> None:
+        if self.active:
+            self.con.execute("RESET memory_limit")
 
 
 #: Ingest is mostly serial -- parsing and per-row work -- so DuckDB threads
@@ -2300,6 +2414,8 @@ def _finalize_rtree(con: duckdb.DuckDBPyConnection) -> bool:
     try:
         con.execute("CREATE INDEX IF NOT EXISTS features_rtree ON features USING RTREE (bbox)")
         return True
+    except duckdb.OutOfMemoryException:
+        raise  # `_MemoryBudget.run` retries it with more; not a reason to go without
     except duckdb.Error:
         return False
 

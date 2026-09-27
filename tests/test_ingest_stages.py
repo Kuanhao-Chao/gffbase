@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from gffbase._options import IngestOptions
 from gffbase.ingest import from_file
 
@@ -80,3 +81,109 @@ def test_the_environment_and_pragmas_override_the_thread_default(tmp_path, monke
     assert _threads(tmp_path) == 3
     options = IngestOptions(pragmas={"threads": 2})
     assert _threads(tmp_path, options=options) == 2
+
+
+# ---------------------------------------------------------------------------
+# The memory budget
+# ---------------------------------------------------------------------------
+
+
+def _limit(con) -> int:
+    from gffbase.ingest import _setting_bytes
+
+    return _setting_bytes(con.execute("SELECT current_setting('memory_limit')").fetchone()[0])
+
+
+def test_a_file_ingest_runs_under_the_budget_and_hands_back_duckdbs_limit(tmp_path, monkeypatch):
+    import duckdb
+    from gffbase import ingest
+
+    default = _limit(duckdb.connect())
+    seen = []
+    real = ingest._add_features_primary_key
+    monkeypatch.setattr(
+        ingest, "_add_features_primary_key", lambda con: (seen.append(_limit(con)), real(con))
+    )
+    path = tmp_path / "a.gff3"
+    path.write_text(GFF3)
+    con, _ = from_file(str(path), str(tmp_path / "a.duckdb"))
+    assert seen == [pytest.approx(ingest.INGEST_MEMORY_LIMIT, rel=0.01)]
+    assert _limit(con) == pytest.approx(default, rel=0.01)
+
+
+@pytest.mark.parametrize("case", ["in_memory", "caller_chose"])
+def test_the_budget_stays_out_of_the_way(case, tmp_path, monkeypatch):
+    import duckdb
+    from gffbase import ingest
+
+    seen = []
+    real = ingest._add_features_primary_key
+    monkeypatch.setattr(
+        ingest, "_add_features_primary_key", lambda con: (seen.append(_limit(con)), real(con))
+    )
+    path = tmp_path / "a.gff3"
+    path.write_text(GFF3)
+    if case == "in_memory":
+        from_file(str(path), ":memory:")
+        assert seen == [pytest.approx(_limit(duckdb.connect()), rel=0.01)]
+    else:
+        from_file(
+            str(path),
+            str(tmp_path / "a.duckdb"),
+            options=IngestOptions(pragmas={"memory_limit": "3GB"}),
+        )
+        # DuckDB reports sizes to 0.1 GiB ("2.7 GiB" for 3 GB).
+        assert seen == [pytest.approx(3 * 10**9, rel=0.05)]
+
+
+def test_a_step_that_runs_out_is_retried_with_twice_the_limit(tmp_path, caplog):
+    import logging
+
+    import duckdb
+    from gffbase.ingest import INGEST_MEMORY_LIMIT, _MemoryBudget
+
+    con = duckdb.connect(str(tmp_path / "b.duckdb"))
+    budget = _MemoryBudget(con, str(tmp_path / "b.duckdb"), None)
+    attempts = []
+
+    def step():
+        attempts.append(_limit(con))
+        if len(attempts) < 3:
+            raise duckdb.OutOfMemoryException("out of memory")
+        return "done"
+
+    with caplog.at_level(logging.INFO, logger="gffbase.ingest"):
+        assert budget.run(step) == "done"
+    assert attempts == [pytest.approx(INGEST_MEMORY_LIMIT * k, rel=0.01) for k in (1, 2, 4)]
+    assert "raising DuckDB's memory limit" in caplog.text
+
+
+def test_running_out_at_the_ceiling_is_an_error(tmp_path):
+    import duckdb
+    from gffbase.ingest import _MemoryBudget
+
+    con = duckdb.connect(str(tmp_path / "c.duckdb"))
+    budget = _MemoryBudget(con, str(tmp_path / "c.duckdb"), None)
+
+    def step():
+        raise duckdb.OutOfMemoryException("out of memory")
+
+    with pytest.raises(duckdb.OutOfMemoryException):
+        budget.run(step)
+    assert budget.limit == budget.ceiling
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("805.7 GiB", int(805.7 * 2**30)),
+        ("976.5 MiB", int(976.5 * 2**20)),
+        ("512 KB", 512_000),
+        ("3GB", 3 * 10**9),
+        ("unlimited", None),
+    ],
+)
+def test_duckdb_size_settings_are_read(text, expected):
+    from gffbase.ingest import _setting_bytes
+
+    assert _setting_bytes(text) == expected

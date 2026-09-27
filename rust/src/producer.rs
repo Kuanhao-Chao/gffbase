@@ -88,9 +88,14 @@ pub struct Bytes {
 
 impl Bytes {
     fn new() -> Self {
+        Bytes::with_capacity(0, 0)
+    }
+    fn with_capacity(rows: usize, bytes: usize) -> Self {
+        let mut offsets = Vec::with_capacity(rows + 1);
+        offsets.push(0);
         Bytes {
-            offsets: vec![0],
-            data: Vec::new(),
+            offsets,
+            data: Vec::with_capacity(bytes),
         }
     }
     fn push(&mut self, value: &[u8]) {
@@ -148,8 +153,15 @@ pub struct Batch {
     pub id_origin: Bytes,
     pub seqid_y: Vec<i64>,
     pub a_n: usize,
-    pub a_feature_id: Bytes,
-    pub a_key: Bytes,
+    /// Each attribute row's feature, as its row in this batch: the column is
+    /// dictionary-encoded against `id`. Spelled out, the repeated ids were
+    /// the largest buffer in a batch (96 MiB of MANE's 346).
+    pub a_feature_row: Vec<i32>,
+    /// Each attribute row's key, as an index into `a_keys`: a file has a few
+    /// dozen distinct keys and millions of attribute rows.
+    pub a_key: Vec<i32>,
+    pub a_keys: Bytes,
+    a_key_index: HashMap<String, i32>,
     pub a_value: Bytes,
     pub a_idx: Vec<i32>,
     /// `merge` / `replace` rows: (id, file_order, record).
@@ -158,7 +170,58 @@ pub struct Batch {
     pub dropped: Vec<String>,
 }
 
+/// Buffer sizes of the previous batch, reserved up front for the next so
+/// the buffers are not grown by doubling -- which left up to half of each
+/// one unused at the peak.
+#[derive(Clone, Copy, Default)]
+pub struct Hint {
+    rows: usize,
+    attribute_rows: usize,
+    text: usize,
+    blob: usize,
+    value: usize,
+}
+
 impl Batch {
+    fn with_hint(h: Hint) -> Self {
+        // Headroom for a batch a little larger than the last.
+        let grow = |n: usize| n + n / 8;
+        let (rows, attrs) = (grow(h.rows), grow(h.attribute_rows));
+        let text = || Bytes::with_capacity(rows, grow(h.text));
+        Batch {
+            id: text(),
+            seqid: text(),
+            source: text(),
+            featuretype: text(),
+            score: text(),
+            strand: text(),
+            frame: text(),
+            raw_id: text(),
+            id_origin: text(),
+            attributes_blob: Bytes::with_capacity(rows, grow(h.blob)),
+            extra_blob: Bytes::with_capacity(rows, 0),
+            file_order: Vec::with_capacity(rows),
+            occ: Vec::with_capacity(rows),
+            seqid_y: Vec::with_capacity(rows),
+            a_feature_row: Vec::with_capacity(attrs),
+            a_key: Vec::with_capacity(attrs),
+            a_idx: Vec::with_capacity(attrs),
+            a_value: Bytes::with_capacity(attrs, grow(h.value)),
+            a_keys: Bytes::new(),
+            ..Default::default()
+        }
+    }
+
+    fn hint(&self) -> Hint {
+        Hint {
+            rows: self.n,
+            attribute_rows: self.a_n,
+            text: self.id.data.len(),
+            blob: self.attributes_blob.data.len(),
+            value: self.a_value.data.len(),
+        }
+    }
+
     fn new() -> Self {
         Batch {
             id: Bytes::new(),
@@ -172,8 +235,7 @@ impl Batch {
             extra_blob: Bytes::new(),
             raw_id: Bytes::new(),
             id_origin: Bytes::new(),
-            a_feature_id: Bytes::new(),
-            a_key: Bytes::new(),
+            a_keys: Bytes::new(),
             a_value: Bytes::new(),
             ..Default::default()
         }
@@ -183,11 +245,10 @@ impl Batch {
 pub struct Producer {
     pub iter: RecordIter,
     cfg: Config,
-    /// id -> how many lines so far yielded it, plus every generated or
-    /// renamed id (count 1): the Python loop's `seen_ids`.
-    seen: HashMap<String, u32>,
-    /// id -> line of its first occurrence, for the duplicate error.
-    first_line: HashMap<String, usize>,
+    /// id -> (how many lines so far yielded it, the line of the first), plus
+    /// every generated or renamed id (count 1): the Python loop's `seen_ids`,
+    /// with what the duplicate error quotes. One map, so one copy of each id.
+    seen: HashMap<Box<str>, (u32, u32)>,
     pub autoinc: HashMap<String, i64>,
     /// Autoincrement bases in the order they were first used.
     pub autoinc_order: Vec<String>,
@@ -197,6 +258,7 @@ pub struct Producer {
     pub n_raw: u64,
     pub n_skipped: u64,
     done: bool,
+    hint: Option<Hint>,
 }
 
 impl Producer {
@@ -211,7 +273,6 @@ impl Producer {
             iter,
             cfg,
             seen: HashMap::new(),
-            first_line: HashMap::new(),
             autoinc,
             autoinc_order,
             seqid_y: HashMap::new(),
@@ -220,6 +281,7 @@ impl Producer {
             n_raw: 0,
             n_skipped: 0,
             done: false,
+            hint: None,
         }
     }
 
@@ -275,7 +337,7 @@ impl Producer {
         if self.done {
             return Ok(None);
         }
-        let mut batch = Batch::new();
+        let mut batch = self.hint.map_or_else(Batch::new, Batch::with_hint);
         while batch.n < self.cfg.batch_size {
             let mut rec = match self.iter.next() {
                 None => {
@@ -304,20 +366,23 @@ impl Producer {
             if generated {
                 // A generated id a line before this one used literally is not
                 // a duplicate of it; draw the next free one instead.
-                while self.seen.contains_key(&fid) {
+                while self.seen.contains_key(fid.as_str()) {
                     fid = self.autoincrement(&rec.featuretype);
                 }
             }
             let raw_id = fid.clone();
-            let occ = self.seen.get(&fid).copied().unwrap_or(0);
+            let (occ, first) = self
+                .seen
+                .get(fid.as_str())
+                .copied()
+                .unwrap_or((0, line_no as u32));
             if occ > 0 {
                 match self.cfg.strategy {
                     Strategy::Fuse => {
                         fid = format!("{raw_id}{}{occ}", self.cfg.surrogate_sep);
                     }
                     Strategy::Error => {
-                        let first = self.first_line.get(&fid).copied().unwrap_or(0);
-                        return Err(Stop::Duplicate(fid, line_no, first));
+                        return Err(Stop::Duplicate(fid, line_no, first as usize));
                     }
                     Strategy::Warning => {
                         batch.dropped.push(fid);
@@ -326,7 +391,7 @@ impl Producer {
                     }
                     Strategy::CreateUnique => {
                         fid = self.autoincrement(&raw_id);
-                        while self.seen.contains_key(&fid) {
+                        while self.seen.contains_key(fid.as_str()) {
                             fid = self.autoincrement(&raw_id);
                         }
                     }
@@ -335,12 +400,12 @@ impl Producer {
                         continue;
                     }
                 }
-            } else {
-                self.first_line.entry(raw_id.clone()).or_insert(line_no);
             }
-            self.seen.insert(raw_id.clone(), occ + 1);
+            self.seen
+                .insert(raw_id.clone().into_boxed_str(), (occ + 1, first));
             if fid != raw_id {
-                self.seen.insert(fid.clone(), 1);
+                self.seen
+                    .insert(fid.clone().into_boxed_str(), (1, line_no as u32));
             }
             let origin = if generated {
                 "autoincrement"
@@ -352,6 +417,7 @@ impl Producer {
         if batch.n == 0 && batch.deferred.is_empty() && batch.dropped.is_empty() && self.done {
             return Ok(None);
         }
+        self.hint = Some(batch.hint());
         Ok(Some(batch))
     }
 
@@ -409,9 +475,18 @@ impl Producer {
                     continue;
                 }
             }
+            let key = match b.a_key_index.get(k.as_str()) {
+                Some(i) => *i,
+                None => {
+                    let i = b.a_key_index.len() as i32;
+                    b.a_key_index.insert(k.clone(), i);
+                    b.a_keys.push(k.as_bytes());
+                    i
+                }
+            };
             b.a_n += 1;
-            b.a_feature_id.push(fid.as_bytes());
-            b.a_key.push(k.as_bytes());
+            b.a_feature_row.push((b.n - 1) as i32);
+            b.a_key.push(key);
             b.a_value.push(v.as_bytes());
             b.a_idx.push(*idx);
         }
