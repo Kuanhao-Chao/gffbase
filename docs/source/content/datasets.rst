@@ -110,6 +110,60 @@ ingests in twenty seconds.
 
 ----
 
+.. _datasets--extended-corpora:
+
+Extended corpora
+----------------
+
+Nine more files, for robustness rather than the headline numbers: each is a
+convention the five human annotations above do not exercise. They are pinned
+by URL, size and SHA-256 in ``benchmarks/corpora.py`` (``EXTENDED_CORPORA``),
+fetched into ``benchmarks/data/extended/`` by
+``python benchmarks/download_corpora.py --extended`` (about 1.9 GB), and
+ingested and fully validated by ``tests/test_corpus_extended.py``
+(``pytest -m corpus``).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 12 14 44
+
+   * - Corpus
+     - Format
+     - Download
+     - What it exercises
+   * - **Ensembl 116** mouse
+     - GFF3, GTF
+     - 78, 103 MB
+     - ``gene:``/``transcript:`` id prefixes; a non-human genome of the
+       same shape
+   * - **NCBI RefSeq** *E. coli* K-12
+     - GFF3
+     - 0.4 MB
+     - a prokaryote: a circular replicon, genes without transcripts
+   * - **FlyBase** r6.69
+     - GFF3
+     - 786 MB
+     - shipped as a gzipped *tar*; 31.8 M rows, most of them alignments
+   * - **WormBase** WS298
+     - GFF3, GTF
+     - 742, 8 MB
+     - 53 M rows of mixed evidence; the canonical gene set as GTF
+   * - **UCSC** hg38 ``knownGene``, ``ncbiRefSeq``
+     - GTF
+     - 37, 40 MB
+     - no gene rows; one transcript id on several contigs
+   * - **T2T CHM13** RefSeq Liftoff v5.2
+     - GFF3
+     - 54 MB
+     - Liftoff's ``_1`` copies of lifted features
+
+FlyBase, WormBase and Ensembl mouse are tested as whole-sequence slices (one
+chromosome each) so the test stays in minutes; the full files load too.
+UCSC and NCBI replace some of these files in place, so a digest mismatch there
+means a new upstream build rather than a corrupt download.
+
+----
+
 .. _datasets--sources:
 
 Sources

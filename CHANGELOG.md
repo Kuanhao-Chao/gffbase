@@ -82,8 +82,8 @@ read as they were meant. Every change to what a query returns is declared in
   does:** one quoted line no longer re-quotes a whole file on output.
 - **The CLI reports a user error in one line** and exits 1; both engines
   raise `FileNotFoundError` for a missing file.
-- **`DuplicateIDError` names both lines:** "Duplicate ID g1 (line 4, first
-  seen on line 2)".
+- **A duplicate-id error names both lines:** `DuplicateIDError` says
+  "Duplicate ID g1 (line 4, first seen on line 2)".
 - **Smaller parity gaps:** `bed12` block order for exons sharing a start;
   `DataIterator.peek`; `GFFWriter.write_mRNA_children(mRNA_id=...)`;
   `parser.Quoter` is a `defaultdict`; the UCSC `gene_id "X"; transcript_id
