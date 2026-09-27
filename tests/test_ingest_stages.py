@@ -55,3 +55,28 @@ def test_no_trace_by_default(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("GFFBASE_INGEST_TRACE", raising=False)
     _stats(tmp_path, GFF3, "a.gff3")
     assert "gffbase ingest:" not in capsys.readouterr().err
+
+
+def _threads(tmp_path, **kw):
+    path = tmp_path / "t.gff3"
+    path.write_text(GFF3)
+    con, _ = from_file(str(path), ":memory:", **kw)
+    return int(con.execute("SELECT current_setting('threads')").fetchone()[0])
+
+
+def test_ingest_uses_at_most_eight_threads_by_default(tmp_path, monkeypatch):
+    """Threads past a handful bought MANE no time and cost 1.2 GiB of RSS."""
+    import os
+
+    from gffbase.ingest import INGEST_THREADS
+
+    monkeypatch.delenv("GFFBASE_THREADS", raising=False)
+    monkeypatch.delenv("GFFUTILS2_THREADS", raising=False)
+    assert _threads(tmp_path) == min(INGEST_THREADS, os.cpu_count() or 1)
+
+
+def test_the_environment_and_pragmas_override_the_thread_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("GFFBASE_THREADS", "3")
+    assert _threads(tmp_path) == 3
+    options = IngestOptions(pragmas={"threads": 2})
+    assert _threads(tmp_path, options=options) == 2
