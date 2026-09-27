@@ -84,11 +84,9 @@ Every figure below is generated from the committed benchmark artifact, never
 typed in. See :doc:`content/performance` for the full sweep and
 :doc:`content/methodology` for how it was run.
 
-**Read the ingest column as a draw.** gffbase spans 1.21× to 0.69× against
-``gffutils``: ahead where per-feature overhead dominates, behind on the
-attribute-dense whole-genome files. Both engines are attribute-bound and
-effectively serial. The durable advantages — batched extraction, spatial
-indexing, SQL over the whole corpus — are elsewhere. ``peak RSS`` is ingest plus
+**gffbase ingests every corpus faster**, 1.92× to 3.62× against ``gffutils``,
+into a smaller database. Batched extraction, spatial indexing and SQL over the
+whole corpus come on top. ``peak RSS`` is ingest plus
 exhaustive validation, not what the default path costs.
 
 .. BEGIN GENERATED: corpus-table
@@ -109,48 +107,48 @@ exhaustive validation, not what the default path costs.
    * - **GENCODE v49** (basic)
      - GTF
      - 6,068,892
-     - **10 min 14 s**
-     - 7 min 1 s
-     - **0.69×**
-     - 53.57 GB
-     - **707** ±0% (n=5)
-     - 963 ms / 1.93 M desc
+     - **3 min 36 s**
+     - 6 min 54 s
+     - **1.92×**
+     - 53.47 GB
+     - **728** ±1% (n=5)
+     - 614 ms / 1.93 M desc
    * - **GENCODE v49** (basic)
      - GFF3
      - 6,066,054
-     - **11 min 8 s**
-     - 9 min 59 s
-     - **0.90×**
-     - 62.00 GB
-     - **705** ±0% (n=5)
-     - 1096 ms / 1.93 M desc
+     - **3 min 13 s**
+     - 9 min 45 s
+     - **3.03×**
+     - 61.93 GB
+     - **770** ±1% (n=5)
+     - 666 ms / 1.93 M desc
    * - **RefSeq GRCh38.p14**
      - GFF3
      - 4,932,571
-     - **7 min 2 s**
-     - 6 min 34 s
-     - **0.93×**
-     - 26.80 GB
-     - **540** ±0% (n=5)
-     - 588 ms / 999 k desc
+     - **2 min 5 s**
+     - 6 min 31 s
+     - **3.13×**
+     - 26.69 GB
+     - **588** ±1% (n=5)
+     - 443 ms / 999 k desc
    * - **CHESS 3.1.3**
      - GFF3
      - 2,761,061
-     - **1 min 53 s**
-     - 2 min 17 s
-     - **1.21×**
-     - 3.38 GB
-     - **702** ±0% (n=5)
-     - 202 ms / 161 k desc
+     - **37.0 s**
+     - 2 min 14 s
+     - **3.62×**
+     - 2.93 GB
+     - **678** ±3% (n=5)
+     - 155 ms / 161 k desc
    * - **MANE v1.5** (Ensembl)
      - GFF3
      - 524,834
-     - **40.0 s**
-     - 45.7 s
-     - **1.14×**
-     - 3.98 GB
-     - **840** ±0% (n=5)
-     - 206 ms / 156 k desc
+     - **15.6 s**
+     - 45.1 s
+     - **2.89×**
+     - 4.00 GB
+     - **890** ±0% (n=5)
+     - 136 ms / 156 k desc
 
 .. END GENERATED: corpus-table
 

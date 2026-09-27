@@ -12,8 +12,9 @@ Threads
 
 DuckDB's own default is one thread per core. gffbase uses at most **8** --
 for ingest and for a handle it opens on a file -- because more bought no time
-and cost memory: MANE ingest took 38.2 s at 8 threads and 38.4 s at 128, with
-peak RSS 1.5 GiB against 2.7 GiB, and a loop over genes ran faster at 8.
+and cost memory: MANE ingest took 15.8-16.1 s at 8, 32 and 128 threads alike,
+while peak RSS rose from 1.0 GiB to 1.2 and 1.6 GiB, and a loop over genes ran
+faster at 8.
 
 .. code-block:: bash
 
@@ -32,7 +33,8 @@ of ids -- is retried with the budget doubled, up to DuckDB's own limit, and
 checkpoints are taken at step boundaries so none of them can run short. The
 connection you get back uses DuckDB's default.
 
-Peak resident memory, at the defaults:
+Ingest wall time and peak resident memory at the defaults (8 threads, ingest
+only, median of repeated runs on the benchmark machine):
 
 .. list-table::
    :header-rows: 1
@@ -43,20 +45,24 @@ Peak resident memory, at the defaults:
      - Peak RSS
    * - MANE v1.5
      - 0.5 M
-     - 16 s
-     - 0.85 GiB
+     - 14.9 s
+     - 1.0 GiB
+   * - CHESS 3.1.3
+     - 2.8 M
+     - 36.2 s
+     - 1.6 GiB
    * - RefSeq GRCh38.p14
      - 4.9 M
-     - 122 s
-     - --
-   * - GENCODE v49 GFF3
-     - 6.1 M
-     - 203 s
-     - 2.6 GiB
+     - 119 s
+     - 2.0 GiB
    * - GENCODE v49 GTF
      - 6.1 M
-     - 223 s
-     - 2.4 GiB
+     - 209 s
+     - 2.6 GiB
+   * - GENCODE v49 GFF3
+     - 6.1 M
+     - 192 s
+     - 2.8 GiB
 
 To hold DuckDB to a fixed limit instead, set it yourself -- the budget then
 stays out of the way:
