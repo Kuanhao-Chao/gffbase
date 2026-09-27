@@ -54,7 +54,6 @@ from gffbase.exceptions import (
 from gffbase.feature import ParsedFeature
 from gffbase.modes import DERIVED_SOURCE, MODE_COMPAT, VALIDATION_NCBI, ResolvedMode
 from gffbase.schema import (
-    CLOSURE_RECURSIVE_CTE,
     COMPAT_VIEWS_SQL,
     DDL,
     EDGES_FROM_GTF,
@@ -72,6 +71,7 @@ from gffbase.schema import (
     POST_LOAD_INDEXES,
     SCHEMA_VERSION,
     SEGMENTS_ALL_VIEW,
+    build_closure,
 )
 
 _log = logging.getLogger("gffbase.ingest")
@@ -1742,7 +1742,7 @@ def _build_database(
 
     # Closure via recursive CTE.
     _log.info("building the transitive closure (depth <= %d)", max_depth)
-    con.execute(CLOSURE_RECURSIVE_CTE, [max_depth])
+    build_closure(con, max_depth)
     clock.mark("closure")
 
     # A cyclic `Parent` graph is malformed GFF3. The walk above no longer

@@ -1851,7 +1851,7 @@ class FeatureDB:
                            list_append(w.seen, e.{edge_descendant_col})
                     FROM walk w
                     JOIN edges e ON e.{edge_anchor_col} = w.id
-                    -- See CLOSURE_RECURSIVE_CTE: no node twice on one path.
+                    -- As in schema.build_closure: no node twice on one path.
                     WHERE w.depth < ? AND NOT list_contains(w.seen, e.{edge_descendant_col})
                 )
                 SELECT
@@ -2159,7 +2159,7 @@ class FeatureDB:
                 SELECT e.{select_col}, w.depth + 1, list_append(w.seen, e.{select_col})
                 FROM walk w
                 {recurse_join}
-                -- See CLOSURE_RECURSIVE_CTE: no node twice on one path. This
+                -- As in schema.build_closure: no node twice on one path. This
                 -- is the deeper of the two walks -- it runs to depth 64 when
                 -- no level is given -- so a cycle here was the most expensive
                 -- one to hit.
@@ -2292,10 +2292,10 @@ class FeatureDB:
         `add_relations()` all route through it so none of them can rebuild it
         slightly differently.
         """
-        from gffbase.schema import CLOSURE_RECURSIVE_CTE
+        from gffbase.schema import build_closure
 
         self.conn.execute("DELETE FROM closure")
-        self.conn.execute(CLOSURE_RECURSIVE_CTE, [self._max_depth])
+        build_closure(self.conn, self._max_depth)
 
     def _refresh_depth_meta(self) -> None:
         """Re-read the corpus statistics the dispatcher decides on.
