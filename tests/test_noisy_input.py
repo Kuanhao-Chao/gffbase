@@ -64,6 +64,16 @@ def test_whitespace_only_lines_are_blank(engine, blank):
     assert [r.seqid for r in records] == ["chr1"]
 
 
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_line_holding_a_nul_byte_is_binary_and_reported(engine):
+    """Once a lone CR ends a line, a binary file splits into runs of control
+    bytes that are valid UTF-8; compat mode kept each as a feature."""
+    it = parse_bytes(b"\x00\x01\x02\r" + GENE.encode(), engine=engine, validation="gffutils")
+    assert [r.seqid for r in it] == ["chr1"]
+    (warning,) = it.warnings
+    assert warning["line_no"] == 1 and "NUL byte" in warning["message"]
+
+
 # ---------------------------------------------------------------------------
 # Column 9
 # ---------------------------------------------------------------------------
