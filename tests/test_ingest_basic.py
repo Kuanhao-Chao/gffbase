@@ -137,7 +137,6 @@ def test_indexes_built(hier_path):
     )
     assert {
         "features_type",
-        "attributes_fid",
         "edges_parent",
         "edges_child",
         "closure_ancestor",
@@ -146,6 +145,27 @@ def test_indexes_built(hier_path):
     } <= set(idx)
     multi = {name: cols for name, cols in idx.items() if "," in str(cols)}
     assert not multi, multi
+    # Only writes use it, so the first write builds it (below).
+    assert "attributes_fid" not in idx
+
+
+def test_the_first_write_builds_the_write_index(hier_path, tmp_path):
+    from gffbase import FeatureDB
+
+    con, _ = ingest.from_file(hier_path, str(tmp_path / "w.duckdb"))
+    con.close()
+    db = FeatureDB(str(tmp_path / "w.duckdb"))
+
+    def names():
+        return {r[0] for r in db.conn.execute("SELECT index_name FROM duckdb_indexes()").fetchall()}
+
+    assert "attributes_fid" not in names()
+    victim = next(iter(db.all_features())).id
+    db.delete(victim)
+    assert "attributes_fid" in names()
+    assert db.conn.execute(
+        "SELECT count(*) FROM attributes WHERE feature_id = ?", [victim]
+    ).fetchone() == (0,)
 
 
 def test_meta_recorded(hier_path):

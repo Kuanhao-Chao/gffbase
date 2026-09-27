@@ -55,7 +55,7 @@ from gffbase.modes import (
     VALIDATION_GFFUTILS,
     VALIDATION_NCBI,
 )
-from gffbase.schema import SCHEMA_VERSION
+from gffbase.schema import SCHEMA_VERSION, WRITE_INDEXES
 
 _log = logging.getLogger("gffbase.interface")
 
@@ -721,6 +721,15 @@ class FeatureDB:
                 f"{op}() writes, but this FeatureDB was opened with read_only=True. "
                 "Reopen it without read_only to modify the database."
             )
+
+    def _ensure_write_indexes(self) -> None:
+        """Build the indexes only writes use (see `schema.WRITE_INDEXES`).
+
+        Asked on every write that deletes or rewrites attribute rows by
+        feature id rather than remembered, so a caller's rolled-back
+        transaction cannot leave a handle believing an index exists.
+        """
+        self.conn.execute(WRITE_INDEXES)
 
     def close(self) -> None:
         """Release the DuckDB connection. Idempotent.
@@ -2251,6 +2260,7 @@ class FeatureDB:
         ids = self._coerce_ids(features)
         if not ids:
             return self
+        self._ensure_write_indexes()
         placeholders = ",".join("?" * len(ids))
         self.conn.execute(f"DELETE FROM features WHERE id IN ({placeholders})", ids)
         self.conn.execute(f"DELETE FROM attributes WHERE feature_id IN ({placeholders})", ids)
@@ -2386,6 +2396,8 @@ class FeatureDB:
             cleanup()
         if stage is None:
             return self
+        # Before the transaction, so the index outlives a rollback.
+        self._ensure_write_indexes()
         # All or nothing. A failure part-way -- a constraint, a full disk, an
         # interrupt -- must not leave half an update behind. If the caller
         # already has a transaction open, it owns the outcome: the update
@@ -2575,6 +2587,7 @@ class FeatureDB:
         """
         fid = _require_feature_id(feature)
         blob = feature._format_attributes().encode("utf-8")
+        self._ensure_write_indexes()
         self.conn.execute(
             'UPDATE features SET seqid = ?, source = ?, featuretype = ?, start = ?, "end" = ?, '
             "score = ?, strand = ?, frame = ?, attributes_blob = ? WHERE id = ?",
