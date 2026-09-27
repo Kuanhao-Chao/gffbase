@@ -285,8 +285,8 @@ def _make_campaign(tmp_path: Path) -> dict:
             "cargo_version": campaign.CARGO_VERSION,
             "git_commit": "1" * 40,
             "wheel": {
-                "path": str(tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_34_x86_64.whl"),
-                "name": "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_34_x86_64.whl",
+                "path": str(tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl"),
+                "name": "gffbase-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl",
                 "bytes": 1,
                 "sha256": "2" * 64,
                 "metadata_version": campaign.PUBLIC_VERSION,
@@ -315,7 +315,7 @@ def _make_campaign(tmp_path: Path) -> dict:
     request = campaign_preflight.normalize_request(
         run_id="unit-run",
         campaign_root=tmp_path,
-        candidate_wheel=(tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_34_x86_64.whl"),
+        candidate_wheel=(tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl"),
         interpreters={role: probe["resolved_executable"] for role, probe in interpreters.items()},
         transform_mode="external",
         parent_stripped=inputs["gencode-gtf-parent-stripped"]["path"],
