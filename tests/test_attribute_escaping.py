@@ -355,7 +355,7 @@ def test_setting_an_attribute_containing_a_separator_is_safe():
 
 
 def test_merge_strategy_merge_stores_an_escaped_blob():
-    """`_regenerate_attributes_blob` rebuilds `features.attributes_blob` from
+    """`_render_attributes_blob` rebuilds `features.attributes_blob` from
     the DECODED `attributes` rows. Unescaped, the corruption is written to the
     database and outlives the process -- every later read of that feature
     parses one value as several attributes.
