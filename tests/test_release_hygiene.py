@@ -1391,3 +1391,17 @@ def test_readme_relative_links_and_images_resolve():
             broken.append(f"image src={match.group(1)}")
 
     assert not broken, "README points at paths that do not exist: " + "; ".join(broken)
+
+
+def test_every_coverage_exclusion_says_why():
+    """`# pragma: no cover` hides a line from the coverage gate, so each one
+    has to state its reason (`# pragma: no cover - <why>`). An unexplained
+    exclusion cannot be told apart from a test someone gave up on."""
+    import re
+
+    bare = []
+    for path in sorted((REPO_ROOT / "python" / "gffbase").rglob("*.py")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "pragma: no cover" in line and not re.search(r"pragma: no cover\s*-\s*\S", line):
+                bare.append(f"{path.relative_to(REPO_ROOT)}:{number}")
+    assert not bare, "coverage exclusions without a reason:\n  " + "\n  ".join(bare)

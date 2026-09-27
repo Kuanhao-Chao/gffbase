@@ -76,4 +76,4 @@ def bin_from_coords(start: int | None, end: int | None) -> int | None:
         end_bin >>= _BINNEXTSHIFT
     # Unreachable for coordinates below MAX_CHROM_SIZE: after five levels the
     # shift totals 29 bits, so both operands are 0 and the last level matches.
-    return 1  # pragma: no cover
+    return 1  # pragma: no cover - unreachable, see above

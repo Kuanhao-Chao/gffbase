@@ -1600,7 +1600,7 @@ class FeatureDB:
         if fmt in ("df", "pandas"):
             try:
                 return empty.to_pandas()
-            except ModuleNotFoundError as e:  # pragma: no cover
+            except ModuleNotFoundError as e:  # pragma: no cover - optional pandas/polars absent
                 raise ImportError(
                     "format='df' requires the optional pandas package "
                     "(pip install 'gffbase[pandas]')"
@@ -1608,7 +1608,7 @@ class FeatureDB:
         if fmt == "polars":
             try:
                 import polars as pl
-            except ImportError as e:  # pragma: no cover
+            except ImportError as e:  # pragma: no cover - optional polars absent
                 raise ImportError(
                     "format='polars' requires the optional polars package "
                     "(pip install 'gffbase[polars]')"
@@ -1915,7 +1915,7 @@ class FeatureDB:
         if fmt in ("df", "pandas"):
             try:
                 return cur.df()
-            except ModuleNotFoundError as e:  # pragma: no cover
+            except ModuleNotFoundError as e:  # pragma: no cover - optional pandas/polars absent
                 raise ImportError(
                     "format='df' requires the optional pandas package "
                     "(pip install 'gffbase[pandas]')"
@@ -1923,7 +1923,7 @@ class FeatureDB:
         if fmt == "polars":
             try:
                 return cur.pl()  # DuckDB >=1.0 returns a polars.DataFrame
-            except ModuleNotFoundError as e:  # pragma: no cover
+            except ModuleNotFoundError as e:  # pragma: no cover - optional pandas/polars absent
                 raise ImportError(
                     "format='polars' requires the optional polars package "
                     "(pip install 'gffbase[polars]')"
@@ -1959,7 +1959,7 @@ class FeatureDB:
         if fmt in ("df", "pandas"):
             try:
                 return empty.to_pandas()
-            except ModuleNotFoundError as e:  # pragma: no cover
+            except ModuleNotFoundError as e:  # pragma: no cover - optional pandas/polars absent
                 raise ImportError(
                     "format='df' requires the optional pandas package "
                     "(pip install 'gffbase[pandas]')"
@@ -1967,7 +1967,7 @@ class FeatureDB:
         if fmt == "polars":
             try:
                 import polars as pl
-            except ImportError as e:  # pragma: no cover
+            except ImportError as e:  # pragma: no cover - optional polars absent
                 raise ImportError(
                     "format='polars' requires the optional polars package "
                     "(pip install 'gffbase[polars]')"
