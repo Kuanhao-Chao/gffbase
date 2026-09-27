@@ -39,7 +39,9 @@ pub fn parse_attributes(
     let mut out: AttributePairs = Vec::new();
     let mut obs = Dialect::default();
 
-    if blob.is_empty() {
+    // `.` is GFF's "no value" for every column, column 9 included. It used to
+    // parse as an attribute KEY named `.`.
+    if blob.is_empty() || blob.trim() == "." {
         return Ok((out, obs));
     }
 
@@ -91,7 +93,18 @@ pub fn parse_attributes(
         // Quoted GTF value handling.
         let (clean_val, was_quoted) = if local_fmt == Format::Gff3 {
             if compat_whole_value_quotes {
-                strip_whole_quotes(raw_val)
+                // Bytes after `=` are data in GFF3 -- `Note= ` is one space --
+                // unless the key side is spaced too. `ID = g1 ;` spaces the
+                // separator, not the value, and read literally it named
+                // ` g1 `. Strict keeps every byte.
+                let spaced_separator = seg
+                    .find('=')
+                    .map_or(false, |i| seg[..i].ends_with(char::is_whitespace));
+                if spaced_separator {
+                    strip_whole_quotes(raw_val.trim_matches(' '))
+                } else {
+                    strip_whole_quotes(raw_val)
+                }
             } else {
                 (raw_val, false)
             }

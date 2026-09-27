@@ -70,10 +70,11 @@ def test_merge_dialects_empty_returns_default():
 
 
 def test_merge_dialects_majority_gtf():
+    gtf = {"fmt": "gtf", "field separator": "; ", "keyval separator": " "}
     samples = [
-        {"fmt": "gtf", "field separator": "; "},
-        {"fmt": "gtf", "field separator": "; "},
-        {"fmt": "gff3", "field separator": ";"},
+        {**gtf, "order": ["gene_id", "transcript_id"]},
+        {**gtf, "order": ["gene_id", "transcript_id"]},
+        {"fmt": "gff3", "field separator": ";", "keyval separator": "=", "order": ["ID"]},
     ]
     out = merge_dialects(samples)
     assert out["fmt"] == "gtf"

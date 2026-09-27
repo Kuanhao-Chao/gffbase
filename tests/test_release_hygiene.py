@@ -971,7 +971,23 @@ def test_the_documented_parity_percentage_is_derivable():
         for mod in manifest.get("modules", {}).values()
         if isinstance(mod, dict)
     )
-    excluded = len(re.findall(r'status = "excluded"', deviations_path.read_text()))
+    # Only module-level symbols count: an excluded class member (e.g.
+    # `_FileIterator.open_function`) is a member of a symbol that is provided.
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - 3.10 only
+        import tomli as tomllib
+
+    symbols = {
+        f"{modname.replace('gffutils', 'gffbase', 1)}.{sym}"
+        for modname, mod in manifest.get("modules", {}).items()
+        if isinstance(mod, dict)
+        for sym in mod.get("symbols", {})
+    }
+    deviations = tomllib.loads(deviations_path.read_text())["deviation"]
+    excluded = sum(
+        1 for d in deviations if d.get("status") == "excluded" and d.get("name") in symbols
+    )
     provided = total - excluded
     pct = round(100 * provided / total)
 

@@ -145,9 +145,15 @@ def test_the_upstream_corpus_validates_without_errors(name):
 
 
 def test_a_warning_does_not_make_the_report_fail():
-    """`mouse_extra_comma.gff3` has `Parent=a,`, which yields an empty parent
-    id. gffutils writes that relation too, so it is reported and tolerated."""
-    db = create_db(str(UPSTREAM / "mouse_extra_comma.gff3"), ":memory:")
+    """A `Parent` naming a feature the file never defines is an edge that does
+    not resolve. gffutils writes that relation too, so it is reported and
+    tolerated. (This used `mouse_extra_comma.gff3`'s `Parent=a,`, whose empty
+    part no longer becomes an edge at all.)"""
+    db = create_db(
+        "chr1\tt\tmRNA\t1\t9\t.\t+\t.\tID=t1;Parent=never_defined\n",
+        ":memory:",
+        from_string=True,
+    )
     report = validate_db(db)
     assert "edges_resolve" in _names(report)
     assert all(v.severity == WARNING for v in report.violations)

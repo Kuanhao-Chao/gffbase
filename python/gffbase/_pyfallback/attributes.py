@@ -39,7 +39,9 @@ def parse_attributes(
     from changing strict GFF3's literal data model.
     """
     obs = default_dialect()
-    if not blob:
+    # `.` is GFF's "no value" for every column, column 9 included. It used to
+    # parse as an attribute KEY named `.`.
+    if not blob or blob.strip() == ".":
         return [], obs
 
     obs["leading semicolon"] = blob.lstrip().startswith(";")
@@ -74,7 +76,15 @@ def parse_attributes(
 
         if local_fmt == "gff3":
             if compat_whole_value_quotes:
-                clean_val, was_quoted = _strip_whole_quotes(raw_val)
+                # Bytes after `=` are data in GFF3 -- `Note= ` is one space --
+                # unless the key side is spaced too. `ID = g1 ;` spaces the
+                # separator, not the value, and read literally it named
+                # ` g1 `. Strict keeps every byte.
+                eq = seg.find("=")
+                spaced_separator = eq > 0 and seg[eq - 1].isspace()
+                clean_val, was_quoted = _strip_whole_quotes(
+                    raw_val.strip(" ") if spaced_separator else raw_val
+                )
             else:
                 clean_val, was_quoted = raw_val, False
         else:

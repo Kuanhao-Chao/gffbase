@@ -505,14 +505,18 @@ def _inv15a_attribute_segments_resolve(con):
 
 
 def _inv16_gtf_hierarchy_coherent(con):
-    """GTF edges share a locus; inferred parents additionally enclose children."""
+    """GTF edges share a locus; inferred parents additionally enclose children.
+
+    A gene may parent a transcript, or directly a row that names a gene but no
+    transcript (`EDGES_GTF_GENE_WITHOUT_TRANSCRIPT`).
+    """
     return _count(
         con,
         """
         SELECT p.id, c.id, p.seqid, c.seqid, p.strand, c.strand,
                p.start, p."end", c.start, c."end",
                CASE
-                 WHEN NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')
+                 WHEN NOT ((p.featuretype = 'gene' AND c.featuretype <> 'gene')
                         OR (p.featuretype = 'transcript'
                             AND c.featuretype NOT IN ('gene', 'transcript')))
                    THEN 'disallowed GTF edge types'
@@ -524,7 +528,7 @@ def _inv16_gtf_hierarchy_coherent(con):
         JOIN features p ON p.id = e.parent
         JOIN features c ON c.id = e.child
         WHERE (((SELECT value FROM meta WHERE key = 'fmt') = 'gtf'
-                AND (NOT ((p.featuretype = 'gene' AND c.featuretype = 'transcript')
+                AND (NOT ((p.featuretype = 'gene' AND c.featuretype <> 'gene')
                        OR (p.featuretype = 'transcript'
                            AND c.featuretype NOT IN ('gene', 'transcript')))
                   OR p.seqid IS DISTINCT FROM c.seqid

@@ -244,7 +244,8 @@ EDGES_FROM_PARENT = """
 INSERT INTO edges (parent, child)
 SELECT DISTINCT a.value AS parent, a.feature_id AS child
 FROM attributes a
-WHERE a.key = 'Parent';
+WHERE a.key = 'Parent'
+  AND a.value <> '';   -- `Parent=a,`: the empty part names no parent
 """
 # DISTINCT because a fused discontinuous feature takes the UNION of its
 # segments' `Parent` values, and NCBI repeats `Parent=` on every segment line.
@@ -288,6 +289,73 @@ WHERE a.key = ?                                  -- gtf_gene_key
   AND EXISTS (SELECT 1 FROM features p
               WHERE p.id = COALESCE(m.resolved_id, a.value)
                 AND p.featuretype = 'gene');
+"""
+
+
+# 2b. A GTF row that names a gene but no transcript (some tools write exons
+#     that way) hangs from its gene directly. It used to be left out of the
+#     hierarchy altogether; gffutils records it as a level-2 relation, which
+#     gffbase -- storing direct relations only -- expresses as a direct edge.
+EDGES_GTF_GENE_WITHOUT_TRANSCRIPT = """
+INSERT INTO edges (parent, child)
+SELECT DISTINCT a.value, a.feature_id
+FROM attributes a
+JOIN features f ON f.id = a.feature_id
+WHERE a.key = ?                                  -- gtf_gene_key
+  AND f.featuretype NOT IN ('gene', 'transcript')
+  AND a.value <> f.id
+  AND NOT EXISTS (SELECT 1 FROM attributes t
+                  WHERE t.feature_id = f.id AND t.key = ?)   -- gtf_transcript_key
+  AND EXISTS (SELECT 1 FROM features p WHERE p.id = a.value AND p.featuretype = 'gene')
+  AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.parent = a.value AND e.child = a.feature_id);
+"""
+
+# 2c. An authored transcript row with no gene key -- AUGUSTUS writes its
+#     transcript rows as a bare id -- takes the gene its children name (the
+#     most common one, then lexical, as 3c does for synthesized transcripts).
+EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN = """
+INSERT INTO edges (parent, child)
+WITH votes AS (
+    SELECT t.id AS transcript, g.value AS gene, COUNT(*) AS n
+    FROM features t
+    JOIN attributes own ON own.feature_id = t.id AND own.key = ?       -- gtf_transcript_key
+    JOIN attributes ct ON ct.key = own.key AND ct.value = own.value
+    JOIN features c ON c.id = ct.feature_id AND c.featuretype NOT IN ('gene', 'transcript')
+    JOIN attributes g ON g.feature_id = c.id AND g.key = ?             -- gtf_gene_key
+    WHERE t.featuretype = 'transcript'
+      AND NOT EXISTS (SELECT 1 FROM attributes x WHERE x.feature_id = t.id AND x.key = ?)
+    GROUP BY t.id, g.value
+),
+ranked AS (
+    SELECT transcript, gene,
+           ROW_NUMBER() OVER (PARTITION BY transcript ORDER BY n DESC, gene) AS rn
+    FROM votes
+)
+SELECT r.gene, r.transcript FROM ranked r
+WHERE r.rn = 1
+  AND EXISTS (SELECT 1 FROM features p WHERE p.id = r.gene AND p.featuretype = 'gene')
+  AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.parent = r.gene AND e.child = r.transcript);
+"""
+
+
+# 5. Column 9 for inferred parents, rendered from their attribute rows in the
+#    form gffutils writes (`transcript_id "T1"; gene_id "G1";`). Synthesis
+#    left it NULL, so an inferred gene or transcript read back with no
+#    attributes and was written out with an empty column 9 -- a GTF that lost
+#    `gene_id` on every inferred gene.
+GTF_RENDER_SYNTHESIZED_BLOBS = """
+UPDATE features
+SET attributes_blob = CAST(r.blob AS BLOB)
+FROM (
+    SELECT a.feature_id,
+           string_agg(a.key || ' "' || replace(a.value, '"', '\\"') || '"', '; '
+                      ORDER BY a.rowid) || ';' AS blob
+    FROM attributes a
+    JOIN features f ON f.id = a.feature_id
+    WHERE f.is_synthetic AND f.attributes_blob IS NULL
+    GROUP BY a.feature_id
+) r
+WHERE features.id = r.feature_id AND features.attributes_blob IS NULL;
 """
 
 

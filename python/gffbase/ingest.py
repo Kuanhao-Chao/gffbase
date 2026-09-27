@@ -59,9 +59,12 @@ from gffbase.schema import (
     DDL,
     EDGES_FROM_GTF,
     EDGES_FROM_PARENT,
+    EDGES_GTF_GENE_WITHOUT_TRANSCRIPT,
+    EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN,
     FIND_PARENT_CYCLES,
     GTF_PROPAGATE_ATTRIBUTE,
     GTF_PROPAGATE_GENE_ID,
+    GTF_RENDER_SYNTHESIZED_BLOBS,
     GTF_SYNTHESIZE_GENES,
     GTF_SYNTHESIZE_TRANSCRIPT_ATTRS,
     GTF_SYNTHESIZE_TRANSCRIPTS,
@@ -1151,7 +1154,7 @@ def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid
         if not same:
             # gffutils falls back to create_unique when the other columns
             # differ, and records the rename in `duplicates`.
-            new_id = IdSpecResolver._autoincrement(fid, autoinc)
+            new_id = _free_autoincrement(con, fid, autoinc)
             _insert_single(con, builder, seqid_to_y, new_id, feat, file_order)
             new_duplicates.append((fid, new_id))
             continue
@@ -1448,7 +1451,15 @@ def _build_database(
             if result is not True:
                 feat = _unwrap_transformed(result, feat, _dialect_cache)
 
+        if _fmt_cache == "gtf" and feat.featuretype in ("gene", "transcript"):
+            _name_bare_gtf_parent(feat, options)
         fid, origin = resolver.resolve(feat, autoinc)
+        if origin == "autoincrement":
+            # A generated `<featuretype>_<n>` that a line before this one
+            # already used literally is not a duplicate of it -- the caller
+            # never wrote this id -- so draw the next free one instead.
+            while fid in seen_ids:
+                fid = IdSpecResolver._autoincrement(feat.featuretype, autoinc)
         # `(raw_id, occ)` is the schema-v2 surrogate identity: the id column 9
         # yielded, plus how many lines before this one yielded the same. It is
         # what the multipart resolve pass groups on, and it is free here --
@@ -1479,7 +1490,14 @@ def _build_database(
                 # rows -- and under plain create_unique there is nothing to
                 # merge. Recording it anyway made `duplicates` disagree with
                 # the oracle on every deduplicated file.
+                #
+                # Skip suffixes the file already used literally: Liftoff names
+                # extra copies `<id>_1`, `<id>_2`, so when `X_1` came first a
+                # later duplicate of `X` was renamed to `X_1` too and the load
+                # died on a DuckDB primary-key violation.
                 fid = IdSpecResolver._autoincrement(fid, autoinc)
+                while fid in seen_ids:
+                    fid = IdSpecResolver._autoincrement(raw_id, autoinc)
             else:
                 # merge / replace: resolved after the bulk load, against the
                 # row that is already in the database.
@@ -1566,6 +1584,9 @@ def _build_database(
         con.execute("INSERT INTO directives (directive) SELECT directive FROM __staging_directives")
         con.unregister("__staging_directives")
 
+    # Ingest-level findings, reported beside the parser's own warnings.
+    extra_warnings: list[dict] = []
+
     # Set-based normalization passes.
     n_synth_t = 0
     n_synth_g = 0
@@ -1577,6 +1598,7 @@ def _build_database(
         # ignored, every statement below naming `transcript_id` / `gene_id`
         # literally. Bound as parameters, never interpolated.
         tkey, gkey = options.gtf_transcript_key, options.gtf_gene_key
+        gtf_subfeature = _effective_gtf_subfeature(con, gtf_subfeature, options)
         _create_gtf_parent_map(con)
         _prepare_gtf_parent_map(
             con,
@@ -1605,8 +1627,12 @@ def _build_database(
         if not disable_infer_genes:
             n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode])
         con.execute(EDGES_FROM_GTF, [tkey, gkey])
+        con.execute(EDGES_GTF_GENE_WITHOUT_TRANSCRIPT, [gkey, tkey])
+        con.execute(EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN, [tkey, gkey, gkey])
+        extra_warnings.extend(_gtf_missing_transcript_warnings(con, gkey, tkey))
         # After the edges, deliberately -- see `resolve_synthesized_ids`.
         resolve_synthesized_ids(con, options, autoinc, fmt)
+        con.execute(GTF_RENDER_SYNTHESIZED_BLOBS)
         # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
         # them up in a single targeted UPDATE (touches only synthesized
         # rows; ~4-9 % of features at GENCODE scale).
@@ -1732,7 +1758,7 @@ def _build_database(
         fmt=fmt,
         dialect=dialect,
         directives=directives,
-        warnings=list(getattr(it, "warnings", []) or []),
+        warnings=list(getattr(it, "warnings", []) or []) + extra_warnings,
         n_skipped=n_skipped,
         n_multipart=n_multipart,
     )
@@ -1784,6 +1810,88 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
         pass
     if pragmas:
         apply_settings(con, pragmas)
+
+
+def _name_bare_gtf_parent(feat, options) -> None:
+    """Read a GTF gene/transcript row whose column 9 is one bare token as its id.
+
+    AUGUSTUS and BRAKER write `gene` and `transcript` rows as
+    `chr1  AUGUSTUS  gene  1  900  0.9  +  .  g1` -- no key at all -- while
+    their CDS rows carry `gene_id "g1"; transcript_id "g1.t1";`. Read
+    literally, `g1` is a KEY with no value (gffutils' reading), so the rows get
+    generated ids and the whole hierarchy comes apart. The token is taken as
+    the row's own `gene_id` / `transcript_id`, and column 9 is rewritten to
+    say so, keeping the stored bytes and the attribute rows in agreement.
+    """
+    pairs = feat.attributes_pairs
+    if len(pairs) != 1:
+        return
+    token, value, _idx = pairs[0]
+    if value or not token or any(c in token for c in " =\"';"):
+        return
+    if feat.attributes_blob.decode("utf-8", errors="replace").strip().rstrip(";") != token:
+        return
+    key = options.gtf_gene_key if feat.featuretype == "gene" else options.gtf_transcript_key
+    feat.attributes_pairs = [(key, token, 0)]
+    feat.attributes_blob = f'{key} "{token}";'.encode()
+
+
+def _effective_gtf_subfeature(con, subfeature: str, options) -> str:
+    """The row type transcripts are inferred from.
+
+    `exon`, as in gffutils -- unless the file has no exon rows at all but
+    does have CDS rows, as gene predictors write (AUGUSTUS without UTRs,
+    GeneMark). gffutils infers nothing from such a file, so every CDS stays an
+    orphan; gffbase infers the transcripts from the CDS rows instead. Only the
+    default is overridden: an explicit `gtf_subfeature` is honoured as given.
+    """
+    if subfeature != "exon" or options.gtf_subfeature != "exon":
+        return subfeature
+    count = scalar(con, "SELECT COUNT(*) FROM features WHERE featuretype = ?", [subfeature])
+    if count:
+        return subfeature
+    if scalar(con, "SELECT COUNT(*) FROM features WHERE featuretype = 'CDS'"):
+        _log.info("no exon rows: inferring GTF transcripts from CDS rows")
+        return "CDS"
+    return subfeature
+
+
+def _gtf_missing_transcript_warnings(con, gene_key: str, transcript_key: str) -> list[dict]:
+    """Report GTF rows that name a gene but no transcript.
+
+    They are linked straight to their gene (`EDGES_GTF_GENE_WITHOUT_TRANSCRIPT`)
+    rather than left out of the hierarchy, and said so: one summary warning,
+    with the first few row ids, instead of silence.
+    """
+    rows = con.execute(
+        "SELECT f.id FROM features f "
+        "JOIN attributes g ON g.feature_id = f.id AND g.key = ? "
+        "WHERE f.featuretype NOT IN ('gene', 'transcript') "
+        "  AND NOT EXISTS (SELECT 1 FROM attributes t WHERE t.feature_id = f.id AND t.key = ?) "
+        "ORDER BY f.file_order LIMIT 6",
+        [gene_key, transcript_key],
+    ).fetchall()
+    if not rows:
+        return []
+    total = scalar(
+        con,
+        "SELECT COUNT(DISTINCT f.id) FROM features f "
+        "JOIN attributes g ON g.feature_id = f.id AND g.key = ? "
+        "WHERE f.featuretype NOT IN ('gene', 'transcript') "
+        "  AND NOT EXISTS (SELECT 1 FROM attributes t WHERE t.feature_id = f.id AND t.key = ?)",
+        [gene_key, transcript_key],
+    )
+    examples = ", ".join(r[0] for r in rows[:5])
+    return [
+        {
+            "line_no": None,
+            "kind": "GtfMissingTranscriptId",
+            "message": (
+                f"{total} GTF row(s) carry {gene_key} but no {transcript_key}; linked "
+                f"directly to their gene (e.g. {examples})"
+            ),
+        }
+    ]
 
 
 def _synthesize_transcripts(

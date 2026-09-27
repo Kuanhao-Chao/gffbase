@@ -91,6 +91,11 @@ _GTF_NO_TRANSCRIPTS_NO_LEVEL2 = (
     "stores direct relations only and links a child to a gene through its "
     "transcript, so without one the child is not linked to the gene."
 )
+_CDS_ONLY_INFERENCE = (
+    "DEVIATION: with every exon dropped the file is CDS-only. The oracle infers "
+    "parents from exons alone, so it infers none and every CDS is an orphan; "
+    "gffbase infers the transcripts (and genes) from the CDS rows instead."
+)
 _CALLABLE_COLLIDES_WITH_INFERRED = (
     "DEVIATION: the callable names the inferred transcript after its own exon. The "
     "oracle merges the inferred feature away; gffbase keeps it under a generated id "
@@ -121,6 +126,10 @@ KNOWN = {
         )
     },
     ("id_spec=callable", "keep-order-test.gtf"): _CALLABLE_COLLIDES_WITH_INFERRED,
+    **{
+        ("transform=drop_exons", name): _CDS_ONLY_INFERENCE
+        for name in ("FBgn0031208.gtf", "ensembl_gtf.txt", "sharr.gtf")
+    },
 }
 
 
