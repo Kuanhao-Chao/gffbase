@@ -581,29 +581,53 @@ CREATE OR REPLACE VIEW relations_compat AS
 # Recursive CTE closure — replaces the N+1 grandchild loop.
 # Single SQL statement; vectorized executor.
 # ---------------------------------------------------------------------------
-CLOSURE_RECURSIVE_CTE = """
-INSERT INTO closure (ancestor, descendant, depth)
-WITH RECURSIVE walk(ancestor, descendant, depth) AS (
-    SELECT DISTINCT parent, child, 1 AS depth FROM edges
-    UNION
-    SELECT w.ancestor, e.child, w.depth + 1
-    FROM walk w
-    JOIN edges e ON e.parent = w.descendant
-    WHERE w.depth < ? AND w.ancestor <> e.child
-)
-SELECT ancestor, descendant, MIN(depth) AS depth
-FROM walk
-GROUP BY ancestor, descendant
-ORDER BY descendant;
-"""
-# ORDER BY descendant: the ART build over the closure's two columns took 48 s
-# on GENCODE in walk order and 13 s in this one (ancestor 5 s, descendant 8
-# s), and the sort costs nothing measurable. Descendant rather than ancestor
-# because the descendant index is the slow one unsorted; a gene's descendants
-# still sit close together, since their ids share the transcript's prefix.
-# UNION deduplicates the recursive frontier by (ancestor, descendant, depth),
-# preventing a layered DAG from enumerating every distinct path.  MIN(depth)
-# then gives each reachable pair one canonical, shortest relationship.
+def build_closure(con, max_depth: int) -> None:
+    """Fill `closure` from `edges`: every (ancestor, descendant) pair within
+    `max_depth` levels, at its shortest depth.
+
+    One level at a time. This used to be one recursive CTE whose `UNION` held
+    the whole walk in a single hash table, which DuckDB cannot spill: under
+    `memory_limit='2GB'` GENCODE's ingest died here with an
+    OutOfMemoryException. Each level is now a plain join and anti-join, which
+    it can. The result is the same: a shortest path to a descendant extends a
+    shortest path to its parent, so expanding only the pairs first reached at
+    the previous level finds every pair at its minimum depth. A walk never
+    returns to its own ancestor, and a cycle ends because a pair is never
+    added twice.
+
+    The walk is staged in a temporary table and copied `ORDER BY descendant`:
+    DuckDB builds an ART index several times faster over sorted keys (GENCODE:
+    both closure indexes 48 s in walk order, 13 s sorted). Descendant rather
+    than ancestor because that index is the slow one unsorted; a gene's
+    descendants still sit together, their ids sharing the transcript prefix.
+    """
+    con.execute(
+        "CREATE TEMP TABLE __closure_walk "
+        "(ancestor VARCHAR NOT NULL, descendant VARCHAR NOT NULL, depth SMALLINT NOT NULL)"
+    )
+    try:
+        con.execute("INSERT INTO __closure_walk SELECT DISTINCT parent, child, 1 FROM edges")
+        for depth in range(2, max_depth + 1):
+            (added,) = con.execute(
+                """
+                INSERT INTO __closure_walk
+                SELECT DISTINCT w.ancestor, e.child, ?
+                FROM __closure_walk w
+                JOIN edges e ON e.parent = w.descendant
+                WHERE w.depth = ? AND e.child <> w.ancestor
+                  AND NOT EXISTS (SELECT 1 FROM __closure_walk x
+                                  WHERE x.ancestor = w.ancestor AND x.descendant = e.child)
+                """,
+                [depth, depth - 1],
+            ).fetchone()
+            if not added:
+                break
+        con.execute(
+            "INSERT INTO closure (ancestor, descendant, depth) "
+            "SELECT ancestor, descendant, depth FROM __closure_walk ORDER BY descendant"
+        )
+    finally:
+        con.execute("DROP TABLE IF EXISTS __closure_walk")
 
 
 # ---------------------------------------------------------------------------
