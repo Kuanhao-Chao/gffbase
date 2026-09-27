@@ -26,7 +26,7 @@ use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 
 use flate2::read::MultiGzDecoder;
-use memchr::memchr;
+use memchr::memchr2;
 
 use crate::attributes::parse_attributes;
 use crate::dialect::{self, Dialect};
@@ -148,9 +148,15 @@ impl RecordIter {
                 v
             }
         };
+        // A UTF-8 byte-order mark is not part of the first seqid.
+        let pos = if buf.starts_with(b"\xef\xbb\xbf") {
+            3
+        } else {
+            0
+        };
         let mut iter = RecordIter {
             buf,
-            pos: 0,
+            pos,
             dialect: Dialect::default(),
             directives: Vec::new(),
             fasta_reached: false,
@@ -275,7 +281,9 @@ impl RecordIter {
             // Python fallback, which reads with universal newlines, stored it
             // clean. The two engines are supposed to be indistinguishable.
             let line = trim_cr(line_owned.as_slice());
-            if line.is_empty() {
+            // Whitespace-only lines are blank, as gffutils treats them. One
+            // used to become a feature named after the spaces.
+            if line.iter().all(|b| b.is_ascii_whitespace()) {
                 continue;
             }
             // Validate UTF-8 once, for the whole line, before any field is
@@ -422,14 +430,21 @@ impl RecordIter {
     /// Return a slice covering the next line (without the terminating LF).
     /// Increments `line_no` internally so the caller can keep borrowing the
     /// returned slice without conflicting with `&mut self`.
+    /// The next physical line. `\n`, `\r\n` and a lone `\r` (classic Mac)
+    /// all end a line, as they do for gffutils and the Python engine.
+    /// Splitting on `\n` alone read a CR-only file as ONE line, so its first
+    /// feature swallowed every other (an ID of `g1\rchr1...`).
     fn read_line(&mut self) -> Option<&[u8]> {
         if self.pos >= self.buf.len() {
             return None;
         }
         let start = self.pos;
-        let nl = memchr(b'\n', &self.buf[start..]);
-        let (end, advance) = match nl {
-            Some(i) => (start + i, i + 1),
+        let (end, advance) = match memchr2(b'\n', b'\r', &self.buf[start..]) {
+            Some(i) => {
+                let at = start + i;
+                let crlf = self.buf[at] == b'\r' && self.buf.get(at + 1) == Some(&b'\n');
+                (at, i + if crlf { 2 } else { 1 })
+            }
             None => (self.buf.len(), self.buf.len() - start),
         };
         self.pos += advance;

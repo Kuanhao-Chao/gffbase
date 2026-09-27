@@ -114,28 +114,36 @@ def _decode_error(err: UnicodeDecodeError, line_no: int):
 
 
 def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
-    # Every read in the fallback funnels through here, which is why the decode
-    # guard lives here rather than at each call site. Text-mode decoding is
-    # lazy, so the `UnicodeDecodeError` surfaces on iteration, not on open().
-    while True:
+    """Physical lines of a binary stream, decoded one at a time.
+
+    Every read in the fallback funnels through here, which is why the decode
+    guard lives here rather than at each call site. A line that is not UTF-8
+    is yielded as its `UnicodeDecodeError` rather than raised: the outer parser
+    owns the line counter and the strict/warn policy, and the stream stays
+    usable after one bad line.
+
+    Line endings are universal -- `\n`, `\r\n` and a lone `\r` (classic Mac)
+    all end a line, as they do for gffutils. Splitting on `\n` alone read a
+    CR-only file as ONE line, so its first feature swallowed the rest (an ID of
+    `g1\rchr1...`). The split is done by a latin-1 text layer, which maps
+    bytes to code points one to one, so the raw bytes -- and a precise
+    per-line UTF-8 error -- survive it. A UTF-8 byte-order mark at the start
+    of the input is dropped rather than becoming part of the first seqid.
+    """
+    text = io.TextIOWrapper(stream, encoding="latin-1", newline=None)
+    first = True
+    for raw_line in text:
+        data = raw_line.encode("latin-1")
+        if data.endswith(b"\n"):
+            data = data[:-1]
+        if first:
+            first = False
+            if data.startswith(b"\xef\xbb\xbf"):
+                data = data[3:]
         try:
-            line = next(stream)
-        except StopIteration:
-            return
-        if isinstance(line, bytes):
-            try:
-                line = line.decode("utf-8", errors="strict")
-            except UnicodeDecodeError as err:
-                # Yield the error rather than raising it here. The outer parser
-                # owns the physical line counter and the strict/warn policy,
-                # and a binary line stream remains usable after one bad line.
-                yield err
-                continue
-        if line.endswith("\n"):
-            line = line[:-1]
-        if line.endswith("\r"):
-            line = line[:-1]
-        yield line
+            yield data.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as err:
+            yield err
 
 
 def _validate(
@@ -580,14 +588,19 @@ def _stream_features(
         )
         return True
 
-    for line in _iter_lines(stream):
+    # ONE iterator for both loops below: the text layer buffers ahead, so a
+    # second wrapper over the same stream would skip what the first had read.
+    lines = _iter_lines(stream)
+    for line in lines:
         line_no += 1
         if isinstance(line, UnicodeDecodeError):
             err = _decode_error(line, line_no)
             if _maybe_handle(err):
                 continue
             raise err from line
-        if not line:
+        if not line.strip():
+            # Whitespace-only, as gffutils treats it. It used to become a
+            # feature named after the spaces.
             continue
         if line.startswith("##"):
             if line.startswith("##FASTA"):
@@ -638,14 +651,16 @@ def _stream_features(
     if fasta_reached:
         return
 
-    for line in _iter_lines(stream):
+    for line in lines:
         line_no += 1
         if isinstance(line, UnicodeDecodeError):
             err = _decode_error(line, line_no)
             if _maybe_handle(err):
                 continue
             raise err from line
-        if not line:
+        if not line.strip():
+            # Whitespace-only, as gffutils treats it. It used to become a
+            # feature named after the spaces.
             continue
         if line.startswith("##"):
             if line.startswith("##FASTA"):
