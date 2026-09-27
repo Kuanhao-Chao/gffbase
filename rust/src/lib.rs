@@ -30,7 +30,7 @@
 //! is the raw col-9 bytes for byte-faithful round-trip.
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyIOError, PyPermissionError, PyValueError};
+use pyo3::exceptions::{PyIOError, PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
@@ -80,15 +80,16 @@ fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
 
 /// Parse a path (plain text or .gz). Yields one tuple per feature.
 /// The Python exception for a failed open, matching what `open()` raises in
-/// the pure-Python engine: a missing file is `FileNotFoundError`, a refused
-/// one `PermissionError`. Both used to arrive as a bare `OSError`, so the two
+/// the pure-Python engine. Python's `OSError(errno, message)` constructor
+/// picks the subclass itself -- `FileNotFoundError`, `PermissionError`,
+/// `IsADirectoryError` -- so the OS error code is passed through rather than
+/// mapped here. These all used to arrive as a bare `OSError`, so the two
 /// engines raised different types for the same mistake.
 fn open_error(path: &str, e: std::io::Error) -> PyErr {
     let message = format!("could not open {}: {}", path, e);
-    match e.kind() {
-        std::io::ErrorKind::NotFound => PyFileNotFoundError::new_err(message),
-        std::io::ErrorKind::PermissionDenied => PyPermissionError::new_err(message),
-        _ => PyIOError::new_err(message),
+    match e.raw_os_error() {
+        Some(code) => PyOSError::new_err((code, message)),
+        None => PyIOError::new_err(message),
     }
 }
 
