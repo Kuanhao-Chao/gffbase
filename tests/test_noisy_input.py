@@ -118,6 +118,76 @@ def test_a_one_file_tar_archive_is_read_as_that_file(engine, case, tmp_path):
     assert not stats.warnings
 
 
+def _header(name: bytes, size_field: bytes, kind: bytes = b"0") -> bytes:
+    """A ustar header with `size_field` verbatim and a valid checksum."""
+    block = bytearray(512)
+    block[: len(name)] = name
+    block[100:108] = b"0000644\0"
+    block[124:136] = size_field
+    block[156:157] = kind
+    block[257:263] = b"ustar\0"
+    block[263:265] = b"00"
+    block[148:156] = b" " * 8
+    block[148:156] = f"{sum(block):06o}\0 ".encode()
+    return bytes(block)
+
+
+def _pad(data: bytes) -> bytes:
+    return data + b"\0" * (-len(data) % 512)
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_base_256_size_is_read(engine):
+    """GNU tar writes sizes past 8 GiB in base 256 (FlyBase is 6.7 GB)."""
+    body = GENE.encode()
+    size = b"\x80" + len(body).to_bytes(11, "big")
+    data = _header(b"a.gff3", size) + _pad(body) + b"\0" * 1024
+    (record,) = parse_bytes(data, engine=engine, validation="gffutils")
+    assert record.seqid == "chr1"
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_pax_size_record_overrides_the_header(engine):
+    body = GENE.encode()
+    # A pax record is "<length> size=<n>\n", the length counting its own digits.
+    record = f" size={len(body)}\n"
+    length = len(record) + len(str(len(record)))
+    length += len(str(length)) - len(str(len(record)))
+    pax = f"{length}{record}".encode()
+    assert len(pax) == length
+    data = (
+        _header(b"pax", f"{len(pax):011o}\0".encode(), b"x")
+        + _pad(pax)
+        + _header(b"a.gff3", b"00000000000\0")  # the ustar size field says 0
+        + _pad(body)
+        + b"\0" * 1024
+    )
+    (record,) = parse_bytes(data, engine=engine, validation="gffutils")
+    assert record.seqid == "chr1"
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("corrupt_second_header", "a header block is corrupt"),
+        ("size_not_a_number", "a header size is not a number"),
+        ("no_regular_file", "holds no regular file"),
+    ],
+)
+def test_a_malformed_tar_archive_is_refused(engine, case, message):
+    body = _pad(GENE.encode())
+    data = {
+        "corrupt_second_header": _header(b"a.gff3", f"{len(GENE):011o}\0".encode())
+        + body
+        + b"garbage".ljust(512, b"x"),
+        "size_not_a_number": _header(b"a.gff3", b"zz\0".ljust(12, b"\0")) + body,
+        "no_regular_file": _header(b"d/", b"00000000000\0", b"5") + b"\0" * 1024,
+    }[case]
+    with pytest.raises(ValueError, match=message):
+        list(parse_bytes(data, engine=engine, validation="gffutils"))
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_a_tar_archive_of_several_files_is_refused(engine):
     data = _tar({"a.gff3": GENE.encode(), "b.gff3": MRNA.encode()})
