@@ -241,12 +241,20 @@ FEATURES_PRIMARY_KEY = "ALTER TABLE features ADD PRIMARY KEY (id)"
 # are merely unused.
 POST_LOAD_INDEXES = """
 CREATE INDEX IF NOT EXISTS features_type     ON features(featuretype);
-CREATE INDEX IF NOT EXISTS attributes_fid    ON attributes(feature_id);
 CREATE INDEX IF NOT EXISTS edges_parent      ON edges(parent);
 CREATE INDEX IF NOT EXISTS edges_child       ON edges(child);
 CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor);
 CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant);
 CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id);
+"""
+
+# Built by `FeatureDB` on the first write that deletes or rewrites attribute
+# rows by feature id, not at ingest: no read path uses it, and it was the
+# costliest index to build (GENCODE GFF3, 108 M attribute rows: 33 s). A
+# database that is never modified never pays for it. `IF NOT EXISTS` makes
+# asking again a catalog check, and a database built before 0.3.0 has it.
+WRITE_INDEXES = """
+CREATE INDEX IF NOT EXISTS attributes_fid    ON attributes(feature_id);
 """
 
 
@@ -260,8 +268,12 @@ INSERT INTO edges (parent, child)
 SELECT DISTINCT a.value AS parent, a.feature_id AS child
 FROM attributes a
 WHERE a.key = 'Parent'
-  AND a.value <> '';   -- `Parent=a,`: the empty part names no parent
+  AND a.value <> ''    -- `Parent=a,`: the empty part names no parent
+ORDER BY parent, child;
 """
+# ORDER BY: DuckDB builds an ART index several times faster over sorted keys,
+# and sorted parents keep children nearly sorted too. On GENCODE both edge
+# indexes took 19 s over file-ordered rows and 4.4 s over these.
 # DISTINCT because a fused discontinuous feature takes the UNION of its
 # segments' `Parent` values, and NCBI repeats `Parent=` on every segment line.
 # It also fixes a latent v1 defect: `Parent=a,a` on a single line produced two
@@ -303,7 +315,8 @@ WHERE a.key = ?                                  -- gtf_gene_key
   AND COALESCE(m.resolved_id, a.value) <> f.id
   AND EXISTS (SELECT 1 FROM features p
               WHERE p.id = COALESCE(m.resolved_id, a.value)
-                AND p.featuretype = 'gene');
+                AND p.featuretype = 'gene')
+ORDER BY parent, child;   -- sorted keys: see EDGES_FROM_PARENT
 """
 
 
@@ -580,8 +593,14 @@ WITH RECURSIVE walk(ancestor, descendant, depth) AS (
 )
 SELECT ancestor, descendant, MIN(depth) AS depth
 FROM walk
-GROUP BY ancestor, descendant;
+GROUP BY ancestor, descendant
+ORDER BY descendant;
 """
+# ORDER BY descendant: the ART build over the closure's two columns took 48 s
+# on GENCODE in walk order and 13 s in this one (ancestor 5 s, descendant 8
+# s), and the sort costs nothing measurable. Descendant rather than ancestor
+# because the descendant index is the slow one unsorted; a gene's descendants
+# still sit close together, since their ids share the transcript's prefix.
 # UNION deduplicates the recursive frontier by (ancestor, descendant, depth),
 # preventing a layered DAG from enumerating every distinct path.  MIN(depth)
 # then gives each reachable pair one canonical, shortest relationship.
