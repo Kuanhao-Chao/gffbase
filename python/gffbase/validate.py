@@ -207,11 +207,10 @@ def _inv5_envelope_exact(con):
 def _inv6_edges_resolve(con):
     """Edge endpoints that name no feature.
 
-    A WARNING, not an error, and calibrated against the oracle rather than
-    against the specification: `mouse_extra_comma.gff3` has `Parent=a,` which
-    yields an empty parent id, and gffutils writes that relation too --
-    `('', 'e1', 1)` -- so refusing it would be a divergence, not a repair. Real
-    files also reference parents that live in another file entirely.
+    A WARNING, not an error: real files reference parents that live in
+    another file entirely. (An empty parent -- `Parent=a,` in
+    `mouse_extra_comma.gff3`, where gffutils writes `('', 'e1', 1)` -- makes
+    no edge at all since 0.3.0, so it no longer lands here.)
 
     It is still worth reporting: a dangling endpoint means `parents()` and
     `children()` will name something `db[...]` cannot fetch.
