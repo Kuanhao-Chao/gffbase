@@ -39,7 +39,7 @@ SCHEMA_VERSION = "2"
 
 DDL = """
 CREATE TABLE IF NOT EXISTS features (
-    id              VARCHAR PRIMARY KEY,   -- LOGICAL key, post-resolution
+    id              VARCHAR NOT NULL,      -- LOGICAL key; FEATURES_PRIMARY_KEY
     seqid           VARCHAR NOT NULL,      -- logical: invariant across segments
     source          VARCHAR,               -- logical
     featuretype     VARCHAR NOT NULL,      -- logical
@@ -220,6 +220,15 @@ UNION ALL
 # Note: B-tree on `(seqid, start, end)` is the universal
 # fallback; the R-tree (if the spatial extension loads) is added separately in
 # `ingest.py::_build_rtree`.
+# `features.id` becomes the primary key once the bulk load is in, not while it
+# runs. Maintaining the key's index row by row made appending Arrow batches
+# the largest ingest stage and grow faster than the file (GENCODE: 283 of
+# 572 s); building it once over the loaded column is a fraction of that.
+# Duplicate ids are still refused -- the resolver prevents them upstream, and
+# this statement fails if one got through.
+FEATURES_PRIMARY_KEY = "ALTER TABLE features ADD PRIMARY KEY (id)"
+
+
 # Single-column indexes only. DuckDB (1.4 and 1.5, checked with EXPLAIN
 # ANALYZE) never scans a multi-column ART index -- not even for a filter on
 # its leading column -- and uses a single-column one only when `col = ?` or
