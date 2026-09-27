@@ -229,7 +229,7 @@ def test_the_release_version_is_canonical_and_stable():
     from packaging.version import Version
 
     version = Version(gffbase.__version__)
-    assert str(version) == gffbase.__version__ == "0.2.1"
+    assert str(version) == gffbase.__version__ == "0.3.0"
     assert not version.is_prerelease and not version.is_devrelease
 
 
