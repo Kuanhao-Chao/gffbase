@@ -386,59 +386,109 @@ fn stop_to_py(py: Python<'_>, stop: producer::Stop) -> PyErr {
     }
 }
 
-fn ne_bytes<T: Copy, const N: usize>(values: &[T], to: fn(T) -> [u8; N]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(values.len() * N);
-    for &v in values {
-        out.extend_from_slice(&to(v));
-    }
-    out
+/// Memory the producer filled, handed to pyarrow without a copy:
+/// `pa.foreign_buffer(buf.address, buf.size, base=buf)` keeps this object --
+/// and so the memory -- alive for as long as any Arrow array refers to it.
+/// Copying each batch into `bytes` first kept two copies of it alive at the
+/// peak. Moving a `Vec` in here does not move its heap buffer, so `address`
+/// stays valid; `frozen` means nothing can change it afterwards.
+#[pyclass(frozen, name = "OwnedBuffer")]
+struct OwnedBuffer {
+    address: usize,
+    size: usize,
+    _data: Owned,
 }
 
-/// A string/binary column as `(kind, offsets, data)`.
+enum Owned {
+    U8(Vec<u8>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+#[pymethods]
+impl OwnedBuffer {
+    #[getter]
+    fn address(&self) -> usize {
+        self.address
+    }
+
+    #[getter]
+    fn size(&self) -> usize {
+        self.size
+    }
+}
+
+fn owned(py: Python<'_>, data: Owned) -> PyResult<Bound<'_, PyAny>> {
+    let (address, size) = match &data {
+        Owned::U8(v) => (v.as_ptr() as usize, v.len()),
+        Owned::I32(v) => (v.as_ptr() as usize, std::mem::size_of_val(v.as_slice())),
+        Owned::I64(v) => (v.as_ptr() as usize, std::mem::size_of_val(v.as_slice())),
+    };
+    Ok(Bound::new(
+        py,
+        OwnedBuffer {
+            address,
+            size,
+            _data: data,
+        },
+    )?
+    .into_any())
+}
+
+/// A string/binary column as `(kind, offsets, data)`: 32-bit offsets
+/// (`str`, `bin`) whenever the data fits; 64-bit (`large_str`, `large_bin`)
+/// only when it does not.
 fn bytes_col<'py>(
     py: Python<'py>,
     kind: &str,
-    b: &producer::Bytes,
+    b: producer::Bytes,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    let producer::Bytes { offsets, data } = b;
+    let (kind, offsets) = if data.len() <= i32::MAX as usize {
+        let narrow: Vec<i32> = offsets.iter().map(|&o| o as i32).collect();
+        (kind.to_string(), Owned::I32(narrow))
+    } else {
+        (format!("large_{kind}"), Owned::I64(offsets))
+    };
     PyTuple::new(
         py,
         [
             kind.into_pyobject(py)?.into_any(),
-            PyBytes::new(py, &ne_bytes(&b.offsets, i64::to_ne_bytes)).into_any(),
-            PyBytes::new(py, &b.data).into_any(),
+            owned(py, offsets)?,
+            owned(py, Owned::U8(data))?,
         ],
     )
 }
 
-fn batch_to_py<'py>(py: Python<'py>, b: &producer::Batch) -> PyResult<Bound<'py, PyDict>> {
+fn batch_to_py(py: Python<'_>, mut b: producer::Batch) -> PyResult<Bound<'_, PyDict>> {
+    use std::mem::take;
     let d = PyDict::new(py);
     d.set_item("n", b.n)?;
     d.set_item("n_attributes", b.a_n)?;
     for (name, col) in [
-        ("id", &b.id),
-        ("seqid", &b.seqid),
-        ("source", &b.source),
-        ("featuretype", &b.featuretype),
-        ("score", &b.score),
-        ("strand", &b.strand),
-        ("frame", &b.frame),
-        ("raw_id", &b.raw_id),
-        ("id_origin", &b.id_origin),
-        ("a_feature_id", &b.a_feature_id),
-        ("a_key", &b.a_key),
-        ("a_value", &b.a_value),
+        ("id", take(&mut b.id)),
+        ("seqid", take(&mut b.seqid)),
+        ("source", take(&mut b.source)),
+        ("featuretype", take(&mut b.featuretype)),
+        ("score", take(&mut b.score)),
+        ("strand", take(&mut b.strand)),
+        ("frame", take(&mut b.frame)),
+        ("raw_id", take(&mut b.raw_id)),
+        ("id_origin", take(&mut b.id_origin)),
+        ("a_keys", take(&mut b.a_keys)),
+        ("a_value", take(&mut b.a_value)),
     ] {
         d.set_item(name, bytes_col(py, "str", col)?)?;
     }
     for (name, col) in [
-        ("attributes_blob", &b.attributes_blob),
-        ("extra_blob", &b.extra_blob),
+        ("attributes_blob", take(&mut b.attributes_blob)),
+        ("extra_blob", take(&mut b.extra_blob)),
     ] {
         d.set_item(name, bytes_col(py, "bin", col)?)?;
     }
-    for (name, col) in [("start", &b.start), ("end", &b.end)] {
+    for (name, col) in [("start", take(&mut b.start)), ("end", take(&mut b.end))] {
         let validity = if col.nulls > 0 {
-            PyBytes::new(py, &col.validity).into_any()
+            owned(py, Owned::U8(col.validity))?
         } else {
             py.None().into_bound(py)
         };
@@ -446,28 +496,25 @@ fn batch_to_py<'py>(py: Python<'py>, b: &producer::Batch) -> PyResult<Bound<'py,
             name,
             (
                 "i64",
-                PyBytes::new(py, &ne_bytes(&col.values, i64::to_ne_bytes)),
+                owned(py, Owned::I64(col.values))?,
                 validity,
                 col.nulls,
             ),
         )?;
     }
-    for (name, col) in [("file_order", &b.file_order), ("seqid_y", &b.seqid_y)] {
-        d.set_item(
-            name,
-            (
-                "i64",
-                PyBytes::new(py, &ne_bytes(col, i64::to_ne_bytes)),
-                py.None(),
-                0,
-            ),
-        )?;
+    for (name, col) in [
+        ("file_order", take(&mut b.file_order)),
+        ("seqid_y", take(&mut b.seqid_y)),
+    ] {
+        d.set_item(name, ("i64", owned(py, Owned::I64(col))?, py.None(), 0))?;
     }
-    for (name, col) in [("occ", &b.occ), ("a_idx", &b.a_idx)] {
-        d.set_item(
-            name,
-            ("i32", PyBytes::new(py, &ne_bytes(col, i32::to_ne_bytes))),
-        )?;
+    for (name, col) in [
+        ("occ", take(&mut b.occ)),
+        ("a_idx", take(&mut b.a_idx)),
+        ("a_feature_row", take(&mut b.a_feature_row)),
+        ("a_key", take(&mut b.a_key)),
+    ] {
+        d.set_item(name, ("i32", owned(py, Owned::I32(col))?))?;
     }
     let deferred = PyList::empty(py);
     for (fid, order, rec) in &b.deferred {
@@ -531,7 +578,7 @@ impl PyIngestProducer {
     /// The next batch as a dict of column buffers, or None at the end.
     fn next_batch<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
         match self.inner.next_batch() {
-            Ok(Some(batch)) => Ok(Some(batch_to_py(py, &batch)?)),
+            Ok(Some(batch)) => Ok(Some(batch_to_py(py, batch)?)),
             Ok(None) => Ok(None),
             Err(stop) => Err(stop_to_py(py, stop)),
         }
@@ -595,6 +642,7 @@ fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(detect_dialect, m)?)?;
     m.add_class::<PyIngestProducer>()?;
+    m.add_class::<OwnedBuffer>()?;
     m.add("__version__", public_version())?;
     // Phase 16 — expose the descriptive Python exception type.
     m.add("GFFFormatError", py.get_type::<GFFFormatError>())?;
