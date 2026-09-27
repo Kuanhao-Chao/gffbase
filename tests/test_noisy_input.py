@@ -74,6 +74,66 @@ def test_a_line_holding_a_nul_byte_is_binary_and_reported(engine):
     assert warning["line_no"] == 1 and "NUL byte" in warning["message"]
 
 
+def _tar(members: dict[str, bytes], fmt=None, gz: bool = False) -> bytes:
+    import gzip
+    import io
+    import tarfile
+
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w", format=fmt or tarfile.USTAR_FORMAT) as tar:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            if fmt == tarfile.PAX_FORMAT:
+                info.pax_headers = {"comment": "x" * 50}
+            tar.addfile(info, io.BytesIO(data))
+    raw = out.getvalue()
+    return gzip.compress(raw) if gz else raw
+
+
+def _tar_cases():
+    import tarfile
+
+    body = (GENE + MRNA).encode()
+    return {
+        "ustar": _tar({"a.gff3": body}),
+        "ustar_gz": _tar({"a.gff3": body}, gz=True),
+        "pax": _tar({"a.gff3": body}, fmt=tarfile.PAX_FORMAT),
+        "gnu_long_name": _tar({"d/" * 60 + "a.gff3": body}, fmt=tarfile.GNU_FORMAT),
+    }
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("case", sorted(_tar_cases()))
+def test_a_one_file_tar_archive_is_read_as_that_file(engine, case, tmp_path):
+    """FlyBase publishes `dmel-all-r6.69.gff.gz` as a gzipped tar: the 512-byte
+    header used to become part of line 1 and the zero padding a last line."""
+    path = tmp_path / "a.gff.gz"
+    path.write_bytes(_tar_cases()[case])
+    con, stats = from_file(str(path), ":memory:", engine=engine)
+    assert con.execute("SELECT id FROM features ORDER BY file_order").fetchall() == [
+        ("g1",),
+        ("t1",),
+    ]
+    assert not stats.warnings
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_tar_archive_of_several_files_is_refused(engine):
+    data = _tar({"a.gff3": GENE.encode(), "b.gff3": MRNA.encode()})
+    with pytest.raises(ValueError, match="more than one file"):
+        list(parse_bytes(data, engine=engine, validation="gffutils"))
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_ustar_at_byte_257_of_a_gff_is_still_text(engine):
+    """Without a valid header checksum it is not an archive."""
+    pad = "chr1\tt\tgene\t1\t100\t.\t+\t.\tID=g0;Note="
+    line = pad + "x" * (257 - len(pad)) + "ustar\n"
+    records = list(parse_bytes((line + GENE).encode(), engine=engine, validation="gffutils"))
+    assert [dict(r.attributes_dict())["ID"] for r in records] == [["g0"], ["g1"]]
+
+
 # ---------------------------------------------------------------------------
 # Column 9
 # ---------------------------------------------------------------------------
