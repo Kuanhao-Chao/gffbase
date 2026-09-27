@@ -152,31 +152,28 @@ database into a legacy `.sqlite` file when you need the old format.
 Head-to-head against legacy `gffutils` across the five canonical human-genome
 annotation releases:
 
-**The ingest column is a draw, not a win.** gffbase spans 1.21× to 0.69×:
-ahead where per-feature overhead dominates, behind on the attribute-dense
-whole-genome files, because both engines are attribute-bound and effectively
-serial at a similar rate. What you gain on day one is in the other columns —
-the spatial index, batched extraction, and SQL over the whole corpus — plus
-the fact that no ratio is published at all unless both engines' correctness
-signatures agree. The GTF row is the inference-disabled arm, the configuration
-least favourable to gffbase. `peak RSS` is ingest **plus exhaustive
-validation**; `validate_db` defaults to `sample=200` and the CLI never
-overrides it.
+**Ingest is faster on every corpus, 1.92× to 3.62×,** into a database 0.61× to 0.89×
+the size of the SQLite one. On top of that you gain the spatial index, batched
+extraction, and SQL over the whole corpus — and no ratio is published at all
+unless both engines' correctness signatures agree. The GTF row is the
+inference-disabled arm, the configuration least favourable to gffbase.
+`peak RSS` is ingest **plus exhaustive validation**; `validate_db` defaults
+to `sample=200` and the CLI never overrides it.
 
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS (ingest + full validation) | spatial qps | batched (5 k anchors) |
 | --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **GENCODE v49** (basic) | GTF | 6,068,892 | **10 min 14 s** | 7 min 1 s | **0.69×** | 53.57 GB | **707** ±0% (n=5) | 963 ms / 1.93 M desc |
-| **GENCODE v49** (basic) | GFF3 | 6,066,054 | **11 min 8 s** | 9 min 59 s | **0.90×** | 62.00 GB | **705** ±0% (n=5) | 1096 ms / 1.93 M desc |
-| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **7 min 2 s** | 6 min 34 s | **0.93×** | 26.80 GB | **540** ±0% (n=5) | 588 ms / 999 k desc |
-| **CHESS 3.1.3** | GFF3 | 2,761,061 | **1 min 53 s** | 2 min 17 s | **1.21×** | 3.38 GB | **702** ±0% (n=5) | 202 ms / 161 k desc |
-| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **40.0 s** | 45.7 s | **1.14×** | 3.98 GB | **840** ±0% (n=5) | 206 ms / 156 k desc |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **3 min 36 s** | 6 min 54 s | **1.92×** | 53.47 GB | **728** ±1% (n=5) | 614 ms / 1.93 M desc |
+| **GENCODE v49** (basic) | GFF3 | 6,066,054 | **3 min 13 s** | 9 min 45 s | **3.03×** | 61.93 GB | **770** ±1% (n=5) | 666 ms / 1.93 M desc |
+| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **2 min 5 s** | 6 min 31 s | **3.13×** | 26.69 GB | **588** ±1% (n=5) | 443 ms / 999 k desc |
+| **CHESS 3.1.3** | GFF3 | 2,761,061 | **37.0 s** | 2 min 14 s | **3.62×** | 2.93 GB | **678** ±3% (n=5) | 155 ms / 161 k desc |
+| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **15.6 s** | 45.1 s | **2.89×** | 4.00 GB | **890** ±0% (n=5) | 136 ms / 156 k desc |
 <!-- END GENERATED: corpus-table -->
 
 <!-- BEGIN GENERATED: benchmark-provenance -->
 **Measured on** AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34  
-**Versions:** Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14  
-**Commit:** `42bb900e328c` · **Run:** 2026-09-10T19:56:52Z  
+**Versions:** Python 3.11.16 · gffbase 0.3.0 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14  
+**Commit:** `632a4d80dee0` · **Run:** 2026-09-27T15:07:53Z  
 *Generated from `benchmarks/results/06_mega.linux-x86_64.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 
@@ -302,19 +299,18 @@ file with `gffutils.FeatureDB("legacy_compatible.sqlite")`.
 - **Storage backend**: SQLite → DuckDB. Database file extension is
   `.duckdb` by convention. The legacy SQLite layout is reachable via
   `export_sqlite()` (above) or the compat views.
-- **Disk size**: GFFBase databases are 1.18× to 1.36× larger than legacy
-  SQLite -- the price of materializing the transitive closure and the R-tree,
-  which is what lets a hierarchy walk run as one query with no recursion and a
-  spatial query use a real spatial index.
+- **Disk size**: GFFBase databases are 0.61× to 0.89× the size of legacy SQLite
+  across the benchmark corpora, though they also hold a materialized transitive
+  closure and an R-tree -- which is what lets a hierarchy walk run as one query
+  with no recursion and a spatial query use a real spatial index.
   Current measurements: [Performance](https://khchao.com/gffbase/content/performance.html).
-- **Peak RSS**: substantially higher -- 6.4-10.2 GB to ingest a whole-genome
-  annotation and validate a 10,000-feature sample (RefSeq 6.4-6.9, GENCODE GTF
-  8.5-9.2, GENCODE GFF3 9.5-10.2), against 111-194 MB for `gffutils`, which
-  only ingests. No run measures ingest with no validation at all. The published
-  figures are larger still (up to 62 GB) because those runs validate
-  exhaustively; `validate_db` defaults to `sample=200`, so no default path pays
-  that. DuckDB allocates a vectorized ingest buffer pool; cap it with
-  `PRAGMA memory_limit='512MB'` if that matters more than wall time.
+- **Peak RSS**: higher -- ingest alone peaks at 1.0 GiB (MANE) to 2.8 GiB (GENCODE GFF3) on the benchmark
+  corpora, under a 512 MB DuckDB budget raised only for the steps that need
+  more, against 107–190 MB for `gffutils`, which writes through to SQLite.
+  The published tables show 2.9–61.9 GB because those runs also validate
+  exhaustively; `validate_db` defaults to `sample=200`, so no default path
+  pays that. To hold DuckDB to a fixed limit instead, pass
+  `pragmas={"memory_limit": ...}` (see [tuning](https://khchao.com/gffbase/content/tuning.html)).
 - **Hierarchy depth**: GFFBase materializes the closure to depth 8 by
   default (vs depth 2 in legacy). Anything past 8 falls through to a
   dynamic recursive CTE — the dispatcher is automatic.

@@ -92,9 +92,9 @@ Two different costs get confused here, so take them apart.
 
 **Ingest into a file is bounded by default** since 0.3.0: the parser streams
 its input, DuckDB runs under a 512 MB budget raised only for the step that
-needs more, and at most 8 threads are used. Peak RSS is 0.85 GiB for MANE
-and about 2.5 GiB for GENCODE (:doc:`tuning` has the table). If yours is
-much higher, one of these is usually why:
+needs more, and at most 8 threads are used. Peak RSS is 1.0 GiB (MANE) to 2.8 GiB (GENCODE GFF3) on the
+benchmark corpora (:doc:`tuning` has the table). If yours is much higher, one
+of these is usually why:
 
 - The database is in memory (``":memory:"``). Its tables cannot be evicted,
   so it holds everything, and the budget does not apply.
@@ -102,10 +102,10 @@ much higher, one of these is usually why:
   limit replaces the budget, and each thread past eight adds buffers.
 
 For comparison, ``gffutils`` -- which only ingests, writing through to SQLite
-on disk -- peaks at 111–194 MB on the published corpora.
+on disk -- peaks at 107–190 MB on the published corpora.
 
 **Exhaustive validation** is what makes the published figures large: the numbers
-in the performance tables span 3.4–62.0 GB because those runs call
+in the performance tables span 2.9–61.9 GB because those runs call
 ``validate(level="full", sample=None)``, which re-reads every stored attribute.
 **No default path does that** — ``validate_db`` defaults to ``sample=200`` and
 the CLI never overrides it. If you asked for exhaustive validation on a
@@ -250,16 +250,21 @@ An ingest that failed part-way, or a truncated file. Rebuild it with
 ``create_db(..., force=True)``. GFFBase refuses to open it rather than handing
 back an empty database that reports itself as complete.
 
-.. _troubleshooting--the-database-is-larger-than-the-sqlite-one:
+.. _troubleshooting--the-database-is-larger-than-expected:
 
-The database is larger than the SQLite one
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The database is larger than expected
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Expected -- 1.18× to 1.36× across the benchmark corpora. GFFBase stores a
-materialized transitive closure, a long-form attributes table and an R-tree, so
-that a hierarchy walk is one query with no recursion, an attribute filter is a
-columnar scan rather than JSON parsing, and a spatial query uses a spatial
-index. That is the trade.
+A database built by 0.3.0 is 0.61× to 0.89× the size of ``gffutils``' SQLite file
+across the benchmark corpora, although it also stores a materialized transitive
+closure, a long-form attributes table and an R-tree. If yours is much larger:
+
+- It was built by 0.2, which kept multi-column indexes DuckDB never used; the
+  same file ingested by 0.3.0 is about half the size. Rebuild it with
+  ``create_db(..., force=True)``.
+- It has been updated many times. DuckDB reuses the blocks that deleted or
+  replaced rows free, but never shrinks the file; rebuilding it returns the
+  space.
 
 ----
 

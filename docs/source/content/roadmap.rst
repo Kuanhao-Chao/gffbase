@@ -14,8 +14,7 @@ Priority 1: speed, memory and trust
 -----------------------------------
 
 - **Parallel parsing.** Parsing and per-record work is about a third of ingest
-  time now (GENCODE v49 GFF3: 58 of 203 s) and runs on one core; appending to
-  DuckDB is most of the rest. Acceptance: the parse stage scales with cores and
+  time now and runs on one core; appending to DuckDB is most of the rest. Acceptance: the parse stage scales with cores and
   the correctness signature is unchanged.
 
 - **Scattered point lookups.** A ``children()`` or ``db[id]`` call on an id
@@ -25,8 +24,14 @@ Priority 1: speed, memory and trust
   in ``benchmarks/08_loops.py`` with every answer digest unchanged.
 
 - **Peak memory under 2 GB on every whole-genome corpus.** GENCODE peaks at
-  about 2.5 GiB, in the index stage. Acceptance: peak RSS in the benchmark
+  2.6-2.8 GiB, in the index stage. Acceptance: peak RSS in the benchmark
   harness, with no out-of-memory retry path left untested.
+
+- **A reproducible spatial benchmark.** ``06_mega.py`` samples its regions from
+  a per-seqid span list whose order DuckDB does not fix, so the seeded sample
+  differs between runs and spatial queries per second compare only within one
+  run. Acceptance: the list is ordered before sampling, and every canonical row
+  is re-measured with it.
 
 - **Persistent source provenance.** Store source checksum, size, parser mode,
   and build identity in database metadata. Acceptance: a database can explain

@@ -16,21 +16,19 @@ and do not claim — is on the :doc:`Methodology <methodology>` page.
 
 .. important::
 
-   **Read the ingest column as a draw, not a win.** Across the five corpora
-   gffbase ranges from 1.21× to 0.69× against ``gffutils`` on ingest wall time:
-   it is ahead where per-feature overhead dominates (CHESS, MANE) and behind on
-   the attribute-dense whole-genome files. Both engines are attribute-bound and
-   effectively serial, at a comparable rate. The durable advantages are
-   elsewhere — batched extraction, spatial indexing, and SQL over the corpus —
-   and those are unaffected by the ingest result. See
-   :ref:`What the ingest numbers do and do not say
-   <methodology--what-the-ingest-numbers-do-and-do-not-say>`.
+   **gffbase ingests every corpus faster**, 1.92× to 3.62× against ``gffutils`` on
+   wall time, into a database 0.61× to 0.89× the size of the SQLite one. The
+   narrowest margin is GENCODE GTF, the inference-disabled arm, where
+   ``gffutils``' GTF path is a plain bulk insert. Each ingest was measured once;
+   see :ref:`What the ingest numbers do and do not say
+   <methodology--what-the-ingest-numbers-do-and-do-not-say>` for how much a
+   single figure is worth.
 
 .. BEGIN GENERATED: benchmark-provenance
 
 | **Measured on** AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34
-| **Versions:** Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14
-| **Commit:** ``42bb900e328c`` · **Run:** 2026-09-10T19:56:52Z
+| **Versions:** Python 3.11.16 · gffbase 0.3.0 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14
+| **Commit:** ``632a4d80dee0`` · **Run:** 2026-09-27T15:07:53Z
 | *Generated from benchmarks/results/06_mega.linux-x86_64.json by tools/gen_benchmark_tables.py. Do not edit by hand.*
 
 .. END GENERATED: benchmark-provenance
@@ -60,48 +58,48 @@ The five-corpus run
    * - **GENCODE v49** (basic)
      - GTF
      - 6,068,892
-     - **10 min 14 s**
-     - 7 min 1 s
-     - **0.69×**
-     - 53.57 GB
-     - **707** ±0% (n=5)
-     - 963 ms / 1.93 M desc
+     - **3 min 36 s**
+     - 6 min 54 s
+     - **1.92×**
+     - 53.47 GB
+     - **728** ±1% (n=5)
+     - 614 ms / 1.93 M desc
    * - **GENCODE v49** (basic)
      - GFF3
      - 6,066,054
-     - **11 min 8 s**
-     - 9 min 59 s
-     - **0.90×**
-     - 62.00 GB
-     - **705** ±0% (n=5)
-     - 1096 ms / 1.93 M desc
+     - **3 min 13 s**
+     - 9 min 45 s
+     - **3.03×**
+     - 61.93 GB
+     - **770** ±1% (n=5)
+     - 666 ms / 1.93 M desc
    * - **RefSeq GRCh38.p14**
      - GFF3
      - 4,932,571
-     - **7 min 2 s**
-     - 6 min 34 s
-     - **0.93×**
-     - 26.80 GB
-     - **540** ±0% (n=5)
-     - 588 ms / 999 k desc
+     - **2 min 5 s**
+     - 6 min 31 s
+     - **3.13×**
+     - 26.69 GB
+     - **588** ±1% (n=5)
+     - 443 ms / 999 k desc
    * - **CHESS 3.1.3**
      - GFF3
      - 2,761,061
-     - **1 min 53 s**
-     - 2 min 17 s
-     - **1.21×**
-     - 3.38 GB
-     - **702** ±0% (n=5)
-     - 202 ms / 161 k desc
+     - **37.0 s**
+     - 2 min 14 s
+     - **3.62×**
+     - 2.93 GB
+     - **678** ±3% (n=5)
+     - 155 ms / 161 k desc
    * - **MANE v1.5** (Ensembl)
      - GFF3
      - 524,834
-     - **40.0 s**
-     - 45.7 s
-     - **1.14×**
-     - 3.98 GB
-     - **840** ±0% (n=5)
-     - 206 ms / 156 k desc
+     - **15.6 s**
+     - 45.1 s
+     - **2.89×**
+     - 4.00 GB
+     - **890** ±0% (n=5)
+     - 136 ms / 156 k desc
 
 .. END GENERATED: corpus-table
 
@@ -116,21 +114,19 @@ on it. Had a comparator been killed at its safety valve the cell would read
    **What a single figure here is worth**
 
    Ingest wall time was measured once per corpus, not repeated — only the query
-   phases use ``--repeats 5``. A separate probe of the same binary put the
-   run-to-run spread at **1.3 % on RefSeq and 2.7 % on GENCODE GTF**, but at
-   roughly **20 % on CHESS**, where a 90-second run is dominated by startup.
-   Read the large-corpus ratios as reliable to a few percent and the CHESS
-   ratio as indicative. The per-corpus figures and the conditions they were
-   taken under are in :ref:`What the ingest numbers do and do not say
+   phases use ``--repeats 5``. A separate probe of the same wheel, ingest only,
+   on the same eight pinned cores, put the run-to-run spread at 0.3-2.3 %,
+   largest on the smallest corpus (MANE), and the published single figures
+   sat 0.7-4.9 % above that probe's medians -- so the ratios above, if
+   anything, understate gffbase. The per-corpus figures are in
+   :ref:`What the ingest numbers do and do not say
    <methodology--what-the-ingest-numbers-do-and-do-not-say>`.
 
    The ``peak RSS`` column is the peak of a process that ingests **and then
    validates exhaustively** (``validation_sample="all"``), which is why it
    reaches tens of GB. It is not the cost of ingest, and it is not what a user
    pays: ``validate_db`` defaults to ``sample=200`` and the CLI never overrides
-   it. Measured at ``validation_sample=10000``, the same five corpora peak at
-   1.3-10.2 GB instead of 3.3-62.2 GB -- GENCODE GFF3 alone falls from 62.2 GB
-   to 9.5-10.2 GB.
+   it. Ingest alone, in the same probe, peaks at 1.0 GiB (MANE) to 2.8 GiB (GENCODE GFF3).
 
 ----
 
@@ -148,12 +144,12 @@ has nothing to do with either engine's storage.
 **The GTF row in the table above is the inference-disabled arm**
 (``gtf_arm="no-infer"``, ``infer_gtf_parents=False`` on both sides) — the
 recommended real-data configuration, and the one that is least favourable to
-gffbase. On that arm ``gffutils`` reaches 229,000 attributes per second, its
-fastest result on any corpus, because its GTF path becomes a plain bulk insert
-with no synthesis; gffbase is at 157,000, which is its third-fastest result of
-the five and within 7% of its best — just under GENCODE GFF3 at 162,000 and
-MANE at 167,700, and well clear of RefSeq at 130,600. The 0.69× is the
-comparator running unusually fast, not gffbase running unusually slow.
+gffbase. On that arm ``gffutils`` reaches 232,400 attributes per
+second, its fastest result on any corpus, because its GTF path becomes a plain
+bulk insert with no synthesis; gffbase is at 446,700, in line with its
+other attribute-dense corpora. That is why this row has the narrowest margin,
+1.92×: the comparator is running at its fastest, not gffbase at its
+slowest.
 
 The 36-job cluster campaign reports three separate arms over these bytes, and
 they are not mixed:
@@ -196,9 +192,11 @@ The per-corpus batched column in the table above shows this at 5 000 anchors.
 
    **The row-by-row loop is the wrong tool here**
 
-   ``for i in ids: db.children(i)`` is **slower in GFFBase than in** ``gffutils``.
-   DuckDB pays vectorization startup on every call; SQLite, an OLTP engine,
-   does not. This is a real and inherent trade, not a defect — and it is why
+   ``for i in ids: db.children(i)``, over ids from your own list, is **slower in
+   GFFBase than in** ``gffutils``. DuckDB pays vectorization startup on every
+   call; SQLite, an OLTP engine, does not. (A loop over a gffbase iterator is
+   prefetched instead -- see :ref:`the loop timings below
+   <performance--loops-against-gffutils>`.) This is a real and inherent trade, not a defect — and it is why
    the batched API exists. The :doc:`Migration guide <migration>` covers it in
    the one place a ported script is likely to hit it.
 
@@ -226,13 +224,13 @@ run as the speed numbers rather than retyped:
      - legacy ``gffutils``
      - ratio
    * - **Peak RSS** (gffbase: ingest + full validation)
-     - 3.38 GB – 62.00 GB
-     - 110.50 MB – 193.74 MB
+     - 2.93 GB – 61.93 GB
+     - 106.76 MB – 190.00 MB
      - not comparable
    * - **On-disk database**
-     - 610.76 MB – 7.14 GB
+     - 329.51 MB – 3.69 GB
      - 472.90 MB – 6.05 GB
-     - 1.18–1.36×
+     - 0.61–0.89×
 
 | *Measured across 5 corpora; the disk ratio is gffbase ÷ legacy. The two RSS figures are not a ratio: gffbase's is the peak of a process that ingests and then validates exhaustively, the comparator's of one that only ingests. Ingest alone peaks far lower, and validate_db defaults to sample=200.*
 

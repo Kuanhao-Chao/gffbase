@@ -88,15 +88,16 @@ query returning Arrow buffers, with an ``anchor`` column carrying each row's
 input ID so you can regroup without re-querying.
 → :doc:`Machine learning workflows <cookbook_ml_workflows>`
 
-.. _faq--why-is-my-database-bigger-than-the-sqlite-one:
+.. _faq--is-the-database-bigger-than-the-sqlite-one:
 
-Why is my database bigger than the SQLite one?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Is the database bigger than the SQLite one?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1.18× to 1.36× across the benchmark corpora, and deliberately: gffbase
-materializes a transitive closure and a long-form attributes table so hierarchy
-walks and attribute searches are indexed lookups rather than scans. That is the
-trade for the query speed.
+No: 0.61× to 0.89× the size across the benchmark corpora, although gffbase also
+materializes a transitive closure and a long-form attributes table so that
+hierarchy walks and attribute searches are indexed lookups rather than scans.
+Columnar compression pays for them. A database built by 0.2 is about twice
+the size of one built by 0.3.0 from the same file.
 → :doc:`Performance <performance>`
 
 .. _faq--native_available-says-false-does-that-matter:

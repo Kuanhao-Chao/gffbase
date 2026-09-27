@@ -99,27 +99,26 @@ and every method has a snippet in the
 ## Measured against `gffutils`
 
 Head-to-head across five canonical human-genome annotations — one run, one
-machine, one commit. **Read the ingest column as a draw rather than a win:**
-gffbase spans 1.21× to 0.69×, ahead where per-feature overhead dominates and
-behind on the attribute-dense whole-genome files, because both engines are
-attribute-bound and effectively serial at a comparable rate. The durable
-advantages — batched extraction, spatial indexing, SQL over the whole corpus —
-are untouched by that result.
+machine, one commit. **gffbase ingests every corpus faster, 1.92× to 3.62×,**
+into a database 0.61× to 0.89× the size of gffutils' SQLite file. The narrowest
+margin is the GENCODE GTF row, the arm least favourable to gffbase: with parent
+inference off, gffutils' GTF path is a plain bulk insert. Batched extraction,
+spatial indexing and SQL over the whole corpus come on top.
 
 <!-- BEGIN GENERATED: corpus-table -->
 | Corpus | Format | Lines | gffbase ingest | legacy ingest | speedup | peak RSS (ingest + full validation) | spatial qps | batched (5 k anchors) |
 | --- | :--: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **GENCODE v49** (basic) | GTF | 6,068,892 | **10 min 14 s** | 7 min 1 s | **0.69×** | 53.57 GB | **707** ±0% (n=5) | 963 ms / 1.93 M desc |
-| **GENCODE v49** (basic) | GFF3 | 6,066,054 | **11 min 8 s** | 9 min 59 s | **0.90×** | 62.00 GB | **705** ±0% (n=5) | 1096 ms / 1.93 M desc |
-| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **7 min 2 s** | 6 min 34 s | **0.93×** | 26.80 GB | **540** ±0% (n=5) | 588 ms / 999 k desc |
-| **CHESS 3.1.3** | GFF3 | 2,761,061 | **1 min 53 s** | 2 min 17 s | **1.21×** | 3.38 GB | **702** ±0% (n=5) | 202 ms / 161 k desc |
-| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **40.0 s** | 45.7 s | **1.14×** | 3.98 GB | **840** ±0% (n=5) | 206 ms / 156 k desc |
+| **GENCODE v49** (basic) | GTF | 6,068,892 | **3 min 36 s** | 6 min 54 s | **1.92×** | 53.47 GB | **728** ±1% (n=5) | 614 ms / 1.93 M desc |
+| **GENCODE v49** (basic) | GFF3 | 6,066,054 | **3 min 13 s** | 9 min 45 s | **3.03×** | 61.93 GB | **770** ±1% (n=5) | 666 ms / 1.93 M desc |
+| **RefSeq GRCh38.p14** | GFF3 | 4,932,571 | **2 min 5 s** | 6 min 31 s | **3.13×** | 26.69 GB | **588** ±1% (n=5) | 443 ms / 999 k desc |
+| **CHESS 3.1.3** | GFF3 | 2,761,061 | **37.0 s** | 2 min 14 s | **3.62×** | 2.93 GB | **678** ±3% (n=5) | 155 ms / 161 k desc |
+| **MANE v1.5** (Ensembl) | GFF3 | 524,834 | **15.6 s** | 45.1 s | **2.89×** | 4.00 GB | **890** ±0% (n=5) | 136 ms / 156 k desc |
 <!-- END GENERATED: corpus-table -->
 
 <!-- BEGIN GENERATED: benchmark-provenance -->
 **Measured on** AMD EPYC 7702 64-Core Processor · 128 cores · 1007.22 GB RAM · Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34  
-**Versions:** Python 3.11.16 · gffbase 0.2.0rc1 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14  
-**Commit:** `42bb900e328c` · **Run:** 2026-09-10T19:56:52Z  
+**Versions:** Python 3.11.16 · gffbase 0.3.0 · duckdb 1.5.5 · pyarrow 25.0.1 · gffutils 0.14  
+**Commit:** `632a4d80dee0` · **Run:** 2026-09-27T15:07:53Z  
 *Generated from `benchmarks/results/06_mega.linux-x86_64.json` by `tools/gen_benchmark_tables.py`. Do not edit by hand.*
 <!-- END GENERATED: benchmark-provenance -->
 

@@ -1,8 +1,8 @@
 {
   "schema_version": "3",
   "environment": {
-    "timestamp_utc": "2026-09-10T19:56:52Z",
-    "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+    "timestamp_utc": "2026-09-27T15:07:53Z",
+    "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
     "git_dirty": false,
     "hostname": "salz13.idies.jhu.edu",
     "platform": "Linux-5.14.0-503.15.1.el9_5.x86_64-x86_64-with-glibc2.34",
@@ -15,7 +15,7 @@
     "cpu_cores_physical": 128,
     "cpu_cores_logical": 128,
     "total_ram_bytes": 1081490325504,
-    "free_disk_bytes": 1843458039808,
+    "free_disk_bytes": 1677793153024,
     "cpu_affinity": [
       0,
       1,
@@ -24,18 +24,16 @@
       4,
       5,
       6,
-      7,
-      8,
-      9
+      7
     ],
     "python": {
       "version": "3.11.16",
       "implementation": "CPython",
       "executable": "python3.11"
     },
-    "rustc_version": "rustc 1.83.0 (90b35a623 2024-11-26)",
+    "rustc_version": "rustc 1.69.0 (84c898d65 2023-04-16)",
     "packages": {
-      "gffbase": "0.2.0rc1",
+      "gffbase": "0.3.0",
       "duckdb": "1.5.5",
       "pyarrow": "25.0.1",
       "pandas": "3.0.5",
@@ -44,31 +42,31 @@
       "psutil": "7.2.2"
     },
     "gffbase_install": {
-      "distribution_version": "0.2.0rc1",
-      "python_version": "0.2.0rc1",
+      "distribution_version": "0.3.0",
+      "python_version": "0.3.0",
       "python_module": "__init__.py",
-      "native_version": "0.2.0rc1",
+      "native_version": "0.3.0",
       "native_module": "_native.abi3.so",
-      "native_sha256": "86efa89f96341e06720c64b2fd03131c20522d0c8462d12bb2e236699804282e"
+      "native_sha256": "1848af76ba250cf6ea9d6daac44dc6ea6c9a685ad2a6b86374566b6532fb09fe"
     },
     "artifact": {
-      "wheel": "gffbase-0.2.0rc1-cp310-abi3-linux_x86_64.whl",
-      "wheel_sha256": "abf0458bc0f4a30c4af3013c190a45f5b82c9f0e2e2deb50694612040f62e0ff",
+      "wheel": "gffbase-0.3.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+      "wheel_sha256": "75ceae8898431c1531d7513c19f23b0ef39e3acfb22d8d208fedc23126cb0ce1",
       "metadata": {
         "name": "gffbase",
-        "version": "0.2.0rc1"
+        "version": "0.3.0"
       },
       "wheel_tags": [
-        "cp310-abi3-linux_x86_64"
+        "cp310-abi3-manylinux_2_34_x86_64"
       ],
       "native": {
         "member": "gffbase/_native.abi3.so",
-        "sha256": "86efa89f96341e06720c64b2fd03131c20522d0c8462d12bb2e236699804282e"
+        "sha256": "1848af76ba250cf6ea9d6daac44dc6ea6c9a685ad2a6b86374566b6532fb09fe"
       }
     },
     "env": {
-      "GFFBASE_THREADS": "10",
-      "GFFUTILS2_THREADS": "10",
+      "GFFBASE_THREADS": "8",
+      "GFFUTILS2_THREADS": "8",
       "OMP_NUM_THREADS": "1",
       "OPENBLAS_NUM_THREADS": "1",
       "MKL_NUM_THREADS": "1",
@@ -84,8 +82,8 @@
       "name": "MANE v1.5 (Ensembl IDs)",
       "key": "mane",
       "measured": {
-        "timestamp_utc": "2026-09-10T16:30:35+00:00",
-        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "timestamp_utc": "2026-09-27T12:06:38+00:00",
+        "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
         "git_dirty": false
       },
       "input": "benchmarks/data/MANE.GRCh38.v1.5.ensembl_genomic.gff.gz",
@@ -94,15 +92,15 @@
       "feature_lines": 524834,
       "gffbase": {
         "label": "gffbase ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
-        "peak_rss_bytes": 4273946624,
-        "peak_rss_mb": 4075.953125,
+        "peak_rss_bytes": 4292046848,
+        "peak_rss_mb": 4093.21484375,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -111,7 +109,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 3600,
-        "wall_seconds": 40.01940732821822,
+        "wall_seconds": 15.615037919022143,
         "n_features": 524834,
         "rtree_built": true,
         "fmt": "gff3",
@@ -167,7 +165,7 @@
             "INV-12"
           ]
         },
-        "disk_bytes": 640430080,
+        "disk_bytes": 345518080,
         "correctness_signature": {
           "schema_version": "database-signature-v3",
           "segment_count": 524834,
@@ -218,15 +216,15 @@
       },
       "legacy": {
         "label": "legacy gffutils ingest(MANE.GRCh38.v1.5.ensembl_genomic.gff.gz)",
-        "peak_rss_bytes": 138055680,
-        "peak_rss_mb": 131.66015625,
+        "peak_rss_bytes": 134557696,
+        "peak_rss_mb": 128.32421875,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -235,7 +233,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 5400,
-        "wall_seconds": 45.68435161188245,
+        "wall_seconds": 45.14781074691564,
         "n_features": 524834,
         "disk_bytes": 495874048,
         "correctness_signature": {
@@ -286,23 +284,23 @@
           "combined_sha256": "d6e5a994edfb9756078f9f5cb1cf784516e114ab5ad1d809b03dbb003f69071c"
         }
       },
-      "ingest_speedup": 1.141554927018367,
+      "ingest_speedup": 2.8913033052527433,
       "spatial": {
         "state": "completed",
         "n_queries": 5000,
-        "wall_seconds": 5.955103232525289,
-        "qps": 839.6160074423642,
-        "total_features_returned": 3850,
+        "wall_seconds": 5.616709663532674,
+        "qps": 890.2009004423437,
+        "total_features_returned": 3930,
         "timing": {
-          "median": 5.955103232525289,
-          "min": 5.951575342565775,
-          "max": 5.9736157497391105,
+          "median": 5.616709663532674,
+          "min": 5.584508213214576,
+          "max": 5.621336434036493,
           "values": [
-            5.951575342565775,
-            5.956975894980133,
-            5.954041575081646,
-            5.955103232525289,
-            5.9736157497391105
+            5.584508213214576,
+            5.6036566169932485,
+            5.616709663532674,
+            5.621336434036493,
+            5.619000074453652
           ],
           "n": 5
         }
@@ -311,18 +309,18 @@
         "state": "completed",
         "n_anchors": 5000,
         "n_descendants": 156327,
-        "wall_seconds": 0.20640211831778288,
-        "qps": 24224.557580857047,
+        "wall_seconds": 0.13554112892597914,
+        "qps": 36889.17186701734,
         "timing": {
-          "median": 0.20640211831778288,
-          "min": 0.2057541674003005,
-          "max": 0.2101896433159709,
+          "median": 0.13554112892597914,
+          "min": 0.13330448977649212,
+          "max": 0.13706957548856735,
           "values": [
-            0.20832681097090244,
-            0.20640211831778288,
-            0.2101896433159709,
-            0.2057541674003005,
-            0.2060372717678547
+            0.13706957548856735,
+            0.1364034041762352,
+            0.13330448977649212,
+            0.1348643573001027,
+            0.13554112892597914
           ],
           "n": 5
         }
@@ -338,13 +336,13 @@
         "n_batched": 5000,
         "repeats": 5,
         "region_seed": 20260501,
-        "threads": 10,
+        "threads": 8,
         "gtf_arm": null,
         "infer_gtf_parents": null,
         "validation_sample": "all",
         "benchmark_env": {
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -360,8 +358,8 @@
       "name": "CHESS 3.1.3",
       "key": "chess",
       "measured": {
-        "timestamp_utc": "2026-09-10T16:41:07+00:00",
-        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "timestamp_utc": "2026-09-27T12:15:57+00:00",
+        "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
         "git_dirty": false
       },
       "input": "benchmarks/data/chess3.1.3.GRCh38.gff.gz",
@@ -370,15 +368,15 @@
       "feature_lines": 2761061,
       "gffbase": {
         "label": "gffbase ingest(chess3.1.3.GRCh38.gff.gz)",
-        "peak_rss_bytes": 3633422336,
-        "peak_rss_mb": 3465.1015625,
+        "peak_rss_bytes": 3148976128,
+        "peak_rss_mb": 3003.09765625,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -387,7 +385,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 3600,
-        "wall_seconds": 113.14759543910623,
+        "wall_seconds": 37.016084232367575,
         "n_features": 2761061,
         "rtree_built": true,
         "fmt": "gff3",
@@ -443,7 +441,7 @@
             "INV-12"
           ]
         },
-        "disk_bytes": 1603284992,
+        "disk_bytes": 1048588288,
         "correctness_signature": {
           "schema_version": "database-signature-v3",
           "segment_count": 2761061,
@@ -478,15 +476,15 @@
       },
       "legacy": {
         "label": "legacy gffutils ingest(chess3.1.3.GRCh38.gff.gz)",
-        "peak_rss_bytes": 203149312,
-        "peak_rss_mb": 193.73828125,
+        "peak_rss_bytes": 199229440,
+        "peak_rss_mb": 190.0,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -495,7 +493,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 5400,
-        "wall_seconds": 136.9852965734899,
+        "wall_seconds": 133.90969208814204,
         "n_features": 2761061,
         "disk_bytes": 1179586560,
         "correctness_signature": {
@@ -530,23 +528,23 @@
           "combined_sha256": "d25edf8948a52ef04077040ebe56600454bb8c5e4b840cfb28ae8e4e235cde39"
         }
       },
-      "ingest_speedup": 1.2106779294944243,
+      "ingest_speedup": 3.6176082604396287,
       "spatial": {
         "state": "completed",
         "n_queries": 5000,
-        "wall_seconds": 7.120141294784844,
-        "qps": 702.2332553515836,
-        "total_features_returned": 12541,
+        "wall_seconds": 7.370909843593836,
+        "qps": 678.3423086290456,
+        "total_features_returned": 10803,
         "timing": {
-          "median": 7.120141294784844,
-          "min": 7.092992872931063,
-          "max": 7.129592828452587,
+          "median": 7.370909843593836,
+          "min": 7.184430297464132,
+          "max": 7.58259915933013,
           "values": [
-            7.092992872931063,
-            7.108533817343414,
-            7.120141294784844,
-            7.122397993691266,
-            7.129592828452587
+            7.184430297464132,
+            7.286455904133618,
+            7.420640368945897,
+            7.370909843593836,
+            7.58259915933013
           ],
           "n": 5
         }
@@ -555,18 +553,18 @@
         "state": "completed",
         "n_anchors": 5000,
         "n_descendants": 161445,
-        "wall_seconds": 0.20161976292729378,
-        "qps": 24799.15623054796,
+        "wall_seconds": 0.15519907139241695,
+        "qps": 32216.68760734802,
         "timing": {
-          "median": 0.20161976292729378,
-          "min": 0.19376371894031763,
-          "max": 0.208396939560771,
+          "median": 0.15519907139241695,
+          "min": 0.14590197894722223,
+          "max": 0.17610385548323393,
           "values": [
-            0.208396939560771,
-            0.20161976292729378,
-            0.20247583743184805,
-            0.19376371894031763,
-            0.2001963397487998
+            0.15519907139241695,
+            0.17610385548323393,
+            0.14590197894722223,
+            0.17045383621007204,
+            0.15036890748888254
           ],
           "n": 5
         }
@@ -582,13 +580,13 @@
         "n_batched": 5000,
         "repeats": 5,
         "region_seed": 20260501,
-        "threads": 10,
+        "threads": 8,
         "gtf_arm": null,
         "infer_gtf_parents": null,
         "validation_sample": "all",
         "benchmark_env": {
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -604,8 +602,8 @@
       "name": "RefSeq GRCh38.p14",
       "key": "refseq",
       "measured": {
-        "timestamp_utc": "2026-09-10T17:25:29+00:00",
-        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "timestamp_utc": "2026-09-27T12:55:26+00:00",
+        "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
         "git_dirty": false
       },
       "input": "benchmarks/data/GCF_000001405.40_GRCh38.p14_genomic.gff.gz",
@@ -614,15 +612,15 @@
       "feature_lines": 4932571,
       "gffbase": {
         "label": "gffbase ingest(GCF_000001405.40_GRCh38.p14_genomic.gff.gz)",
-        "peak_rss_bytes": 28774322176,
-        "peak_rss_mb": 27441.33203125,
+        "peak_rss_bytes": 28659646464,
+        "peak_rss_mb": 27331.96875,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -631,7 +629,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 3600,
-        "wall_seconds": 421.9399029649794,
+        "wall_seconds": 124.90959763992578,
         "n_features": 4932571,
         "rtree_built": true,
         "fmt": "gff3",
@@ -687,7 +685,7 @@
             "INV-12"
           ]
         },
-        "disk_bytes": 5291388928,
+        "disk_bytes": 2982686720,
         "correctness_signature": {
           "schema_version": "database-signature-v3",
           "segment_count": 4932571,
@@ -998,15 +996,15 @@
       },
       "legacy": {
         "label": "legacy gffutils ingest(GCF_000001405.40_GRCh38.p14_genomic.gff.gz)",
-        "peak_rss_bytes": 138944512,
-        "peak_rss_mb": 132.5078125,
+        "peak_rss_bytes": 136445952,
+        "peak_rss_mb": 130.125,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1015,7 +1013,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 5400,
-        "wall_seconds": 393.87841872218996,
+        "wall_seconds": 390.97022945061326,
         "n_features": 4932571,
         "disk_bytes": 4071698432,
         "correctness_signature": {
@@ -1326,23 +1324,23 @@
           "combined_sha256": "e6c44bfa116b1ee97870cb7da98c430729bd2262b0375c3a059201ff0a79f059"
         }
       },
-      "ingest_speedup": 0.9334941207370981,
+      "ingest_speedup": 3.1300255291643384,
       "spatial": {
         "state": "completed",
         "n_queries": 5000,
-        "wall_seconds": 9.2598524261266,
-        "qps": 539.9654087242837,
-        "total_features_returned": 14588,
+        "wall_seconds": 8.507028901018202,
+        "qps": 587.7492668917056,
+        "total_features_returned": 13395,
         "timing": {
-          "median": 9.2598524261266,
-          "min": 9.225137805566192,
-          "max": 9.28128173109144,
+          "median": 8.507028901018202,
+          "min": 8.47831328958273,
+          "max": 8.60288814175874,
           "values": [
-            9.225137805566192,
-            9.24971494358033,
-            9.28128173109144,
-            9.262769455090165,
-            9.2598524261266
+            8.47831328958273,
+            8.60288814175874,
+            8.50466975942254,
+            8.507028901018202,
+            8.530816499143839
           ],
           "n": 5
         }
@@ -1351,18 +1349,18 @@
         "state": "completed",
         "n_anchors": 5000,
         "n_descendants": 999468,
-        "wall_seconds": 0.5881044678390026,
-        "qps": 8501.890860262572,
+        "wall_seconds": 0.4433279428631067,
+        "qps": 11278.332621465117,
         "timing": {
-          "median": 0.5881044678390026,
-          "min": 0.5746306190267205,
-          "max": 0.6003573462367058,
+          "median": 0.4433279428631067,
+          "min": 0.43664133083075285,
+          "max": 0.4768897285684943,
           "values": [
-            0.6003573462367058,
-            0.5910005373880267,
-            0.5881044678390026,
-            0.5746306190267205,
-            0.5849443441256881
+            0.45066187530755997,
+            0.4768897285684943,
+            0.4433279428631067,
+            0.4386317580938339,
+            0.43664133083075285
           ],
           "n": 5
         }
@@ -1378,13 +1376,13 @@
         "n_batched": 5000,
         "repeats": 5,
         "region_seed": 20260501,
-        "threads": 10,
+        "threads": 8,
         "gtf_arm": null,
         "infer_gtf_parents": null,
         "validation_sample": "all",
         "benchmark_env": {
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1400,8 +1398,8 @@
       "name": "GENCODE v49 (GTF)",
       "key": "gencode-gtf",
       "measured": {
-        "timestamp_utc": "2026-09-10T18:39:18+00:00",
-        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "timestamp_utc": "2026-09-27T14:00:44+00:00",
+        "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
         "git_dirty": false
       },
       "input": "benchmarks/data/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz",
@@ -1410,15 +1408,15 @@
       "feature_lines": 6068892,
       "gffbase": {
         "label": "gffbase ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz)",
-        "peak_rss_bytes": 57518280704,
-        "peak_rss_mb": 54853.70703125,
+        "peak_rss_bytes": 57411104768,
+        "peak_rss_mb": 54751.49609375,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1427,7 +1425,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 3600,
-        "wall_seconds": 614.0879075564444,
+        "wall_seconds": 215.5666834153235,
         "n_features": 6068892,
         "rtree_built": true,
         "fmt": "gtf",
@@ -1483,7 +1481,7 @@
             "INV-12"
           ]
         },
-        "disk_bytes": 6664761344,
+        "disk_bytes": 3463720960,
         "correctness_signature": {
           "schema_version": "database-signature-v3",
           "segment_count": 6068892,
@@ -1534,15 +1532,15 @@
       },
       "legacy": {
         "label": "legacy gffutils ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gtf.gz)",
-        "peak_rss_bytes": 115871744,
-        "peak_rss_mb": 110.50390625,
+        "peak_rss_bytes": 111947776,
+        "peak_rss_mb": 106.76171875,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1551,7 +1549,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 5400,
-        "wall_seconds": 420.76745446771383,
+        "wall_seconds": 414.36626782268286,
         "n_features": 6068892,
         "disk_bytes": 5407047680,
         "correctness_signature": {
@@ -1602,23 +1600,23 @@
           "combined_sha256": "86c49a36a6358c12a5f0689d8538f7f0f5861af96bbe03d223612407d1a9a8d6"
         }
       },
-      "ingest_speedup": 0.6851909136951025,
+      "ingest_speedup": 1.9222185045373656,
       "spatial": {
         "state": "completed",
         "n_queries": 5000,
-        "wall_seconds": 7.068133122287691,
-        "qps": 707.4003719926666,
-        "total_features_returned": 10981,
+        "wall_seconds": 6.8639215510338545,
+        "qps": 728.4465538868072,
+        "total_features_returned": 11016,
         "timing": {
-          "median": 7.068133122287691,
-          "min": 7.045949036255479,
-          "max": 7.086436772719026,
+          "median": 6.8639215510338545,
+          "min": 6.802570074796677,
+          "max": 6.898069023154676,
           "values": [
-            7.059358563274145,
-            7.086436772719026,
-            7.068133122287691,
-            7.077416829764843,
-            7.045949036255479
+            6.802570074796677,
+            6.823538842611015,
+            6.8639215510338545,
+            6.898069023154676,
+            6.889861062169075
           ],
           "n": 5
         }
@@ -1627,18 +1625,18 @@
         "state": "completed",
         "n_anchors": 5000,
         "n_descendants": 1933583,
-        "wall_seconds": 0.9629110265523195,
-        "qps": 5192.58774915309,
+        "wall_seconds": 0.6136337202042341,
+        "qps": 8148.183249016796,
         "timing": {
-          "median": 0.9629110265523195,
-          "min": 0.9573602322489023,
-          "max": 0.9688235269859433,
+          "median": 0.6136337202042341,
+          "min": 0.6118365181609988,
+          "max": 0.617858518846333,
           "values": [
-            0.9629110265523195,
-            0.9621087126433849,
-            0.9573602322489023,
-            0.9683271665126085,
-            0.9688235269859433
+            0.6118365181609988,
+            0.6149590248242021,
+            0.6120447209104896,
+            0.617858518846333,
+            0.6136337202042341
           ],
           "n": 5
         }
@@ -1654,13 +1652,13 @@
         "n_batched": 5000,
         "repeats": 5,
         "region_seed": 20260501,
-        "threads": 10,
+        "threads": 8,
         "gtf_arm": "no-infer",
         "infer_gtf_parents": false,
         "validation_sample": "all",
         "benchmark_env": {
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1676,8 +1674,8 @@
       "name": "GENCODE v49 (GFF3)",
       "key": "gencode-gff3",
       "measured": {
-        "timestamp_utc": "2026-09-10T19:56:51+00:00",
-        "git_commit": "42bb900e328cda1419e63173be48056b147819d2",
+        "timestamp_utc": "2026-09-27T15:07:52+00:00",
+        "git_commit": "632a4d80dee0a0eadb2532639c194ac957d8522f",
         "git_dirty": false
       },
       "input": "benchmarks/data/gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz",
@@ -1686,15 +1684,15 @@
       "feature_lines": 6066054,
       "gffbase": {
         "label": "gffbase ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
-        "peak_rss_bytes": 66568019968,
-        "peak_rss_mb": 63484.2109375,
+        "peak_rss_bytes": 66493009920,
+        "peak_rss_mb": 63412.67578125,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1703,7 +1701,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 3600,
-        "wall_seconds": 668.2786516500637,
+        "wall_seconds": 193.0534246666357,
         "n_features": 6066054,
         "rtree_built": true,
         "fmt": "gff3",
@@ -1759,7 +1757,7 @@
             "INV-12"
           ]
         },
-        "disk_bytes": 7665364992,
+        "disk_bytes": 3958648832,
         "correctness_signature": {
           "schema_version": "database-signature-v3",
           "segment_count": 6066054,
@@ -1814,15 +1812,15 @@
       },
       "legacy": {
         "label": "legacy gffutils ingest(gencode.v49.chr_patch_hapl_scaff.basic.annotation.gff3.gz)",
-        "peak_rss_bytes": 163495936,
-        "peak_rss_mb": 155.921875,
+        "peak_rss_bytes": 164614144,
+        "peak_rss_mb": 156.98828125,
         "exit_code": 0,
         "state": "completed",
         "benchmark_env": {
           "DUCKDB_DISABLE_PROGRESS_BAR": "1",
           "PYTHONUNBUFFERED": "1",
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
@@ -1831,7 +1829,7 @@
           "BLIS_NUM_THREADS": "1"
         },
         "cap_seconds": 5400,
-        "wall_seconds": 598.732997033745,
+        "wall_seconds": 584.8004160691053,
         "n_features": 6066054,
         "disk_bytes": 6495186944,
         "correctness_signature": {
@@ -1886,23 +1884,23 @@
           "combined_sha256": "623e50669ad957aac3915879a0060b432c8da8f4a4a85de36082185a23e66b84"
         }
       },
-      "ingest_speedup": 0.8959331493762345,
+      "ingest_speedup": 3.029215446858493,
       "spatial": {
         "state": "completed",
         "n_queries": 5000,
-        "wall_seconds": 7.089976935647428,
-        "qps": 705.2209119130823,
-        "total_features_returned": 10739,
+        "wall_seconds": 6.493704787455499,
+        "qps": 769.976487021549,
+        "total_features_returned": 10468,
         "timing": {
-          "median": 7.089976935647428,
-          "min": 7.055673802271485,
-          "max": 7.119549820199609,
+          "median": 6.493704787455499,
+          "min": 6.432196935638785,
+          "max": 6.504363242536783,
           "values": [
-            7.055673802271485,
-            7.119549820199609,
-            7.089976935647428,
-            7.079669300466776,
-            7.118247747421265
+            6.432196935638785,
+            6.46559224743396,
+            6.495008338242769,
+            6.504363242536783,
+            6.493704787455499
           ],
           "n": 5
         }
@@ -1911,18 +1909,18 @@
         "state": "completed",
         "n_anchors": 5000,
         "n_descendants": 1932935,
-        "wall_seconds": 1.09594308398664,
-        "qps": 4562.280717910851,
+        "wall_seconds": 0.6660635303705931,
+        "qps": 7506.7914275655285,
         "timing": {
-          "median": 1.09594308398664,
-          "min": 1.0924320444464684,
-          "max": 1.1197585696354508,
+          "median": 0.6660635303705931,
+          "min": 0.6539927301928401,
+          "max": 0.671153518371284,
           "values": [
-            1.112987664528191,
-            1.09404756128788,
-            1.0924320444464684,
-            1.1197585696354508,
-            1.09594308398664
+            0.6660635303705931,
+            0.668766007758677,
+            0.671153518371284,
+            0.6539927301928401,
+            0.6575551619753242
           ],
           "n": 5
         }
@@ -1938,13 +1936,13 @@
         "n_batched": 5000,
         "repeats": 5,
         "region_seed": 20260501,
-        "threads": 10,
+        "threads": 8,
         "gtf_arm": null,
         "infer_gtf_parents": null,
         "validation_sample": "all",
         "benchmark_env": {
-          "GFFBASE_THREADS": "10",
-          "GFFUTILS2_THREADS": "10",
+          "GFFBASE_THREADS": "8",
+          "GFFUTILS2_THREADS": "8",
           "OMP_NUM_THREADS": "1",
           "OPENBLAS_NUM_THREADS": "1",
           "MKL_NUM_THREADS": "1",
