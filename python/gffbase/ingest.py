@@ -42,6 +42,7 @@ from gffbase._options import (
     IdSpecResolver,
     IngestOptions,
     _FeatureAdapter,
+    native_id_spec,
 )
 from gffbase._serialize import encode_value
 from gffbase.dialect import normalize_dialect
@@ -389,34 +390,127 @@ class _ArrowBatchBuilder:
     def flush_into(self, con: duckdb.DuckDBPyConnection):
         if not self.f_id:
             return
-        feats = self.features_table()
-        attrs = self.attributes_table()
-        # Register and INSERT ... SELECT — DuckDB's fastest Arrow path. When
-        # the spatial extension is loaded we ALSO compute `bbox` inline so
-        # the R-tree build at the end of ingest is a single CREATE INDEX
-        # (no UPDATE pass over the table).
-        con.register("__staging_features", feats)
-        con.register("__staging_attributes", attrs)
-        fcols = self._staging_columns(self.FEATURES_SCHEMA)
-        if self._has_spatial:
-            con.execute(
-                f"INSERT INTO features ({fcols}, bbox) "
-                f"SELECT {fcols}, "
-                # A null coordinate yields a null envelope rather than
-                # failing the insert; such rows are then absent from R-tree
-                # results, which matches gffutils (where `NULL <= ?` is
-                # unknown) and the B-tree path.
-                'CASE WHEN start IS NULL OR "end" IS NULL THEN NULL '
-                'ELSE ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) END '
-                "FROM __staging_features"
-            )
-        else:
-            con.execute(f"INSERT INTO features ({fcols}) SELECT {fcols} FROM __staging_features")
-        acols = self._staging_columns(self.ATTRIBUTES_SCHEMA)
-        con.execute(f"INSERT INTO attributes ({acols}) SELECT {acols} FROM __staging_attributes")
-        con.unregister("__staging_features")
-        con.unregister("__staging_attributes")
+        _insert_batch(con, self.features_table(), self.attributes_table(), self._has_spatial)
         self._reset()
+
+
+def _insert_batch(con, feats: pa.Table, attrs: pa.Table, has_spatial: bool) -> None:
+    """Append one Arrow batch of features and their attribute rows."""
+    # Register and INSERT ... SELECT — DuckDB's fastest Arrow path. When
+    # the spatial extension is loaded we ALSO compute `bbox` inline so
+    # the R-tree build at the end of ingest is a single CREATE INDEX
+    # (no UPDATE pass over the table).
+    con.register("__staging_features", feats)
+    con.register("__staging_attributes", attrs)
+    fcols = _ArrowBatchBuilder._staging_columns(_ArrowBatchBuilder.FEATURES_SCHEMA)
+    if has_spatial:
+        con.execute(
+            f"INSERT INTO features ({fcols}, bbox) "
+            f"SELECT {fcols}, "
+            # A null coordinate yields a null envelope rather than
+            # failing the insert; such rows are then absent from R-tree
+            # results, which matches gffutils (where `NULL <= ?` is
+            # unknown) and the B-tree path.
+            'CASE WHEN start IS NULL OR "end" IS NULL THEN NULL '
+            'ELSE ST_MakeEnvelope(start, seqid_y, "end", seqid_y + 1) END '
+            "FROM __staging_features"
+        )
+    else:
+        con.execute(f"INSERT INTO features ({fcols}) SELECT {fcols} FROM __staging_features")
+    acols = _ArrowBatchBuilder._staging_columns(_ArrowBatchBuilder.ATTRIBUTES_SCHEMA)
+    con.execute(f"INSERT INTO attributes ({acols}) SELECT {acols} FROM __staging_attributes")
+    con.unregister("__staging_features")
+    con.unregister("__staging_attributes")
+
+
+#: Whether ingest uses the Rust producer where it can. Tests turn it off to
+#: compare the two paths; nothing else should.
+_USE_NATIVE_PRODUCER = True
+
+
+class _NativeRows:
+    """The Rust ingest producer, answering what the rest of
+    `_build_database` asks of a parser iterator."""
+
+    def __init__(self, producer):
+        self.producer = producer
+
+    def dialect(self) -> dict:
+        return self.producer.dialect()
+
+    def directives(self) -> list:
+        return list(self.producer.directives())
+
+    @property
+    def warnings(self) -> list[dict]:
+        return list(self.producer.warnings())
+
+
+def _native_producer(it, options, batch_size: int, autoinc: dict):
+    """The Rust producer over `it`'s input, or None where the Python loop
+    must run: a `transform`, an id_spec it cannot resolve without calling
+    Python, or the pure-Python engine. Returns (rows, dialect, fmt)."""
+    if not _USE_NATIVE_PRODUCER or options.transform is not None:
+        return None
+    if not getattr(it, "_native", False):
+        return None
+    dialect = options.dialect if options.dialect is not None else _dialect_safe(it)
+    fmt = dialect.get("fmt", "gff3")
+    spec = native_id_spec(options.id_spec_for(fmt))
+    if spec is None:
+        return None
+    from gffbase import _native
+
+    producer = _native.IngestProducer(
+        it._inner,
+        spec,
+        "fuse" if options.fuses_multipart else options.merge_strategy,
+        (options.gtf_gene_key, options.gtf_transcript_key) if fmt == "gtf" else None,
+        _SURROGATE_SEP,
+        SEQID_Y_BAND,
+        batch_size,
+        list(autoinc.items()),
+    )
+    return _NativeRows(producer), dialect, fmt
+
+
+def _column(spec, length: int) -> pa.Array:
+    """One column from the producer's buffers."""
+    kind = spec[0]
+    if kind in ("str", "bin"):
+        typ = pa.large_string() if kind == "str" else pa.large_binary()
+        return pa.Array.from_buffers(
+            typ, length, [None, pa.py_buffer(spec[1]), pa.py_buffer(spec[2])]
+        )
+    if kind == "i64":
+        validity = None if spec[2] is None else pa.py_buffer(spec[2])
+        return pa.Array.from_buffers(
+            pa.int64(), length, [validity, pa.py_buffer(spec[1])], null_count=spec[3]
+        )
+    return pa.Array.from_buffers(pa.int32(), length, [None, pa.py_buffer(spec[1])])
+
+
+def _tables_from_producer(batch: dict) -> tuple[pa.Table, pa.Table]:
+    n, m = batch["n"], batch["n_attributes"]
+    feats = pa.table(
+        {
+            name: (
+                pa.repeat(pa.scalar(False), n)
+                if name == "is_synthetic"
+                else _column(batch[name], n)
+            )
+            for name in _ArrowBatchBuilder.FEATURES_SCHEMA.names
+        }
+    )
+    attrs = pa.table(
+        {
+            "feature_id": _column(batch["a_feature_id"], m),
+            "key": _column(batch["a_key"], m),
+            "value": _column(batch["a_value"], m),
+            "idx": _column(batch["a_idx"], m),
+        }
+    )
+    return feats, attrs
 
 
 # ---------------------------------------------------------------------------
@@ -1479,7 +1573,37 @@ def _build_database(
     # and `append` can be told apart without a clock read per row.
     append_seconds = 0.0
 
-    for feat in it:
+    # The Rust producer does the per-row work below -- ids, duplicates,
+    # batching -- without a Python object per row, wherever it can. The loop
+    # below is then handed nothing and stays the path for `transform=`,
+    # callable id specs and the pure-Python engine.
+    native = _native_producer(it, options, batch_size, autoinc)
+    records = it if native is None else ()
+    if native is not None:
+        it, _dialect_cache, _fmt_cache = native
+        producer = it.producer
+        logged = 0
+        while (batch := producer.next_batch()) is not None:
+            feats, attrs = _tables_from_producer(batch)
+            t0 = time.perf_counter()
+            _insert_batch(con, feats, attrs, has_spatial)
+            append_seconds += time.perf_counter() - t0
+            deferred.extend(
+                (fid, ParsedFeature.from_tuple(record), order)
+                for fid, order, record in batch["deferred"]
+            )
+            for fid in batch["dropped"]:
+                _log.warning("Duplicate lines in file for id '%s'; ignoring all but the first", fid)
+            n_raw = producer.counts()[0]
+            if report and n_raw // _PROGRESS_EVERY > logged:
+                logged = n_raw // _PROGRESS_EVERY
+                _log.info("%d records parsed (%.0f s)", n_raw, time.perf_counter() - started)
+        n_raw, n_skipped, file_order = producer.counts()
+        autoinc.clear()
+        autoinc.update(producer.autoincrements())
+        seqid_to_y.update(producer.seqid_map())
+
+    for feat in records:
         file_order += 1
         n_raw += 1
         if report and not n_raw % _PROGRESS_EVERY:
