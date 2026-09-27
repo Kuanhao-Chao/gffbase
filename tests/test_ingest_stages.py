@@ -197,13 +197,17 @@ GTF_TWO = (
 
 
 def _dump(con):
-    tables = ("features", "attributes", "edges", "closure", "autoincrements")
-    return {
-        t: sorted(map(repr, con.execute(f"SELECT * EXCLUDE (bbox) FROM {t}").fetchall()))
-        if t == "features"
-        else sorted(map(repr, con.execute(f"SELECT * FROM {t}").fetchall()))
-        for t in tables
-    }
+    """Every row of the tables a stage writes, as sets -- `bbox` aside, which
+    exists only when the R-tree was built."""
+    has_bbox = con.execute(
+        "SELECT count(*) FROM duckdb_columns() WHERE table_name = 'features' "
+        "AND column_name = 'bbox'"
+    ).fetchone()[0]
+    out = {}
+    for table in ("features", "attributes", "edges", "closure", "autoincrements"):
+        select = "* EXCLUDE (bbox)" if table == "features" and has_bbox else "*"
+        out[table] = sorted(map(repr, con.execute(f"SELECT {select} FROM {table}").fetchall()))
+    return out
 
 
 def test_gtf_inference_that_runs_out_is_rolled_back_and_rerun(tmp_path, monkeypatch, caplog):
