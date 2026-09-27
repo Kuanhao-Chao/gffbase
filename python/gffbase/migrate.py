@@ -195,7 +195,7 @@ def migrate_v1_to_v2(target, *, con: duckdb.DuckDBPyConnection | None = None) ->
             _add_columns(con, "attributes", _ATTRIBUTE_COLUMNS, applied)
             con.execute(_NEW_TABLES)
             applied.extend(["segments", "id_conflicts"])
-            con.execute("CREATE INDEX IF NOT EXISTS segments_fid ON segments(feature_id, seg_idx)")
+            con.execute("CREATE INDEX IF NOT EXISTS segments_fid ON segments(feature_id)")
             con.execute(SEGMENTS_ALL_VIEW)
             con.execute(_COMPAT_VIEW)
             applied.extend(["segments_all", "features_compat"])

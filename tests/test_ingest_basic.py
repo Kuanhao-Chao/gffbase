@@ -127,16 +127,25 @@ def test_gtf_closure_after_synthesis(synth_path):
 
 
 def test_indexes_built(hier_path):
+    """Single-column indexes only: DuckDB never scans a multi-column one."""
     con, _ = ingest.from_file(hier_path)
-    idx = [
-        r[0]
-        for r in con.execute(
-            "SELECT index_name FROM duckdb_indexes() WHERE table_name IN ('features','attributes','edges','closure')"
+    idx = dict(
+        con.execute(
+            "SELECT index_name, expressions FROM duckdb_indexes() "
+            "WHERE table_name IN ('features','attributes','edges','closure','segments')"
         ).fetchall()
-    ]
-    assert "features_seqstart" in idx
-    assert "attributes_kv" in idx
-    assert "closure_ancestor" in idx
+    )
+    assert {
+        "features_type",
+        "attributes_fid",
+        "edges_parent",
+        "edges_child",
+        "closure_ancestor",
+        "closure_descend",
+        "segments_fid",
+    } <= set(idx)
+    multi = {name: cols for name, cols in idx.items() if "," in str(cols)}
+    assert not multi, multi
 
 
 def test_meta_recorded(hier_path):

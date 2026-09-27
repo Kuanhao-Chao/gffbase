@@ -133,8 +133,8 @@ Why this is fast
 ----------------
 
 GENCODE's ``tag`` attribute appears on ~3 M attribute rows in the
-normalized table. The ``attributes_kv`` index turns the
-``WHERE key='tag' AND value='MANE_Select'`` predicate into a single
-B-tree seek that returns ~19 k feature_ids. Compare to the legacy
+normalized table. ``WHERE key='tag' AND value='MANE_Select'`` is a
+columnar scan of two compressed string columns -- no row is decoded
+unless both match -- returning ~19 k feature_ids. Compare to the legacy
 ``gffutils`` model where the entire col-9 JSON blob has to be parsed for
 every feature row before the tag can even be examined.
