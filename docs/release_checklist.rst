@@ -1,6 +1,6 @@
 .. _release_checklist--020rc1-release-checklist:
 
-Release checklist (current: 0.2.1)
+Release checklist (current: 0.3.0)
 ==================================
 
 Written for 0.2.0 and kept for every release since; the version literals below
@@ -21,7 +21,7 @@ decision.
 
 - Record each artifact's SHA-256 and inspect its file list.
 - Install the wheel into a clean environment and verify the Python package and
-  native extension report exactly ``0.2.1`` and resolve inside that environment.
+  native extension report exactly ``0.3.0`` and resolve inside that environment.
 
 - Run the installed-wheel parser sentinels, CLI entry point, and small database
   round trip without repository ``PYTHONPATH`` injection.
@@ -99,7 +99,7 @@ published; do not present one as the other.
 4. Prepare—but do not publish—the release metadata
 --------------------------------------------------
 
-- Give the changelog heading (``## [0.2.1]``) the actual approved release date
+- Give the changelog heading (``## [0.3.0]``) the actual approved release date
   -- the tag date -- and the same ``date-released`` in ``CITATION.cff``.
   ``tools/release_policy.py`` refuses a stable version whose two dates differ.
 
@@ -117,7 +117,7 @@ published; do not present one as the other.
 5. Authorization boundary
 -------------------------
 
-Only after explicit approval: create and push ``v0.2.1``, let the protected
+Only after explicit approval: create and push ``v0.3.0``, let the protected
 release workflow build from that tag, verify the trusted-publisher target, and
 publish the matching documentation and advisory. Never rebuild artifacts from a
 different commit to repair a failed upload; correct the source and create a new
