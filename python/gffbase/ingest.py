@@ -137,6 +137,46 @@ class IngestStats:
     #: Features assembled from more than one input line. Non-zero only under
     #: `mode="strict"`, the only mode that fuses.
     n_multipart: int = 0
+    #: Wall seconds per ingest stage, in the order they ran: `setup`,
+    #: `parse` (reading plus per-row Python: transform, ids, batching),
+    #: `append` (Arrow batches into DuckDB), then the set-based passes. Set
+    #: `GFFBASE_INGEST_TRACE=1` to have each printed to stderr as it ends,
+    #: with the process's peak RSS so far.
+    stages: dict = None  # type: ignore[assignment]
+
+
+def _peak_rss_bytes() -> int | None:
+    """The process's peak resident set size, or None where unknown."""
+    try:
+        import resource
+    except ImportError:  # pragma: no cover - Windows
+        return None
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # kilobytes on Linux, bytes on macOS
+    return peak if sys.platform == "darwin" else peak * 1024
+
+
+class _StageClock:
+    """Accumulates wall time per ingest stage for `IngestStats.stages`."""
+
+    def __init__(self) -> None:
+        self.stages: dict[str, float] = {}
+        self._last = time.perf_counter()
+        self._trace = os.environ.get("GFFBASE_INGEST_TRACE", "") not in ("", "0")
+
+    def mark(self, stage: str, *, less: float = 0.0) -> None:
+        """Charge the time since the previous mark to `stage`, less `less`
+        seconds that were already charged to another stage."""
+        now = time.perf_counter()
+        self.add(stage, now - self._last - less)
+        self._last = now
+
+    def add(self, stage: str, seconds: float) -> None:
+        self.stages[stage] = self.stages.get(stage, 0.0) + seconds
+        if self._trace:
+            peak = _peak_rss_bytes()
+            rss = f" (peak RSS {peak / 2**30:.2f} GiB)" if peak else ""
+            sys.stderr.write(f"gffbase ingest: {stage} {seconds:.3f} s{rss}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -1374,6 +1414,7 @@ def _build_database(
     # `dbfn` is already resolved by `from_file` -- either ":memory:" or the
     # scratch path it will rename from. Existence and `force` are decided
     # there, so that an ingest which fails never touches the real target.
+    clock = _StageClock()
     con = duckdb.connect(dbfn)
     _apply_pragmas(con, options.pragmas)
     con.execute(DDL)
@@ -1426,6 +1467,10 @@ def _build_database(
     report = _log.isEnabledFor(logging.INFO)
     if report:
         _log.info("parsing %s", "the input" if options.from_string else path)
+    clock.mark("setup")
+    # Flushes are timed inside the loop (there are few of them), so `parse`
+    # and `append` can be told apart without a clock read per row.
+    append_seconds = 0.0
 
     for feat in it:
         file_order += 1
@@ -1513,7 +1558,9 @@ def _build_database(
             seen_ids[fid] = 1
         builder.append(fid, feat, file_order, raw_id, occ, origin)
         if len(builder) >= batch_size:
+            t0 = time.perf_counter()
             builder.flush_into(con)
+            append_seconds += time.perf_counter() - t0
 
     # gffutils raises here too. A database with no features is never what a
     # caller wanted, and building one silently hid three real mistakes: the
@@ -1529,7 +1576,11 @@ def _build_database(
         raise EmptyInputError(
             f"the transform rejected all {n_raw} features, so there is nothing to store"
         )
+    t0 = time.perf_counter()
     builder.flush_into(con)
+    append_seconds += time.perf_counter() - t0
+    clock.mark("parse", less=append_seconds)
+    clock.add("append", append_seconds)
     if report:
         _log.info(
             "%d records parsed, %d skipped (%.0f s)",
@@ -1558,6 +1609,7 @@ def _build_database(
             "SELECT original_id, new_id FROM __staging_dups"
         )
         con.unregister("__staging_dups")
+    clock.mark("duplicates")
 
     # Multipart resolution, BEFORE edges, GTF synthesis and the
     # `autoincrements` write: edges and the closure are then built once against
@@ -1565,6 +1617,7 @@ def _build_database(
     # duplicate candidates, and a `split` resolution's renames are reflected in
     # the counters that get persisted below.
     n_multipart = resolve_multipart(con, options, autoinc, has_spatial)
+    clock.mark("multipart")
 
     # Before GTF synthesis: the post-synthesis patch below reads this table to
     # stamp a synthesized row's seqid_y and bbox.
@@ -1583,6 +1636,7 @@ def _build_database(
         con.register("__staging_directives", dir_table)
         con.execute("INSERT INTO directives (directive) SELECT directive FROM __staging_directives")
         con.unregister("__staging_directives")
+    clock.mark("directives")
 
     # Ingest-level findings, reported beside the parser's own warnings.
     extra_warnings: list[dict] = []
@@ -1658,8 +1712,10 @@ def _build_database(
                 "FROM seqid_map m "
                 "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
             )
+        clock.mark("gtf_inference")
     else:
         con.execute(EDGES_FROM_PARENT)
+        clock.mark("edges")
 
     # Persist after synthesis: create_unique parent splitting and a custom
     # synthesized-row id_spec may advance the same counters as the streaming
@@ -1670,10 +1726,12 @@ def _build_database(
         con.register("__staging_autoinc", ai_tbl)
         con.execute("INSERT INTO autoincrements (base, n) SELECT base, n FROM __staging_autoinc")
         con.unregister("__staging_autoinc")
+    clock.mark("autoincrements")
 
     # Closure via recursive CTE.
     _log.info("building the transitive closure (depth <= %d)", max_depth)
     con.execute(CLOSURE_RECURSIVE_CTE, [max_depth])
+    clock.mark("closure")
 
     # A cyclic `Parent` graph is malformed GFF3. The walk above no longer
     # follows the cycle, so the database is usable and bounded -- but staying
@@ -1693,10 +1751,12 @@ def _build_database(
             "VALUES (?, ?, 'parent_cycle', NULL, 'Parent cycle; edge not followed')",
             cycles,
         )
+    clock.mark("cycles")
 
     # Indexes — only after all data is materialized.
     _log.info("building indexes")
     con.execute(POST_LOAD_INDEXES)
+    clock.mark("indexes")
 
     # Optional R-tree. When spatial is loaded, this is a
     # single CREATE INDEX over the bbox column we already populated
@@ -1705,6 +1765,7 @@ def _build_database(
     if has_spatial:
         _log.info("building the R-tree")
         rtree_built = _finalize_rtree(con)
+        clock.mark("rtree")
 
     # SQLite-compat views (must run after closure has been populated).
     # `segments_all` first -- `features_compat` is defined on top of it.
@@ -1723,6 +1784,7 @@ def _build_database(
         max_depth=max_depth,
         resolved_mode=options.resolved_mode,
     )
+    clock.mark("views_meta")
 
     # Strict mode validates what it just built. The failure these catch is not
     # a crash but a database that answers plausibly and wrongly -- a fused
@@ -1734,11 +1796,13 @@ def _build_database(
         from gffbase.validate import validate_db
 
         validate_db(con, level="fast", raise_on_error=True)
+        clock.mark("validate")
 
     # Stats.
     n_attributes = scalar(con, "SELECT COUNT(*) FROM attributes")
     n_edges = scalar(con, "SELECT COUNT(*) FROM edges")
     n_closure = scalar(con, "SELECT COUNT(*) FROM closure")
+    clock.mark("stats")
     if report:
         _log.info(
             "done: %d features, %d edges in %.1f s",
@@ -1761,6 +1825,7 @@ def _build_database(
         warnings=list(getattr(it, "warnings", []) or []) + extra_warnings,
         n_skipped=n_skipped,
         n_multipart=n_multipart,
+        stages=clock.stages,
     )
 
 
