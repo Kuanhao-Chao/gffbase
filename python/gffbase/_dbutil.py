@@ -25,11 +25,32 @@ make the no-row case explicit.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import duckdb
 
 _log = logging.getLogger("gffbase")
+
+
+#: DuckDB threads for a connection gffbase opens. DuckDB's default is every
+#: core; ingest is mostly serial and a per-call query pays for them all. MANE
+#: ingest took 38.2 s at 8 threads and 38.4 s at 128, with peak RSS 1.53 vs
+#: 2.70 GiB; a prefetched gene loop ran 0.074 ms/call at 8 and 0.089 at 128.
+#: A lone point lookup is fastest on one, but a prefetch window needs four or
+#: more (a 1,000-row fetch by id: 83 ms on one thread, 28 ms on four).
+DEFAULT_THREADS = 8
+
+
+def default_threads() -> int:
+    """`GFFBASE_THREADS` if set (or its old name, `GFFUTILS2_THREADS`), else
+    `DEFAULT_THREADS` capped at the machine's cores."""
+    threads = os.environ.get("GFFBASE_THREADS") or os.environ.get("GFFUTILS2_THREADS")
+    if threads:
+        # `int()` first: the value is interpolated into SQL, so it must not
+        # be able to carry syntax (docs/source/content/advisory_sql_injection.rst).
+        return int(threads)
+    return max(1, min(DEFAULT_THREADS, os.cpu_count() or 1))
 
 
 def scalar(con: duckdb.DuckDBPyConnection, sql: str, params: list | None = None) -> Any:
