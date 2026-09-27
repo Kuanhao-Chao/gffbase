@@ -412,6 +412,12 @@ impl RecordIter {
         &self.directives
     }
 
+    /// The number of the last line read: the line of the record `next`
+    /// just returned.
+    pub fn line_no(&self) -> usize {
+        self.line_no
+    }
+
     /// Peek up to `checklines` features (without consuming them) to compute
     /// the dialect. We snapshot `pos`, walk forward, then reset.
     fn peek_dialect(&mut self, opts: &ParseOptions) {
