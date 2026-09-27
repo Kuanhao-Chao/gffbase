@@ -36,6 +36,20 @@ pub fn parse_attributes(
     decode_url_escapes: bool,
     compat_whole_value_quotes: bool,
 ) -> Result<ParsedAttributes, String> {
+    parse_attributes_observing(blob, decode_url_escapes, compat_whole_value_quotes, true)
+}
+
+/// As `parse_attributes`. With `observe` false the returned dialect is
+/// accurate only in `fmt` and `keyval_separator` -- all that iteration past
+/// the dialect peek reads -- and the rest of the per-line observation (key
+/// order, separators) is not built. Building it for every record was most of
+/// the parser's time.
+pub fn parse_attributes_observing(
+    blob: &str,
+    decode_url_escapes: bool,
+    compat_whole_value_quotes: bool,
+    observe: bool,
+) -> Result<ParsedAttributes, String> {
     let mut out: AttributePairs = Vec::new();
     let mut obs = Dialect::default();
 
@@ -45,23 +59,26 @@ pub fn parse_attributes(
         return Ok((out, obs));
     }
 
-    // Detect leading / trailing semicolons.
-    obs.leading_semicolon = blob.trim_start().starts_with(';');
-    obs.trailing_semicolon = blob.trim_end().ends_with(';');
-    if blob.contains("; ") {
-        obs.field_separator = "; ".into();
-    } else if blob.contains(" ; ") {
-        obs.field_separator = " ; ".into();
-    } else {
-        obs.field_separator = ";".into();
+    if observe {
+        // Detect leading / trailing semicolons.
+        obs.leading_semicolon = blob.trim_start().starts_with(';');
+        obs.trailing_semicolon = blob.trim_end().ends_with(';');
+        if blob.contains("; ") {
+            obs.field_separator = "; ".into();
+        } else if blob.contains(" ; ") {
+            obs.field_separator = " ; ".into();
+        } else {
+            obs.field_separator = ";".into();
+        }
     }
 
     // Decide GFF3 vs GTF: GFF3 has `key=value`; GTF has `key "value"` or
     // `key value` (space separator). The first non-empty record decides per-line.
     let segments = split_top_level_semicolons(blob, &mut obs);
 
-    let mut keys_seen: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-    let mut order: Vec<String> = Vec::new();
+    // Each key with its value count so far, in first-seen order. A line has a
+    // handful of keys, so a scan beats hashing an owned copy of each.
+    let mut keys: Vec<(&str, i32)> = Vec::new();
     let mut detected_fmt: Option<Format> = None;
 
     for raw_seg in segments {
@@ -118,34 +135,42 @@ pub fn parse_attributes(
         // Multi-value handling.
         // GFF3: split on commas (canonical).
         // GTF:  rarely multi-value; we still split on comma for compatibility.
-        let multi_values: Vec<&str> = if local_fmt == Format::Gff3 {
-            split_unquoted_commas(clean_val)
-        } else {
-            vec![clean_val]
+        let slot = match keys.iter().position(|(k, _)| *k == key) {
+            Some(i) => i,
+            None => {
+                keys.push((key, 0));
+                keys.len() - 1
+            }
         };
-
-        if !order.contains(&key.to_string()) {
-            order.push(key.to_string());
-        }
-        let counter = keys_seen.entry(key.to_string()).or_insert(0);
+        let counter = &mut keys[slot].1;
         if *counter > 0 {
             obs.repeated_keys = true;
         }
 
-        for v in multi_values {
+        let mut push = |v: &str| -> Result<(), String> {
             let decoded = if local_fmt == Format::Gff3 && decode_url_escapes {
                 unescape(v).into_owned()
             } else {
                 v.to_string()
             };
             out.push((key.to_string(), decoded, *counter));
-            increment_attribute_index(counter)?;
+            increment_attribute_index(counter)
+        };
+        if local_fmt == Format::Gff3 && clean_val.contains(',') {
+            for v in split_unquoted_commas(clean_val) {
+                push(v)?;
+            }
+        } else {
+            // No comma, or GTF: one value (what the split would return).
+            push(clean_val)?;
         }
     }
 
     obs.fmt = detected_fmt.unwrap_or(Format::Gff3);
     obs.keyval_separator = if obs.fmt == Format::Gtf { ' ' } else { '=' };
-    obs.order = order;
+    if observe {
+        obs.order = keys.iter().map(|(k, _)| k.to_string()).collect();
+    }
     Ok((out, obs))
 }
 

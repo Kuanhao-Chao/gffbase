@@ -28,7 +28,7 @@ use std::path::Path;
 use flate2::read::MultiGzDecoder;
 use memchr::memchr2;
 
-use crate::attributes::parse_attributes;
+use crate::attributes::{parse_attributes, parse_attributes_observing};
 use crate::dialect::{self, Dialect};
 use crate::validate::{
     validate_attributes_pairs, validate_field_errors, ErrorKind, GffError, ValidationProfile,
@@ -746,10 +746,11 @@ impl Iterator for RecordIter {
             let (seqid, source, featuretype, start, end, score, strand, frame, blob, extra) = raw;
 
             let blob_str = std::str::from_utf8(&blob).unwrap_or("");
-            let (pairs, obs) = match parse_attributes(
+            let (pairs, obs) = match parse_attributes_observing(
                 blob_str,
                 self.decode_url_escapes,
                 !self.profile.rejects(),
+                false,
             ) {
                 Ok(parsed) => parsed,
                 Err(message) => {
@@ -1036,6 +1037,63 @@ mod tests {
         let f = TempFile::new("a.tar.gz", &gz(&archive));
         let iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, false)).unwrap();
         assert_eq!(ids(iter), ["g0", "g1"]);
+    }
+
+    /// Where parse time goes, on a real file:
+    /// `GFFBASE_PROFILE_INPUT=<file> cargo test --release -- --ignored --nocapture profile_parse`
+    #[test]
+    #[ignore]
+    fn profile_parse() {
+        use std::time::Instant;
+        let Ok(path) = std::env::var("GFFBASE_PROFILE_INPUT") else {
+            return;
+        };
+        let open = || RecordIter::new(FileSource::open(&path).unwrap(), opts(10, false)).unwrap();
+        let t = Instant::now();
+        let mut it = open();
+        let mut n = 0;
+        while let Some(Ok(_)) = it.read_line() {
+            n += 1;
+        }
+        println!(
+            "lines only:      {:.2} s ({n} lines)",
+            t.elapsed().as_secs_f64()
+        );
+        let t = Instant::now();
+        let mut it = open();
+        let mut n = 0;
+        while let Some(r) = it.next_raw_record() {
+            r.unwrap();
+            n += 1;
+        }
+        println!(
+            "fields split:    {:.2} s ({n} records)",
+            t.elapsed().as_secs_f64()
+        );
+        let mut it = open();
+        let mut raws = Vec::new();
+        while let Some(r) = it.next_raw_record() {
+            raws.push(r.unwrap());
+        }
+        let t = Instant::now();
+        for r in &raws {
+            let blob = std::str::from_utf8(&r.8).unwrap_or("");
+            std::hint::black_box(parse_attributes(blob, true, true).unwrap());
+        }
+        println!("parse_attributes: {:.2} s", t.elapsed().as_secs_f64());
+        let t = Instant::now();
+        for r in &raws {
+            std::hint::black_box(validate_field_errors(
+                1, &r.0, &r.2, r.3, r.4, &r.5, &r.6, &r.7, &r.8, false,
+            ));
+        }
+        println!("field validation: {:.2} s", t.elapsed().as_secs_f64());
+        let t = Instant::now();
+        let n = open().count();
+        println!(
+            "full records:    {:.2} s ({n} records)",
+            t.elapsed().as_secs_f64()
+        );
     }
 
     #[test]
