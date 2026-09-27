@@ -67,6 +67,8 @@ pub enum ErrorKind {
     InvalidPhase,
     InvalidScore,
     InvalidAttribute,
+    /// The input could not be read on (a truncated or corrupt gzip stream).
+    ReadError,
 }
 
 impl ErrorKind {
@@ -82,6 +84,7 @@ impl ErrorKind {
             ErrorKind::InvalidPhase => "InvalidPhase",
             ErrorKind::InvalidScore => "InvalidScore",
             ErrorKind::InvalidAttribute => "InvalidAttribute",
+            ErrorKind::ReadError => "ReadError",
         }
     }
 }

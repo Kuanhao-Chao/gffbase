@@ -134,6 +134,76 @@ def test_ustar_at_byte_257_of_a_gff_is_still_text(engine):
     assert [dict(r.attributes_dict())["ID"] for r in records] == [["g0"], ["g1"]]
 
 
+def _truncated_gzip(tmp_path):
+    import gzip
+
+    text = "".join(f"chr1\tt\tgene\t{i + 1}\t{i + 9}\t.\t+\t.\tID=g{i}\n" for i in range(50_000))
+    z = gzip.compress(text.encode())
+    path = tmp_path / "cut.gff3.gz"
+    path.write_bytes(z[: len(z) // 2])
+    return path
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("validation", ["gffutils", "ncbi"])
+def test_a_truncated_gzip_is_an_error_whatever_the_strictness(engine, validation, tmp_path):
+    """The records before the cut are real; the cut is not a warning."""
+    from gffbase import GFFFormatError
+    from gffbase.parser import parse_gff
+
+    records = 0
+    with pytest.raises(GFFFormatError, match="ends before its end marker") as info:
+        for _ in parse_gff(
+            str(_truncated_gzip(tmp_path)), engine=engine, validation=validation, strict=False
+        ):
+            records += 1
+    assert records > 1000
+    assert info.value.kind == "ReadError"
+    assert info.value.line_no == records
+
+
+def test_both_engines_stop_at_the_same_line(tmp_path):
+    from gffbase.parser import parse_gff
+
+    if len(ENGINES) < 2:
+        pytest.skip("needs the native engine")
+    path = str(_truncated_gzip(tmp_path))
+    seen = {}
+    for engine in ENGINES:
+        with pytest.raises(ValueError) as info:
+            list(parse_gff(path, engine=engine, validation="gffutils", strict=False))
+        seen[engine] = (info.value.line_no, str(info.value))
+    assert seen["python"] == seen["rust"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_create_db_on_a_truncated_gzip_raises_and_leaves_nothing(engine, tmp_path):
+    from gffbase import GFFFormatError
+
+    target = tmp_path / "out.duckdb"
+    with pytest.raises(GFFFormatError):
+        from_file(str(_truncated_gzip(tmp_path)), str(target), engine=engine)
+    assert not target.exists()
+    assert not [p for p in tmp_path.iterdir() if "gffbase-building" in p.name]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_corrupt_gzip_is_a_read_error(engine, tmp_path):
+    import gzip
+
+    from gffbase import GFFFormatError
+    from gffbase.parser import parse_gff
+
+    z = bytearray(gzip.compress((GENE * 2000).encode()))
+    z[200:250] = b"\x00" * 50
+    path = tmp_path / "bad.gff3.gz"
+    path.write_bytes(bytes(z))
+    # How damage shows depends on the bytes: a bad block or an early end.
+    with pytest.raises(GFFFormatError, match="could not be read|ends before") as info:
+        list(parse_gff(str(path), engine=engine, validation="gffutils", strict=False))
+    assert info.value.kind == "ReadError"
+
+
 # ---------------------------------------------------------------------------
 # Column 9
 # ---------------------------------------------------------------------------

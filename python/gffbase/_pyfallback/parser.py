@@ -29,6 +29,7 @@ import io
 import math
 import re
 import unicodedata
+import zlib
 from collections.abc import Iterator
 
 from gffbase._pyfallback.attributes import parse_attributes
@@ -201,7 +202,10 @@ class _Slice(io.RawIOBase):
 
 def _untar(stream):
     """`stream`, or the one file it holds if it is a tar archive."""
-    member = _tar_member(stream)
+    try:
+        member = _tar_member(stream)
+    except (EOFError, zlib.error, gzip.BadGzipFile) as exc:
+        raise _ReadFailure(exc).error(0) from exc
     if member is None:
         return stream
     return io.BufferedReader(_Slice(stream, *member))
@@ -222,7 +226,25 @@ def _decode_error(err: UnicodeDecodeError, line_no: int):
     return _make_error(f"line {line_no}: {detail}", line_no, "InvalidAttribute")
 
 
-def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
+class _ReadFailure:
+    """The input could not be read on: a truncated or corrupt gzip stream.
+
+    Yielded by `_iter_lines` in place of a line, and always fatal -- the
+    stream stops there whatever the strictness. The Rust engine reports the
+    same failure, with the same message, as a `ReadError`.
+    """
+
+    def __init__(self, exc: BaseException):
+        if isinstance(exc, EOFError):
+            self.message = "the compressed input ends before its end marker"
+        else:
+            self.message = f"the input could not be read: {exc}"
+
+    def error(self, lines_read: int):
+        return _make_error(f"line {lines_read}: {self.message}", lines_read, "ReadError")
+
+
+def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError | _ReadFailure]:
     """Physical lines of a binary stream, decoded one at a time.
 
     Every read in the fallback funnels through here, which is why the decode
@@ -244,7 +266,10 @@ def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
     """
     text = io.TextIOWrapper(stream, encoding="latin-1", newline=None)
     first = True
-    for raw_line in text:
+    for raw_line in _guarded(text):
+        if isinstance(raw_line, _ReadFailure):
+            yield raw_line
+            return
         data = raw_line.encode("latin-1")
         if data.endswith(b"\n"):
             data = data[:-1]
@@ -266,6 +291,14 @@ def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
             yield UnicodeDecodeError("utf-8", data, at, at + 1, _NUL_REASON)
             continue
         yield line
+
+
+def _guarded(text) -> Iterator[str | _ReadFailure]:
+    """`text`'s lines, ending in a `_ReadFailure` if reading them fails."""
+    try:
+        yield from text
+    except (EOFError, zlib.error, gzip.BadGzipFile) as exc:
+        yield _ReadFailure(exc)
 
 
 def _validate(
@@ -713,8 +746,13 @@ def _stream_features(
     # ONE iterator for both loops below: the text layer buffers ahead, so a
     # second wrapper over the same stream would skip what the first had read.
     lines = _iter_lines(stream)
+    read_failure: _ReadFailure | None = None
     for line in lines:
         line_no += 1
+        if isinstance(line, _ReadFailure):
+            # Stop sampling; what was read is still yielded, then this raises.
+            read_failure = line
+            break
         if isinstance(line, UnicodeDecodeError):
             err = _decode_error(line, line_no)
             if _maybe_handle(err):
@@ -770,11 +808,15 @@ def _stream_features(
     for f in buffered:
         yield f, directives, dialect
 
+    if read_failure is not None:
+        raise read_failure.error(line_no - 1)
     if fasta_reached:
         return
 
     for line in lines:
         line_no += 1
+        if isinstance(line, _ReadFailure):
+            raise line.error(line_no - 1)
         if isinstance(line, UnicodeDecodeError):
             err = _decode_error(line, line_no)
             if _maybe_handle(err):
