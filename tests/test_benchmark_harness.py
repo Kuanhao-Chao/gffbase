@@ -630,10 +630,10 @@ def _write_test_candidate_wheel(
     path,
     *,
     metadata_name="gffbase",
-    metadata_version="0.2.0rc1",
+    metadata_version="0.3.0",
     wheel_tags=("cp310-abi3-manylinux_2_28_x86_64",),
     native_members=(("gffbase/_native.abi3.so", b"candidate-native"),),
-    dist_info="gffbase-0.2.0rc1.dist-info",
+    dist_info="gffbase-0.3.0.dist-info",
     extra_members=(),
 ):
     with zipfile.ZipFile(path, "w") as archive:
@@ -667,7 +667,7 @@ def test_the_wheel_fixture_keeps_a_backslash_member_on_any_host(tmp_path, monkey
     able to build one everywhere. `os.sep` is patched to emulate Windows.
     """
     monkeypatch.setattr(os, "sep", "\\")
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel, extra_members=(("gffbase\\windows.txt", b"x"),))
     # `orig_filename`: zipfile applies the same rewrite when *reading* the
     # central directory, so `namelist()` would hide the stored backslash too.
@@ -678,10 +678,10 @@ def test_the_wheel_fixture_keeps_a_backslash_member_on_any_host(tmp_path, monkey
 
 def _installed_candidate_identity(*, native_sha256):
     return {
-        "distribution_version": "0.2.0rc1",
-        "python_version": "0.2.0rc1",
+        "distribution_version": "0.3.0",
+        "python_version": "0.3.0",
         "python_module": "__init__.py",
-        "native_version": "0.2.0rc1",
+        "native_version": "0.3.0",
         "native_module": "_native.abi3.so",
         "native_sha256": native_sha256,
     }
@@ -710,7 +710,7 @@ def test_environment_rejects_candidate_wheels_over_configured_archive_limits(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel)
     native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
@@ -735,7 +735,7 @@ def test_environment_rejects_candidate_wheels_over_configured_archive_limits(
 def test_environment_streams_the_native_member_when_hashing(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel)
     native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
@@ -775,7 +775,7 @@ def test_environment_streams_the_native_member_when_hashing(tmp_path, monkeypatc
 def test_environment_rejects_nonportable_wheel_member_paths(tmp_path, monkeypatch, member):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=((member, b"x"),))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
@@ -796,7 +796,7 @@ def test_environment_rejects_casefold_and_unicode_member_collisions(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=extra_members)
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
@@ -808,7 +808,7 @@ def test_environment_rejects_casefold_and_unicode_member_collisions(
 def test_environment_rejects_nul_in_raw_wheel_member_name(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel, extra_members=(("docs/nulx.txt", b"x"),))
     raw = wheel.read_bytes().replace(b"docs/nulx.txt", b"docs/nul\x00.txt")
     assert raw.count(b"docs/nul\x00.txt") == 2
@@ -823,8 +823,8 @@ def test_environment_rejects_nul_in_raw_wheel_member_name(tmp_path, monkeypatch)
 def test_environment_requires_the_exact_candidate_dist_info_directory(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
-    wheel_sha256 = _write_test_candidate_wheel(wheel, dist_info="gffbase-0.2.0rc1.post1.dist-info")
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel_sha256 = _write_test_candidate_wheel(wheel, dist_info="gffbase-0.3.0.post1.dist-info")
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
 
@@ -836,7 +836,7 @@ def test_environment_requires_the_exact_candidate_dist_info_directory(tmp_path, 
 def test_environment_requires_regular_wheel_evidence_members(tmp_path, monkeypatch, file_type):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     native = zipfile.ZipInfo("gffbase/_native.abi3.so")
     native.create_system = 3
     native.external_attr = (file_type | 0o755) << 16
@@ -853,7 +853,7 @@ def test_environment_requires_regular_wheel_evidence_members(tmp_path, monkeypat
 def test_environment_rejects_entry_count_before_zipfile_materialization(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel)
     raw = bytearray(wheel.read_bytes())
     eocd = raw.rfind(b"PK\x05\x06")
@@ -944,7 +944,7 @@ def test_zip64_metadata_rejects_disagreeing_non_sentinel_eocd_fields(
 def test_environment_validates_every_local_header_and_member_crc(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel, extra_members=(("docs/good.txt", b"crc-payload"),))
     raw = wheel.read_bytes()
     assert raw.count(b"docs/good.txt") == 2
@@ -977,7 +977,7 @@ def test_environment_rejects_file_directory_namespace_conflicts(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel, extra_members=extra_members)
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
@@ -989,7 +989,7 @@ def test_environment_rejects_file_directory_namespace_conflicts(
 def test_environment_rejects_foreign_dist_info_trees(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(
         wheel, extra_members=(("evil-1.dist-info/RECORD", b"foreign"),)
     )
@@ -1003,10 +1003,10 @@ def test_environment_rejects_foreign_dist_info_trees(tmp_path, monkeypatch):
 def test_environment_normalizes_unsupported_member_compression_errors(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel)
     raw = bytearray(wheel.read_bytes())
-    metadata_name = b"gffbase-0.2.0rc1.dist-info/METADATA"
+    metadata_name = b"gffbase-0.3.0.dist-info/METADATA"
     local_name = raw.find(metadata_name)
     central_name = raw.rfind(metadata_name)
     assert local_name >= 30 and central_name >= 46 and local_name != central_name
@@ -1026,13 +1026,13 @@ def test_environment_normalizes_corrupt_supported_compression_errors(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
-    dist_info = "gffbase-0.2.0rc1.dist-info"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
+    dist_info = "gffbase-0.3.0.dist-info"
     corrupt_name = "docs/corrupt.bin"
     with zipfile.ZipFile(wheel, "w", compression=compression) as archive:
         archive.writestr(
             f"{dist_info}/METADATA",
-            "Metadata-Version: 2.4\nName: gffbase\nVersion: 0.2.0rc1\n",
+            "Metadata-Version: 2.4\nName: gffbase\nVersion: 0.3.0\n",
         )
         archive.writestr(
             f"{dist_info}/WHEEL",
@@ -1058,7 +1058,7 @@ def test_environment_normalizes_corrupt_supported_compression_errors(
 def test_environment_binds_installed_native_to_authoritative_wheel_evidence(tmp_path, monkeypatch):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel)
     native_sha256 = hashlib.sha256(b"candidate-native").hexdigest()
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
@@ -1074,7 +1074,7 @@ def test_environment_binds_installed_native_to_authoritative_wheel_evidence(tmp_
     assert artifact == {
         "wheel": wheel.name,
         "wheel_sha256": wheel_sha256,
-        "metadata": {"name": "gffbase", "version": "0.2.0rc1"},
+        "metadata": {"name": "gffbase", "version": "0.3.0"},
         "wheel_tags": ["cp310-abi3-manylinux_2_28_x86_64"],
         "native": {
             "member": "gffbase/_native.abi3.so",
@@ -1090,7 +1090,7 @@ def test_environment_rejects_missing_or_mismatched_configured_wheel_hash(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     _write_test_candidate_wheel(wheel)
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     if configured_hash is None:
@@ -1135,7 +1135,7 @@ def test_environment_rejects_forged_or_unbound_wheel_evidence(
 ):
     from benchmarks import common
 
-    wheel = tmp_path / "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl"
+    wheel = tmp_path / "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl"
     wheel_sha256 = _write_test_candidate_wheel(wheel, **wheel_options)
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL", str(wheel))
     monkeypatch.setenv("GFFBASE_BENCH_WHEEL_SHA256", wheel_sha256)
@@ -1383,7 +1383,7 @@ def _publishable_payload(*, threads: int = 4) -> dict:
         },
         "rustc_version": "rustc 1.90.0 (example 2026-01-01)",
         "packages": {
-            "gffbase": "0.2.0rc1",
+            "gffbase": "0.3.0",
             "duckdb": "1.5.3",
             "pyarrow": "21.0.0",
             "pandas": "2.3.2",
@@ -1392,17 +1392,17 @@ def _publishable_payload(*, threads: int = 4) -> dict:
             "psutil": "7.0.0",
         },
         "gffbase_install": {
-            "distribution_version": "0.2.0rc1",
-            "python_version": "0.2.0rc1",
+            "distribution_version": "0.3.0",
+            "python_version": "0.3.0",
             "python_module": "__init__.py",
-            "native_version": "0.2.0rc1",
+            "native_version": "0.3.0",
             "native_module": "_native.abi3.so",
             "native_sha256": "b" * 64,
         },
         "artifact": {
-            "wheel": "gffbase-0.2.0rc1-cp310-abi3-manylinux_2_28_x86_64.whl",
+            "wheel": "gffbase-0.3.0-cp310-abi3-manylinux_2_28_x86_64.whl",
             "wheel_sha256": "c" * 64,
-            "metadata": {"name": "gffbase", "version": "0.2.0rc1"},
+            "metadata": {"name": "gffbase", "version": "0.3.0"},
             "wheel_tags": ["cp310-abi3-manylinux_2_28_x86_64"],
             "native": {
                 "member": "gffbase/_native.abi3.so",
@@ -1553,10 +1553,10 @@ def test_full_gate_requires_fixed_candidate_and_comparator_versions():
 @pytest.mark.parametrize(
     "wheel",
     [
-        "gffbase-0.2.0rc1-cp312-cp312-manylinux_2_28_x86_64.whl",
-        "gffbase-0.2.0rc1-cp313-cp312-manylinux_2_28_x86_64.whl",
-        "gffbase-0.2.0rc1-cp313-cp39-manylinux_2_28_x86_64.whl",
-        "gffbase-0.2.0rc1-cp313-none-manylinux_2_28_x86_64.whl",
+        "gffbase-0.3.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "gffbase-0.3.0-cp313-cp312-manylinux_2_28_x86_64.whl",
+        "gffbase-0.3.0-cp313-cp39-manylinux_2_28_x86_64.whl",
+        "gffbase-0.3.0-cp313-none-manylinux_2_28_x86_64.whl",
     ],
 )
 def test_full_gate_cross_checks_wheel_tag_and_abi_with_python_runtime(wheel):
@@ -1572,15 +1572,15 @@ def test_full_gate_cross_checks_wheel_tag_and_abi_with_python_runtime(wheel):
     ("wheel", "native_module"),
     [
         (
-            "gffbase-0.2.0rc1-cp313-cp313-win_amd64.whl",
+            "gffbase-0.3.0-cp313-cp313-win_amd64.whl",
             "_native.cp313-win_amd64.pyd",
         ),
         (
-            "gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_aarch64.whl",
+            "gffbase-0.3.0-cp313-cp313-manylinux_2_28_aarch64.whl",
             "_native.cpython-313-aarch64-linux-gnu.so",
         ),
         (
-            "gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_x86_64.whl",
+            "gffbase-0.3.0-cp313-cp313-manylinux_2_28_x86_64.whl",
             "_native.cpython-312-x86_64-linux-gnu.so",
         ),
     ],
@@ -1609,7 +1609,7 @@ def test_full_gate_accepts_normalized_linux_artifact_architectures(
 
     payload = _publishable_payload()
     payload["environment"]["machine"] = machine
-    wheel = f"gffbase-0.2.0rc1-cp313-cp313-manylinux_2_28_{wheel_arch}.whl"
+    wheel = f"gffbase-0.3.0-cp313-cp313-manylinux_2_28_{wheel_arch}.whl"
     wheel_tag = f"cp313-cp313-manylinux_2_28_{wheel_arch}"
     native_module = f"_native.cpython-313-{native_arch}-linux-gnu.so"
     payload["environment"]["artifact"]["wheel"] = wheel
@@ -1636,7 +1636,7 @@ def test_full_gate_accepts_normalized_windows_artifact_architectures(
     payload["environment"]["platform"] = "Windows-11-10.0.26100-SP0"
     payload["environment"]["machine"] = machine
     payload["environment"]["libc"] = {"family": None, "version": None}
-    wheel = f"gffbase-0.2.0rc1-cp313-cp313-win_{wheel_arch}.whl"
+    wheel = f"gffbase-0.3.0-cp313-cp313-win_{wheel_arch}.whl"
     wheel_tag = f"cp313-cp313-win_{wheel_arch}"
     native_module = f"_native.cp313-win_{native_arch}.pyd"
     payload["environment"]["artifact"]["wheel"] = wheel
@@ -1652,7 +1652,7 @@ def test_full_gate_accepts_valid_wheel_build_tag():
 
     payload = _publishable_payload()
     payload["environment"]["artifact"]["wheel"] = (
-        "gffbase-0.2.0rc1-1+cuda-cp310-abi3-manylinux_2_28_x86_64.whl"
+        "gffbase-0.3.0-1+cuda-cp310-abi3-manylinux_2_28_x86_64.whl"
     )
 
     assert benchmark_results_evidence_error(payload) is None
@@ -1664,7 +1664,7 @@ def test_full_gate_rejects_invalid_wheel_build_tag(build_tag):
 
     payload = _publishable_payload()
     payload["environment"]["artifact"]["wheel"] = (
-        f"gffbase-0.2.0rc1-{build_tag}-cp310-abi3-manylinux_2_28_x86_64.whl"
+        f"gffbase-0.3.0-{build_tag}-cp310-abi3-manylinux_2_28_x86_64.whl"
     )
 
     assert benchmark_results_evidence_error(payload) is not None
@@ -1693,7 +1693,7 @@ def test_full_gate_accepts_configured_abi3_artifact(
     payload["environment"]["machine"] = machine
     if not platform_name.startswith("Linux-"):
         payload["environment"]["libc"] = {"family": None, "version": None}
-    wheel = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    wheel = f"gffbase-0.3.0-cp310-abi3-{wheel_platform}.whl"
     payload["environment"]["artifact"]["wheel"] = wheel
     payload["environment"]["artifact"]["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
     payload["environment"]["artifact"]["native"]["member"] = f"gffbase/{native_module}"
@@ -1707,7 +1707,7 @@ def test_full_gate_rejects_wrong_candidate_abi3_floor():
 
     payload = _publishable_payload()
     payload["environment"]["artifact"]["wheel"] = (
-        "gffbase-0.2.0rc1-cp39-abi3-manylinux_2_28_x86_64.whl"
+        "gffbase-0.3.0-cp39-abi3-manylinux_2_28_x86_64.whl"
     )
 
     assert benchmark_results_evidence_error(payload) is not None
@@ -1724,7 +1724,7 @@ def test_full_gate_cross_checks_wheel_and_native_linux_libc(wheel_platform, nati
     from benchmarks.common import benchmark_results_evidence_error
 
     payload = _publishable_payload()
-    wheel = f"gffbase-0.2.0rc1-cp313-cp313-{wheel_platform}.whl"
+    wheel = f"gffbase-0.3.0-cp313-cp313-{wheel_platform}.whl"
     native_module = f"_native.cpython-313-x86_64-linux-{native_libc}.so"
     artifact = payload["environment"]["artifact"]
     artifact["wheel"] = wheel
@@ -1758,7 +1758,7 @@ def test_full_gate_rejects_incompatible_or_too_old_linux_libc(wheel_platform, fa
     payload = _publishable_payload()
     payload["environment"]["libc"] = {"family": family, "version": version}
     artifact = payload["environment"]["artifact"]
-    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel"] = f"gffbase-0.3.0-cp310-abi3-{wheel_platform}.whl"
     artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
 
     assert benchmark_results_evidence_error(payload) is not None
@@ -1779,7 +1779,7 @@ def test_full_gate_accepts_compatible_linux_libc_boundaries(wheel_platform, fami
     payload = _publishable_payload()
     payload["environment"]["libc"] = {"family": family, "version": version}
     artifact = payload["environment"]["artifact"]
-    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel"] = f"gffbase-0.3.0-cp310-abi3-{wheel_platform}.whl"
     artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
 
     assert benchmark_results_evidence_error(payload) is None
@@ -1801,7 +1801,7 @@ def test_full_gate_rejects_unsupported_linux_policy_tags(wheel_platform, family,
     payload = _publishable_payload()
     payload["environment"]["libc"] = {"family": family, "version": version}
     artifact = payload["environment"]["artifact"]
-    artifact["wheel"] = f"gffbase-0.2.0rc1-cp310-abi3-{wheel_platform}.whl"
+    artifact["wheel"] = f"gffbase-0.3.0-cp310-abi3-{wheel_platform}.whl"
     artifact["wheel_tags"] = [f"cp310-abi3-{wheel_platform}"]
 
     assert benchmark_results_evidence_error(payload) is not None
@@ -1813,7 +1813,7 @@ def test_full_gate_cross_checks_generic_linux_native_libc_suffix():
     payload = _publishable_payload()
     payload["environment"]["libc"] = {"family": "musl", "version": "1.2"}
     artifact = payload["environment"]["artifact"]
-    artifact["wheel"] = "gffbase-0.2.0rc1-cp313-cp313-linux_x86_64.whl"
+    artifact["wheel"] = "gffbase-0.3.0-cp313-cp313-linux_x86_64.whl"
     artifact["wheel_tags"] = ["cp313-cp313-linux_x86_64"]
     native_module = "_native.cpython-313-x86_64-linux-gnu.so"
     artifact["native"]["member"] = f"gffbase/{native_module}"
@@ -1933,7 +1933,7 @@ def test_full_gate_rejects_unknown_or_ambiguous_runtime_identity(
     payload["environment"]["platform"] = platform_name
     payload["environment"]["machine"] = machine
     payload["environment"]["artifact"]["wheel"] = (
-        f"gffbase-0.2.0rc1-cp313-cp313-{wheel_platform}.whl"
+        f"gffbase-0.3.0-cp313-cp313-{wheel_platform}.whl"
     )
     payload["environment"]["gffbase_install"]["native_module"] = native_module
 
