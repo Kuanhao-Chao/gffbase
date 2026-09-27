@@ -61,6 +61,7 @@ from gffbase.schema import (
     EDGES_FROM_PARENT,
     EDGES_GTF_GENE_WITHOUT_TRANSCRIPT,
     EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN,
+    FEATURES_PRIMARY_KEY,
     FIND_PARENT_CYCLES,
     GTF_PROPAGATE_ATTRIBUTE,
     GTF_PROPAGATE_GENE_ID,
@@ -109,7 +110,13 @@ def _verbose_logging(verbose):
             _log.removeHandler(handler)
 
 
-DEFAULT_BATCH_SIZE = 50_000
+#: Features per Arrow batch: two DuckDB row groups (2 x 122,880). A batch
+#: smaller than a row group leaves a partial group that every later append
+#: reworks, so on a file-backed database 50,000-row batches made appending
+#: cost three times a single insert (MANE, 8 threads: 10.5 s vs 3.2 s); at
+#: this size it is 3.7 s. Peak RSS did not move (a 200 k sweep point matched
+#: 50 k to within 2 %).
+DEFAULT_BATCH_SIZE = 245_760
 DEFAULT_MAX_DEPTH = 8
 
 
@@ -1581,6 +1588,11 @@ def _build_database(
     append_seconds += time.perf_counter() - t0
     clock.mark("parse", less=append_seconds)
     clock.add("append", append_seconds)
+
+    # Before anything looks a feature up by id: the merge/replace pass below
+    # does, row by row.
+    _add_features_primary_key(con)
+    clock.mark("primary_key")
     if report:
         _log.info(
             "%d records parsed, %d skipped (%.0f s)",
@@ -1832,6 +1844,22 @@ def _build_database(
 # ---------------------------------------------------------------------------
 # Helpers.
 # ---------------------------------------------------------------------------
+
+
+def _add_features_primary_key(con) -> None:
+    """Make `features.id` the primary key, now that the bulk load is in.
+
+    The resolver has already made every id unique, so a failure here is a
+    resolution defect. It is reported as the duplicate it is, naming one id,
+    rather than as DuckDB's constraint message.
+    """
+    try:
+        con.execute(FEATURES_PRIMARY_KEY)
+    except duckdb.ConstraintException as exc:
+        row = con.execute(
+            "SELECT id FROM features GROUP BY id HAVING count(*) > 1 ORDER BY min(file_order) LIMIT 1"
+        ).fetchone()
+        raise DuplicateIDError(f"Duplicate ID {row[0] if row else '?'}") from exc
 
 
 def _dialect_safe(it) -> dict:
