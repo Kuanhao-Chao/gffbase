@@ -27,6 +27,7 @@ from __future__ import annotations
 import gzip
 import io
 import math
+import re
 import unicodedata
 from collections.abc import Iterator
 
@@ -418,11 +419,20 @@ _I64_MIN = -(2**63)
 _I64_MAX = 2**63 - 1
 
 
+#: What the Rust engine's `str::parse::<i64>` accepts once trimmed: an optional
+#: sign and ASCII digits. Python's `int()` is looser -- `int("1_000")` is 1000
+#: and `int("\u0661\u0662")` (Arabic-Indic digits) is 12 -- so the fallback
+#: loaded coordinates the Rust engine and the GFF3 spec reject.
+_ASCII_INT = re.compile(r"[+-]?[0-9]+")
+
+
 def _coord_or_error(s: str, line_no: int, which: str) -> int | None:
     """Returns the int, or raises GFFFormatError with structured info."""
     if s == "." or s == "":
         return None
     try:
+        if not _ASCII_INT.fullmatch(s.strip()):
+            raise ValueError(s)
         value = int(s)
     except ValueError as err:
         raise _make_error(
