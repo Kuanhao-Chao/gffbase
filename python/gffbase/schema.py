@@ -220,19 +220,25 @@ UNION ALL
 # Note: B-tree on `(seqid, start, end)` is the universal
 # fallback; the R-tree (if the spatial extension loads) is added separately in
 # `ingest.py::_build_rtree`.
+# Single-column indexes only. DuckDB (1.4 and 1.5, checked with EXPLAIN
+# ANALYZE) never scans a multi-column ART index -- not even for a filter on
+# its leading column -- and uses a single-column one only when `col = ?` or
+# `col IN (...)` is that table scan's whole filter. The compound indexes this
+# list used to build (`features(seqid, start, "end")`, `attributes(key,
+# value)`, `closure(ancestor, depth)`, `closure(descendant, depth)`,
+# `segments(feature_id, seg_idx)`) served no query and cost ingest time,
+# memory and disk. The closure and segments names are kept, now on one
+# column; a database built before 0.3.0 keeps its old definitions, which
+# are merely unused.
 POST_LOAD_INDEXES = """
 CREATE INDEX IF NOT EXISTS features_type     ON features(featuretype);
-CREATE INDEX IF NOT EXISTS features_seqstart ON features(seqid, start, "end");
-CREATE INDEX IF NOT EXISTS attributes_kv     ON attributes(key, value);
 CREATE INDEX IF NOT EXISTS attributes_fid    ON attributes(feature_id);
 CREATE INDEX IF NOT EXISTS edges_parent      ON edges(parent);
 CREATE INDEX IF NOT EXISTS edges_child       ON edges(child);
-CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor, depth);
-CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant, depth);
-CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id, seg_idx);
+CREATE INDEX IF NOT EXISTS closure_ancestor  ON closure(ancestor);
+CREATE INDEX IF NOT EXISTS closure_descend   ON closure(descendant);
+CREATE INDEX IF NOT EXISTS segments_fid      ON segments(feature_id);
 """
-# Dropped the redundant `features_seqid` — every (seqid)
-# predicate is satisfied by the leading prefix of `features_seqstart`.
 
 
 # ---------------------------------------------------------------------------
