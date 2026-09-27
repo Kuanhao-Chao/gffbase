@@ -127,3 +127,39 @@ def test_matches_gffutils(name):
         oracle = gffutils.create_db(GFF, ":memory:", from_string=True, transform=TRANSFORMS[name])
     ours = create_db(GFF, ":memory:", from_string=True, transform=TRANSFORMS[name])
     assert snapshot(ours) == snapshot(oracle)
+
+
+def test_a_transform_may_return_a_gffbase_feature():
+    """What a gffutils transform often does: build a fresh Feature."""
+    from gffbase import Feature
+
+    def rebuild(f):
+        return Feature(
+            seqid=f.seqid,
+            source="rebuilt",
+            featuretype=f.featuretype,
+            start=f.start,
+            end=f.end,
+            strand=f.strand,
+            # `f.id` is None here, as in gffutils: ids are assigned after.
+            attributes={"ID": [f.attributes["ID"][0] + "_new"], "Note": "n"},
+        )
+
+    db = create_db(GFF, ":memory:", from_string=True, transform=rebuild)
+    assert sorted(f.id for f in db.all_features()) == ["g1_new", "t1_new"]
+    g = db["g1_new"]
+    assert (g.source, dict(g.attributes)) == ("rebuilt", {"ID": ["g1_new"], "Note": ["n"]})
+
+
+def test_str_of_the_view_is_the_line_as_edited():
+    lines = []
+
+    def record(f):
+        lines.append(str(f))
+        f.attributes["Name"] = ["b"]
+        lines.append(str(f))
+        return f
+
+    create_db(GFF.splitlines()[0] + "\n", ":memory:", from_string=True, transform=record)
+    assert lines[0] == "chr1\tt\tgene\t1\t100\t.\t+\t.\tID=g1;Name=a"
+    assert lines[1] == "chr1\tt\tgene\t1\t100\t.\t+\t.\tID=g1;Name=b"
