@@ -1873,6 +1873,17 @@ def _dialect_safe(it) -> dict:
     return {"fmt": "gff3"}
 
 
+#: Ingest is mostly serial -- parsing and per-row work -- so DuckDB threads
+#: past a handful buy no time and cost memory. MANE: 38.2 s at 8 threads and
+#: 38.4 s at 128, peak RSS 1.53 GiB vs 2.70 GiB; 1 thread took 43 s.
+INGEST_THREADS = 8
+
+
+def _default_ingest_threads() -> int:
+    """DuckDB's default is every core; ingest uses at most `INGEST_THREADS`."""
+    return max(1, min(INGEST_THREADS, os.cpu_count() or 1))
+
+
 def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
     """Configure the ingest connection.
 
@@ -1883,7 +1894,8 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
     explicit `threads` wins over `GFFBASE_THREADS`. SQLite-only names are
     skipped, as `FeatureDB.set_pragmas` skips them.
     """
-    # DuckDB's defaults are excellent; we only nudge threads.
+    # DuckDB's defaults are kept except for threads: at most INGEST_THREADS
+    # unless GFFBASE_THREADS or `pragmas` say otherwise.
     #
     # `GFFUTILS2_THREADS` is the old name, from before the project was called
     # gffbase, and was the last `GFFUTILS2_*` variable left. It still works so
@@ -1891,10 +1903,9 @@ def _apply_pragmas(con: duckdb.DuckDBPyConnection, pragmas: dict | None = None):
     # limit -- which on a shared node is exactly the kind of change that makes
     # someone else's day worse -- but `GFFBASE_THREADS` wins where both are set.
     threads = os.environ.get("GFFBASE_THREADS") or os.environ.get("GFFUTILS2_THREADS")
-    if threads:
-        # `int()` first: the value is interpolated, so it must not be able to
-        # carry syntax. See docs/source/content/advisory_sql_injection.rst.
-        con.execute(f"PRAGMA threads = {int(threads)}")
+    # `int()` first: the value is interpolated, so it must not be able to
+    # carry syntax. See docs/source/content/advisory_sql_injection.rst.
+    con.execute(f"PRAGMA threads = {int(threads) if threads else _default_ingest_threads()}")
     # Suppress the interactive progress bar — it floods stderr in batch and
     # subprocess scenarios and offers no value for benchmarking or scripting.
     try:
