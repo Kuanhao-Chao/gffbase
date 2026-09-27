@@ -91,6 +91,92 @@ fn read_up_to(r: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
     Ok(n)
 }
 
+const TAR_BLOCK: usize = 512;
+
+/// A tar header number: octal text, or GNU base-256 for large values.
+fn tar_number(field: &[u8]) -> Option<u64> {
+    if field.first().is_some_and(|b| b & 0x80 != 0) {
+        let mut n = u64::from(field[0] & 0x7f);
+        for &b in &field[1..] {
+            n = n.checked_mul(256)?.checked_add(u64::from(b))?;
+        }
+        return Some(n);
+    }
+    let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
+    let digits = std::str::from_utf8(&field[..end]).ok()?.trim_matches(' ');
+    if digits.is_empty() {
+        return Some(0);
+    }
+    u64::from_str_radix(digits, 8).ok()
+}
+
+/// A ustar header block with a valid checksum. The checksum keeps a GFF
+/// file that happens to have `ustar` at byte 257 from reading as an archive.
+fn is_tar_header(block: &[u8]) -> bool {
+    if block.len() != TAR_BLOCK || &block[257..262] != b"ustar" {
+        return false;
+    }
+    let sum: u64 = block[..148]
+        .iter()
+        .chain(&block[156..])
+        .map(|&b| u64::from(b))
+        .sum::<u64>()
+        + 8 * 0x20;
+    tar_number(&block[148..156]) == Some(sum)
+}
+
+/// The byte range of the one regular file in a tar archive, or None.
+///
+/// FlyBase publishes `dmel-all-r6.69.gff.gz` as a gzipped *tar* of the GFF:
+/// read as text, the 512-byte header became part of line 1 and the zero
+/// padding a last line. A one-file archive is read as that file; anything
+/// else is refused before a record is parsed. Mirrors `_tar_member` in the
+/// Python fallback, message for message.
+fn tar_member(buf: &[u8]) -> Result<Option<(usize, usize)>, String> {
+    if buf.len() < TAR_BLOCK || !is_tar_header(&buf[..TAR_BLOCK]) {
+        return Ok(None);
+    }
+    let (mut at, mut member, mut pax_size) = (0usize, None, None::<u64>);
+    while at + TAR_BLOCK <= buf.len() && buf[at..at + TAR_BLOCK].iter().any(|&b| b != 0) {
+        let block = &buf[at..at + TAR_BLOCK];
+        if !is_tar_header(block) {
+            return Err("malformed tar archive: a header block is corrupt".to_string());
+        }
+        let mut size = tar_number(&block[124..136])
+            .ok_or("malformed tar archive: a header size is not a number")?;
+        let body = at + TAR_BLOCK;
+        match block[156] {
+            b'x' => {
+                // pax extended header: may carry the real size
+                let end = body.saturating_add(size as usize).min(buf.len());
+                for record in buf[body..end].split(|&b| b == b'\n') {
+                    let kv = record.splitn(2, |&b| b == b' ').nth(1).unwrap_or(b"");
+                    if let Some(v) = kv.strip_prefix(b"size=") {
+                        pax_size = std::str::from_utf8(v).ok().and_then(|v| v.parse().ok());
+                    }
+                }
+            }
+            b'0' | 0 | b'7' => {
+                if let Some(real) = pax_size.take() {
+                    size = real;
+                }
+                if member.is_some() {
+                    return Err(
+                        "tar archive holds more than one file; extract the one to load".to_string(),
+                    );
+                }
+                let end = body.saturating_add(size as usize).min(buf.len());
+                member = Some((body, end));
+            }
+            _ => {}
+        }
+        at = body.saturating_add((size as usize).div_ceil(TAR_BLOCK) * TAR_BLOCK);
+    }
+    member
+        .map(Some)
+        .ok_or_else(|| "tar archive holds no regular file".to_string())
+}
+
 impl FileSource {
     /// Open `path`, decompressing if it is gzip.
     ///
@@ -148,11 +234,20 @@ impl RecordIter {
                 v
             }
         };
+        // A one-file tar archive is read as the file it holds.
+        let mut buf = buf;
+        let start = match tar_member(&buf)? {
+            Some((body, end)) => {
+                buf.truncate(end);
+                body
+            }
+            None => 0,
+        };
         // A UTF-8 byte-order mark is not part of the first seqid.
-        let pos = if buf.starts_with(b"\xef\xbb\xbf") {
-            3
+        let pos = if buf[start..].starts_with(b"\xef\xbb\xbf") {
+            start + 3
         } else {
-            0
+            start
         };
         let mut iter = RecordIter {
             buf,

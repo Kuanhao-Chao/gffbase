@@ -102,6 +102,111 @@ def _open(path: str):
 _NUL_REASON = "NUL byte"
 
 
+_TAR_BLOCK = 512
+
+
+def _tar_number(field: bytes) -> int | None:
+    """A tar header number: octal text, or GNU base-256 for large values."""
+    if field and field[0] & 0x80:
+        n = field[0] & 0x7F
+        for byte in field[1:]:
+            n = n * 256 + byte
+        return n
+    digits = field.split(b"\0", 1)[0].strip(b" ")
+    if not digits:
+        return 0
+    try:
+        return int(digits, 8)
+    except ValueError:
+        return None
+
+
+def _is_tar_header(block: bytes) -> bool:
+    """A ustar header block with a valid checksum.
+
+    The checksum is what keeps a GFF file that happens to have `ustar` at
+    byte 257 from being read as an archive.
+    """
+    if len(block) != _TAR_BLOCK or block[257:262] != b"ustar":
+        return False
+    stored = _tar_number(block[148:156])
+    return stored == sum(block[:148]) + 8 * 0x20 + sum(block[156:])
+
+
+def _tar_member(stream) -> tuple[int, int] | None:
+    """The byte range of the one regular file in a tar archive, or None.
+
+    FlyBase publishes `dmel-all-r6.69.gff.gz` as a gzipped *tar* of the GFF:
+    read as text, the 512-byte header became part of line 1 and the zero
+    padding a last line. A one-file archive is read as that file; anything
+    else is refused before a record is yielded. Mirrors `tar_member` in
+    rust/src/parser.rs. `stream` must be seekable; it is left at offset 0.
+    """
+    block = stream.read(_TAR_BLOCK)
+    if not _is_tar_header(block):
+        stream.seek(0)
+        return None
+    at, member, pax_size = 0, None, None
+    while len(block) == _TAR_BLOCK and any(block):
+        if not _is_tar_header(block):
+            raise ValueError("malformed tar archive: a header block is corrupt")
+        size = _tar_number(block[124:136])
+        if size is None:
+            raise ValueError("malformed tar archive: a header size is not a number")
+        body = at + _TAR_BLOCK
+        kind = block[156:157]
+        if kind == b"x":  # pax extended header: may carry the real size
+            stream.seek(body)
+            for record in stream.read(size).split(b"\n"):
+                key, _, value = record.partition(b" ")[2].partition(b"=")
+                if key == b"size":
+                    pax_size = int(value) if value.isdigit() else None
+        elif kind in (b"0", b"\0", b"7"):
+            if pax_size is not None:
+                size, pax_size = pax_size, None
+            if member is not None:
+                raise ValueError("tar archive holds more than one file; extract the one to load")
+            member = (body, body + size)
+        at = body + -(-size // _TAR_BLOCK) * _TAR_BLOCK
+        stream.seek(at)
+        block = stream.read(_TAR_BLOCK)
+    if member is None:
+        raise ValueError("tar archive holds no regular file")
+    stream.seek(0)
+    return member
+
+
+class _Slice(io.RawIOBase):
+    """Bytes `[start, end)` of a seekable binary stream, read sequentially."""
+
+    def __init__(self, stream, start: int, end: int):
+        stream.seek(start)
+        self._stream, self._left = stream, end - start
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        if self._left <= 0:
+            return 0
+        data = self._stream.read(min(len(buffer), self._left))
+        buffer[: len(data)] = data
+        self._left -= len(data)
+        return len(data)
+
+    def close(self) -> None:
+        self._stream.close()
+        super().close()
+
+
+def _untar(stream):
+    """`stream`, or the one file it holds if it is a tar archive."""
+    member = _tar_member(stream)
+    if member is None:
+        return stream
+    return io.BufferedReader(_Slice(stream, *member))
+
+
 def _decode_error(err: UnicodeDecodeError, line_no: int):
     """Turn a raw `UnicodeDecodeError` into the parser's own error type.
 
@@ -810,7 +915,7 @@ def parse_file(
     strict: bool = True,
     validation: str = "ncbi",
 ) -> _FallbackIterator:
-    stream = _open(path)
+    stream = _untar(_open(path))
     return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
@@ -825,7 +930,7 @@ def parse_bytes(
     # Keep the stream binary and decode one physical line at a time in
     # `_iter_lines`. That preserves line-aware diagnostics and lets
     # `strict=False` skip one invalid line and continue with the next.
-    stream = io.BytesIO(data)
+    stream = _untar(io.BytesIO(data))
     return _FallbackIterator(stream, checklines, force_dialect_check, force_gff, strict, validation)
 
 
