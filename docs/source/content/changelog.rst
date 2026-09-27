@@ -45,7 +45,7 @@ Performance
   ``attributes(feature_id)`` -- used only by writes -- on the first write.
 - **Batches of two DuckDB row groups** (245,760 rows): smaller ones were
   rewritten by every later append. The primary key is added after the load.
-- **``children()`` / ``parents()`` are 3-25x faster per call** (MANE, level 1:
+- ``children()`` / ``parents()`` **are 3-25x faster per call** (MANE, level 1:
   15 ms -> 1.2 ms at one thread): one single-table lookup (``edges`` for
   level 1, the closure otherwise), then the features by key, instead of a
   join DuckDB served by scanning the whole closure.
@@ -55,7 +55,7 @@ Performance
   run 6-15x faster than per call, and within 1.2-2.5x of gffutils 0.14
   (``benchmarks/08_loops.py``). Scattered single calls remain slower than
   SQLite's point lookups -- see the performance page.
-- **``merge`` / ``replace`` duplicates are resolved in bulk:** MANE under
+- ``merge`` / ``replace`` **duplicates are resolved in bulk:** MANE under
   ``merge_strategy="merge"`` took over 15 minutes and now 29 s.
 - **DuckDB uses at most 8 threads** for ingest and for a handle opened on a
   file (``GFFBASE_THREADS`` overrides): more bought no time and cost memory.
@@ -84,7 +84,7 @@ Fixed
 - **A truncated or corrupt gzip file** is the same error in both engines:
   ``GFFFormatError(kind="ReadError")`` after the complete lines before the
   damage, whatever the strictness.
-- **A ``memory_limit`` no longer kills ingest:** the closure is built one level
+- **A** ``memory_limit`` **no longer kills ingest:** the closure is built one level
   at a time, which DuckDB can spill; the recursive query it replaces could
   not.
 - **A transform's attribute edits are stored** (they were discarded), and the
@@ -107,7 +107,7 @@ Fixed
 Changed
 ~~~~~~~
 
-- **``db.children()``, ``db.parents()`` and ``db[id]`` inside a loop may be
+- ``db.children()``, ``db.parents()`` **and** ``db[id]`` **inside a loop may be
   answered from a prefetch.** Answers are identical (a Hypothesis state
   machine interleaves streams, calls and writes to hold them to it); writes
   through ``FeatureDB`` invalidate it. Writes made directly on ``db.conn`` while
