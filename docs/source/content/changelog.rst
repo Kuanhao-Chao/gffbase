@@ -8,6 +8,142 @@ All notable changes to GFFBase are documented here.
 The format follows `Keep a Changelog <https://keepachangelog.com/en/1.1.0/>`__, and
 this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.html>`__.
 
+.. _changelog--unreleased:
+
+Unreleased
+----------
+
+A performance and robustness release: ingest rebuilt around a streaming Rust
+producer, relation queries rewritten around what DuckDB can index, loops over
+a live stream prefetched, and the noisy files real annotation sources publish
+read as they were meant. Every change to what a query returns is declared in
+``tests/parity/deviations.toml``.
+
+.. _changelog--unreleased-performance:
+
+Performance
+~~~~~~~~~~~
+
+- **Ingest is 2.5-3x faster and needs about a quarter of the memory.**
+  GENCODE v49 GFF3: 572 s and 9.7 GiB peak -> 203 s and 2.6 GiB; RefSeq
+  GRCh38.p14: 355 s -> 122 s; MANE: 38 s and 1.5 GiB -> 16 s and 0.85 GiB;
+  database files are about half the size. Measured stage by stage
+  (``IngestStats.stages``); the changes below each moved one stage.
+- **The Rust parser streams its input** through a ~1 MiB window instead of
+  reading the whole decompressed file first (1.9 GB for GENCODE before the
+  first record, 6.7 GB for FlyBase).
+- **A Rust ingest producer** resolves ids, applies the duplicate strategies
+  and builds each batch as Arrow buffers handed to pyarrow without a copy --
+  no Python object per record. ``transform=`` and callable id specs keep the
+  Python path, which is also the oracle the producer is tested against.
+- **A DuckDB memory budget during ingest into a file:** 512 MB, doubled only
+  for the step that needs more (a primary key over 31.8 M FlyBase ids needs
+  2 GB), with checkpoints taken at step boundaries so none can run short.
+  ``pragmas={"memory_limit": ...}`` still takes precedence.
+- **Leaner indexes.** Single-column only (DuckDB never scans a multi-column
+  one), built over sorted input (several times faster), one at a time, and
+  ``attributes(feature_id)`` -- used only by writes -- on the first write.
+- **Batches of two DuckDB row groups** (245,760 rows): smaller ones were
+  rewritten by every later append. The primary key is added after the load.
+- **``children()`` / ``parents()`` are 3-25x faster per call** (MANE, level 1:
+  15 ms -> 1.2 ms at one thread): one single-table lookup (``edges`` for
+  level 1, the closure otherwise), then the features by key, instead of a
+  join DuckDB served by scanning the whole closure.
+- **Loops over a live stream are prefetched.** A ``children()``, ``parents()`` or
+  ``db[id]`` call on a feature an open iterator holds is answered, with its
+  neighbours', by one query; nested loops too. The canonical gffutils loops
+  run 6-15x faster than per call, and within 1.2-2.5x of gffutils 0.14
+  (``benchmarks/08_loops.py``). Scattered single calls remain slower than
+  SQLite's point lookups -- see the performance page.
+- **``merge`` / ``replace`` duplicates are resolved in bulk:** MANE under
+  ``merge_strategy="merge"`` took over 15 minutes and now 29 s.
+- **DuckDB uses at most 8 threads** for ingest and for a handle opened on a
+  file (``GFFBASE_THREADS`` overrides): more bought no time and cost memory.
+
+.. _changelog--unreleased-fixed:
+
+Fixed
+~~~~~
+
+- **Noisy input is read as it was meant**, in both engines: a UTF-8 BOM is
+  not part of the first seqid; a lone CR ends a line; a whitespace-only line
+  is blank; ``.`` in column 9 means no attributes; ``Parent=a,`` makes no edge to
+  an empty parent; compat mode trims spaces around a spaced ``=`` (``ID = g1``).
+- **GTF from gene predictors and browsers.** A CDS-only file gets its
+  transcripts and genes; a row with ``gene_id`` but no ``transcript_id`` hangs
+  from its gene and is reported; AUGUSTUS gene/transcript rows whose column 9
+  is a bare id are named by it; an authored transcript without ``gene_id``
+  takes its children's gene; inferred parents carry their ids in column 9.
+- **Liftoff-style ids.** ``create_unique``, ``merge`` and generated ids skip names
+  the file uses literally (``X_1``), where ingest died on a primary-key error.
+- **A one-file tar archive is read as the file it holds** (FlyBase ships its
+  GFF as a gzipped tar named ``.gff.gz``); an archive of several files is
+  refused.
+- **A line holding a NUL byte is binary data**, reported and skipped, so a
+  binary file raises ``EmptyInputError`` again.
+- **A truncated or corrupt gzip file** is the same error in both engines:
+  ``GFFFormatError(kind="ReadError")`` after the complete lines before the
+  damage, whatever the strictness.
+- **A ``memory_limit`` no longer kills ingest:** the closure is built one level
+  at a time, which DuckDB can spill; the recursive query it replaces could
+  not.
+- **A transform's attribute edits are stored** (they were discarded), and the
+  view a transform or id_spec callable receives has gffutils' surface:
+  ``f.id``, ``len(f)``, ``str(f)``, ``f.dialect``, ``f[key] = value``.
+- **The dialect is voted per key, weighted by attribute count, as gffutils
+  does:** one quoted line no longer re-quotes a whole file on output.
+- **The CLI reports a user error in one line** and exits 1; both engines
+  raise ``FileNotFoundError`` for a missing file.
+- **``DuplicateIDError`` names both lines:** "Duplicate ID g1 (line 4, first
+  seen on line 2)".
+- **Smaller parity gaps:** ``bed12`` block order for exons sharing a start;
+  ``DataIterator.peek``; ``GFFWriter.write_mRNA_children(mRNA_id=...)``;
+  ``parser.Quoter`` is a ``defaultdict``; the UCSC `gene_id "X"; transcript_id
+  "X"`` convention no longer invents a suffixed gene under ``create_unique`;
+  a transform's edit to a multi-valued GTF key repeats the key.
+
+.. _changelog--unreleased-changed:
+
+Changed
+~~~~~~~
+
+- **``db.children()``, ``db.parents()`` and ``db[id]`` inside a loop may be
+  answered from a prefetch.** Answers are identical (a Hypothesis state
+  machine interleaves streams, calls and writes to hold them to it); writes
+  through ``FeatureDB`` invalidate it. Writes made directly on ``db.conn`` while
+  a loop is running are not seen by the loop's prefetched answers.
+- **The ingest connection's DuckDB memory limit** is managed by gffbase unless
+  ``pragmas`` sets one; the connection handed back uses DuckDB's default.
+
+.. _changelog--unreleased-added:
+
+Added
+~~~~~
+
+- ``IngestStats.stages`` -- wall seconds per ingest stage -- and
+  ``GFFBASE_INGEST_TRACE=1``, which prints each stage with peak RSS.
+- ``benchmarks/07_profile.py`` (ingest stages, thread and batch sweeps, per-call
+  latency and query plans) and ``benchmarks/08_loops.py`` (loops against
+  gffutils, with answer digests).
+- Nine extended corpora -- Ensembl mouse, NCBI *E. coli*, FlyBase, WormBase,
+  UCSC GTFs, a T2T Liftoff annotation -- pinned in ``benchmarks/corpora.py``,
+  fetched by ``download_corpora.py --extended``, and tested by
+  ``tests/test_corpus_extended.py``.
+
+.. _changelog--unreleased-testing-and-ci:
+
+Testing and CI
+~~~~~~~~~~~~~~
+
+- Differential comparison against gffutils under every non-default
+  ``create_db`` option and for 34 methods with the arguments people pass;
+  the parity manifest enforced at class-member level.
+- The Rust and Python engines compared on every upstream fixture and 33
+  hostile inputs; compat mode fuzzed on noisy bytes.
+- Equivalence oracles kept for each rebuilt path: the Python ingest loop
+  (producer), the row-by-row duplicate pass, the recursive closure query,
+  the closure join (relations), and the per-call path (prefetch).
+
 .. _changelog--021:
 
 `0.2.1 <https://github.com/Kuanhao-Chao/gffbase/compare/v0.2.0...v0.2.1>`__ — 2026-09-26
