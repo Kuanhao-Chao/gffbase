@@ -100,13 +100,18 @@ def test_relations_match_the_closure_join(fixture):
                 assert got == expected, f"{fixture} {direction}({anchor!r}, {kwargs})"
 
 
-def test_a_long_id_list_binds_one_parameter(monkeypatch):
-    """Past `_ID_LIST_INLINE_MAX` ids the lookup binds a list, same answer."""
+def test_a_long_id_list_is_still_one_answer(monkeypatch):
+    """Past `_ID_GROUP` ids a prefetch reads in groups; the answer is whole
+    and in order."""
+    from gffbase.interface import FeatureDB
+
     text = "chr1\tt\tgene\t1\t10000\t.\t+\t.\tID=g\n" + "".join(
-        f"chr1\tt\texon\t{i + 1}\t{i + 1}\t.\t+\t.\tID=e{i};Parent=g\n" for i in range(60)
+        f"chr1\tt\t{'exon' if i % 2 else 'CDS'}\t{i + 1}\t{i + 1}\t.\t+\t.\tID=e{i};Parent=g\n"
+        for i in range(60)
     )
     db = create_db(text, ":memory:", from_string=True)
-    inline = [f.id for f in db.children("g", order_by="start")]
-    monkeypatch.setattr(type(db), "_ID_LIST_INLINE_MAX", 5)
-    assert [f.id for f in db.children("g", order_by="start")] == inline
-    assert [f.id for f in db.children("g", featuretype="exon", order_by="start")] == inline
+    expected = [row[0] for row in db._rows_by_ids([f"e{i}" for i in range(60)])]
+    monkeypatch.setattr(FeatureDB, "_ID_GROUP", 7)
+    assert [row[0] for row in db._rows_by_ids([f"e{i}" for i in range(60)])] == expected
+    exons = [row[0] for row in db._rows_by_ids([f"e{i}" for i in range(60)], "exon")]
+    assert exons == [f"e{i}" for i in range(1, 60, 2)]

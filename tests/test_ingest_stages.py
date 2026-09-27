@@ -69,11 +69,11 @@ def test_ingest_uses_at_most_eight_threads_by_default(tmp_path, monkeypatch):
     """Threads past a handful bought MANE no time and cost 1.2 GiB of RSS."""
     import os
 
-    from gffbase.ingest import INGEST_THREADS
+    from gffbase._dbutil import DEFAULT_THREADS
 
     monkeypatch.delenv("GFFBASE_THREADS", raising=False)
     monkeypatch.delenv("GFFUTILS2_THREADS", raising=False)
-    assert _threads(tmp_path) == min(INGEST_THREADS, os.cpu_count() or 1)
+    assert _threads(tmp_path) == min(DEFAULT_THREADS, os.cpu_count() or 1)
 
 
 def test_the_environment_and_pragmas_override_the_thread_default(tmp_path, monkeypatch):
@@ -255,3 +255,29 @@ def test_no_automatic_checkpoint_while_the_budget_holds(tmp_path, monkeypatch):
     con, _ = from_file(str(path), str(tmp_path / "a.duckdb"))
     assert "GiB" in seen[0] and float(seen[0].split()[0]) > 900
     assert con.execute("SELECT current_setting('checkpoint_threshold')").fetchone()[0] == "16.0 MiB"
+
+
+def test_a_handle_opened_on_a_file_uses_the_same_default(tmp_path, monkeypatch):
+    """DuckDB's own default is every core, which a per-call query pays for."""
+    import os
+
+    from gffbase import FeatureDB
+    from gffbase._dbutil import DEFAULT_THREADS
+
+    path = tmp_path / "a.gff3"
+    path.write_text(GFF3)
+    con, _ = from_file(str(path), str(tmp_path / "a.duckdb"))
+    con.close()
+
+    def opened():
+        db = FeatureDB(str(tmp_path / "a.duckdb"), read_only=True)
+        try:
+            return int(db.conn.execute("SELECT current_setting('threads')").fetchone()[0])
+        finally:
+            db.close()
+
+    monkeypatch.delenv("GFFBASE_THREADS", raising=False)
+    monkeypatch.delenv("GFFUTILS2_THREADS", raising=False)
+    assert opened() == min(DEFAULT_THREADS, os.cpu_count() or 1)
+    monkeypatch.setenv("GFFBASE_THREADS", "2")
+    assert opened() == 2
