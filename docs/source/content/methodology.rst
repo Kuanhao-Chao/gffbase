@@ -225,9 +225,9 @@ What the ingest numbers do and do not say
 Two properties of the ingest measurement bound how much weight a single figure
 carries, and both were measured rather than assumed.
 
-**Ingest is attribute-bound, and essentially serial.** Cost tracks the number of
-attributes far better than the number of features. Dividing each corpus's
-attribute values by its published ingest wall:
+**Ingest cost tracks attributes.** Cost follows the number of attribute values
+far better than the number of features. Dividing each corpus's attribute
+values by its published ingest wall:
 
 .. list-table::
    :header-rows: 1
@@ -240,51 +240,60 @@ attribute values by its published ingest wall:
    * - MANE v1.5
      - 6,711,851
      - 12.8
-     - 167,700
-     - 146,900
+     - 429,800
+     - 148,700
    * - GENCODE v49 (GFF3)
      - 108,289,882
      - 17.9
-     - 162,000
-     - 180,900
+     - 560,900
+     - 185,200
    * - GENCODE v49 (GTF)
      - 96,291,901
      - 15.9
-     - 156,800
-     - 228,800
+     - 446,700
+     - 232,400
    * - RefSeq GRCh38.p14
      - 55,104,379
      - 11.2
-     - 130,600
-     - 139,900
+     - 441,200
+     - 140,900
    * - CHESS 3.1.3
      - 7,063,651
      - 2.6
-     - 62,400
-     - 51,600
+     - 190,800
+     - 52,700
 
-Across the three attribute-dense corpora -- 12.8 to 17.9 attributes per feature
--- gffbase holds 157,000 to 168,000 attributes per second, a seven percent band
-over a sixteen-fold range of corpus size. The rate falls off as attributes per
-feature falls, to 130,600 on RefSeq and 62,400 on CHESS, which is what an
-attribute-bound cost with a fixed per-feature floor looks like: where there are
-few attributes to move, the per-feature work is what is left to pay. That is
-also why gffbase wins on CHESS and not on GENCODE.
+On the four attribute-dense corpora -- 11.2 to 17.9 attributes per feature --
+gffbase moves 430,000 to 561,000 attributes per second, against 141,000 to
+232,000 for ``gffutils``. The rate falls to 190,800 on CHESS, where 2.6
+attributes per feature leave the fixed per-feature work to dominate; the
+comparator's per-feature cost is higher still there, which is why CHESS has
+the largest ratio. GENCODE GTF has the smallest because ``gffutils`` runs at
+its fastest on it: with parent inference off, its GTF path is a plain bulk
+insert. Before 0.3.0 gffbase held 131,000 to 168,000 attributes per second on
+those four, level with the comparator; the rebuilt ingest removed the Python
+object it built per record.
 
 Attribute values are counted from the corpus files themselves -- semicolon
 fields in column nine, with comma-separated GFF3 values expanded, which
 reproduces the per-feature ratios above -- rather than from either database, so
 the figure does not depend on how either engine chose to store them.
 
-Raising the DuckDB thread count barely helps. From the 25-job thread sweep of
-one cluster campaign run, over five corpora at 1, 2, 4, 8 and 10 threads -- all
+**More threads buy little.** Measured on 0.3.0, MANE ingest took 15.8 to 16.1 s at
+8, 32 and 128 DuckDB threads alike, while peak RSS rose from 1.0 GiB to 1.2 and
+1.6 GiB -- which is why gffbase uses at most 8 threads by default. The parse
+and per-record work runs on one core; the rest is DuckDB's append and index
+builds, which do not speed up past a few threads at this size.
+
+Before the rebuild the picture was the same. One cluster campaign run swept
+gffbase 0.2.0rc1 over the five corpora at 1, 2, 4, 8 and 10 threads -- all
 twenty-five figures from that single run, since thread scaling is only
 meaningful within one:
 
 .. list-table::
    :header-rows: 1
 
-   * - corpus
+   * - corpus (0.2.0rc1)
      - 1 thread
      - 10 threads
      - speedup
@@ -309,46 +318,53 @@ meaningful within one:
      - 534.8 s
      - 1.23x
 
-Ten times the cores buys at most a quarter more throughput. The comparator is
-single-threaded, so the published comparison is largely one serial ingest
-against another, and neither engine's figure should be read as a parallel
-result.
+The comparator is single-threaded, so neither engine's figure should be read
+as a parallel result.
 
-A second, partial sweep measured the same corpora 12-15 percent slower at every
-thread count -- 47.4 s rather than 41.6 s for MANE at one thread, 506.8 s rather
-than 425.4 s for RefSeq -- while reproducing the same shape. Absolute figures
-from a thread sweep are therefore run-specific; the conclusion that ingest does
-not parallelise is not.
-
-**Ingest uncertainty is asymmetric, and it falls with corpus size.** Repeating
-the same corpus with a byte-identical binary on ten pinned physical cores of an
-otherwise idle machine:
+**Ingest uncertainty falls with corpus size.** Repeating the ingest alone with
+the same wheel, on the same eight pinned cores of an otherwise idle socket:
 
 .. list-table::
    :header-rows: 1
 
    * - corpus
+     - runs
      - repeated gffbase ingest
      - spread
+     - published figure
+   * - MANE v1.5
+     - 5
+     - 14.9 s – 15.2 s
+     - 2.3%
+     - 15.6 s
    * - CHESS 3.1.3
-     - 93.9 s – 113.1 s
-     - 20%
+     - 5
+     - 36.0 s – 36.5 s
+     - 1.4%
+     - 37.0 s
    * - RefSeq GRCh38.p14
-     - 419.5 s – 424.8 s
-     - 1.3%
+     - 3
+     - 118.8 s – 119.3 s
+     - 0.5%
+     - 124.9 s
    * - GENCODE v49 (GTF)
-     - 606.1 s – 622.2 s
-     - 2.7%
+     - 3
+     - 208.2 s – 208.7 s
+     - 0.3%
+     - 215.6 s
+   * - GENCODE v49 (GFF3)
+     - 3
+     - 191.1 s – 192.5 s
+     - 0.7%
+     - 193.1 s
 
-The large corpora are reproducible to within a few percent; the small, fast one
-is not, because fixed startup and page-cache effects are a large fraction of a
-ninety-second run. ``gffutils`` on CHESS spanned 134.2 s to 137.0 s over the
-same period -- 2 percent -- so the sensitivity is specific to the parallel,
-allocation-heavy engine rather than to the machine. Hyperthreading,
-temporary-directory placement and machine load were each ruled out as the cause.
-
-Read the published ratios accordingly: the whole-genome figures are solid, and
-the CHESS ratio is the one carrying real uncertainty.
+Every corpus repeats to within a few percent, the whole-genome ones to under
+one. The published single figures sit 0.7 to 4.9 percent above the probe's
+medians. The canonical run shared the machine with test suites running on the
+other socket for its first four corpora; the fifth, GENCODE GFF3, measured
+alone, sits closest. Either way the published ratios understate gffbase
+slightly rather than flatter it. (0.2.0rc1, probed on ten pinned cores, spread
+20 percent on CHESS.)
 
 The harness measures each ingest once, while the query phases run five times and
 report their spread. Closing that asymmetry is future work; until it is closed, a
