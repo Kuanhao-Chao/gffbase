@@ -279,11 +279,11 @@ fields in column nine, with comma-separated GFF3 values expanded, which
 reproduces the per-feature ratios above -- rather than from either database, so
 the figure does not depend on how either engine chose to store them.
 
-**More threads buy little.** Measured on 0.3.0, MANE ingest took 15.8 to 16.1 s at
-8, 32 and 128 DuckDB threads alike, while peak RSS rose from 1.0 GiB to 1.2 and
-1.6 GiB -- which is why gffbase uses at most 8 threads by default. The parse
-and per-record work runs on one core; the rest is DuckDB's append and index
-builds, which do not speed up past a few threads at this size.
+**More threads buy little.** Measured on 0.3.0, MANE ingest took 15.8 to 16.1 s
+at 8, 32 and 128 DuckDB threads alike, while peak RSS rose from 1.0 GiB to 1.2
+and 1.6 GiB -- which is why gffbase uses at most 8 threads by default. The
+parse and per-record work runs on one core; the rest, DuckDB's append and
+index builds, gained nothing past 8 threads here.
 
 Before the rebuild the picture was the same. One cluster campaign run swept
 gffbase 0.2.0rc1 over the five corpora at 1, 2, 4, 8 and 10 threads -- all
