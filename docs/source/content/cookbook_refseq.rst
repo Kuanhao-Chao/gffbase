@@ -177,19 +177,10 @@ Performance notes
 -----------------
 
 On the benchmark machine (see :doc:`performance`), RefSeq GRCh38.p14 --
-4.9 million lines -- ingests in about 7 minutes, level with gffutils.
+4.9 million lines -- ingests in about two minutes at the default 8 threads,
+against gffutils' three and a half.
 
-Ingest memory is not flat in 0.2.x: it grows with the file, and most of it is
-the parser and per-record work rather than DuckDB. Two settings help:
-
-- Fewer DuckDB threads. DuckDB sizes its thread pool, and the buffers that
-  come with it, from every core it can see. ``GFFBASE_THREADS=8`` (or
-  ``pragmas={"threads": 8}``) matters on a many-core node.
-
-- ``pragmas={"memory_limit": "2GB"}`` caps DuckDB's own share, and spills to
-  disk beyond it. It does not cap the parser.
-
-Measured on MANE v1.5 (525 thousand features) on a 128-core node: 3.2 GB peak
-with the defaults, 2.6 GB with a 512 MB DuckDB cap, and 1.9 GB with 10
-threads, where the cap then makes no further difference. Bounding the whole
-ingest is the work planned for 0.3.0 (:doc:`roadmap`).
+Ingest memory is bounded by default: the parser streams, and DuckDB runs under
+a budget raised only for the steps that need it. ``pragmas={"memory_limit":
+"2GB"}`` holds DuckDB to a fixed limit instead, and ``GFFBASE_THREADS``
+changes the thread count; :doc:`tuning` has the measurements.

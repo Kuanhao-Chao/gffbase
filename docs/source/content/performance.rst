@@ -248,28 +248,72 @@ The rest of the ledger is qualitative, and stays that way:
      - gffbase
      - legacy ``gffutils``
    * - **Ingest wall**
-     - faster where per-feature overhead dominates; **slower** on
-       attribute-dense whole-genome files
-     - the mirror of the same trade
-   * - **Single-feature point query**
-     - comparable
-     - comparable
-   * - **Row-by-row loop over many IDs**
-     - **slower**
-     - faster
+     - faster; memory bounded by a DuckDB budget
+     - streams to SQLite in a few hundred MB
+   * - **Loop over a gffbase iterator** (``children``, ``parents``, ``db[id]``)
+     - prefetched: close, see below
+     - close
+   * - **Single call on an id from your own list**
+     - **slower**: one DuckDB statement, 0.5-1.5 ms
+     - a B-tree seek, a few hundredths of a ms
    * - **Bulk batched extraction**
      - one query, zero ``Feature`` objects
      - not available
    * - **Spatial index**
-     - R-tree, or B-tree fallback
+     - R-tree, or a zone-map-pruned scan
      - none
 
-The memory and disk costs buy the query behavior rather than the ingest wall:
-an Arrow batch builder that stages columns before writing, a materialized
-transitive closure so a hierarchy walk is one query rather than a recursion,
-and a long-form attributes table so attribute search parses no JSON. Ingest pays
-for all three up front, which is a large part of why it does not win outright on
-the biggest files.
+The memory and disk costs buy the query behavior: a materialized transitive
+closure so a hierarchy walk is one lookup rather than a recursion, and a
+long-form attributes table so attribute search parses no JSON.
+
+.. _performance--loops-against-gffutils:
+
+Loops against ``gffutils``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``benchmarks/08_loops.py`` times the loops people write, in both libraries on
+the same input, and prints a ratio only where every answer agrees (a digest of
+each call's result). Milliseconds per call, 0.3.0 at the default 8 threads:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 15 15 15 15
+
+   * - Workload
+     - MANE, gffbase
+     - MANE, ``gffutils``
+     - GENCODE GTF, gffbase
+     - GENCODE GTF, ``gffutils``
+   * - ``for g in features_of_type("gene"): children(g, level=1)``
+     - 0.10
+     - 0.07
+     - 0.45
+     - 0.30
+   * - ``... for t in children(g, level=1): children(t, featuretype="exon")``
+     - 0.34
+     - 0.29
+     - 0.37
+     - 0.38
+   * - ``for e in features_of_type("exon"): parents(e, featuretype="gene")``
+     - 0.08
+     - 0.05
+     - 0.13
+     - 0.05
+   * - ``children(id, level=1)``, ids from a random sample
+     - 1.3
+     - 0.05
+     - --
+     - --
+   * - ``db[id]``, ids from a random sample
+     - 0.5
+     - 0.04
+     - --
+     - --
+
+The first three are loops over a gffbase iterator, where each call is answered
+from a prefetch; the last two have no iterator to prefetch from, and each call
+is a DuckDB statement. Bring those into one query with the batched API.
 
 ----
 
