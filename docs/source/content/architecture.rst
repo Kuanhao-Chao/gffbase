@@ -54,6 +54,11 @@ Parsing
 Python package and otherwise uses ``_pyfallback``. Both engines must return the
 same records, warnings, directives, and failures for the same profile.
 
+Both stream their input: the Rust engine through a window of about 1 MiB
+refilled as lines are consumed, the fallback a line at a time. gzip is
+recognized by content, a one-file tar archive is read as the file it holds, and
+a truncated or corrupt stream ends in the same ``ReadError`` in both.
+
 ``validation="gffutils"`` is the compatibility profile used by
 ``create_db(mode="compat")``. It preserves permissive legacy input handling and
 attaches diagnostics. ``validation="ncbi"`` is the formal profile: malformed
@@ -68,6 +73,15 @@ Ingest and identity
 identifiers, materializes multipart features, derives relationships, and only
 commits after final indexes and metadata exist. A failure must leave neither a
 partially usable database nor an orphan temporary file.
+
+With the Rust engine the per-record work -- id resolution, the duplicate
+strategies, batching -- happens in ``IngestProducer`` (``rust/src/producer.rs``),
+which hands each batch of two DuckDB row groups to pyarrow as column buffers
+without a copy. A ``transform``, a callable ``id_spec`` or the pure-Python engine
+takes the Python loop in ``_build_database`` instead; it is also the oracle the
+producer is tested against. Ingest into a file runs under a DuckDB memory budget
+(``_MemoryBudget``) that retries a step with more memory rather than fail, and
+checkpoints at step boundaries.
 
 The stored ``id`` is a unique logical key. ``raw_id`` records the identifier found
 in the annotation before collision handling. Physical pieces of a
@@ -98,6 +112,12 @@ Changing that order requires migration, mutation, round-trip, and validator
 tests because IDs embedded in an earlier structure cannot safely be repaired
 afterward.
 
+The primary key on ``features.id`` is added after the load. The closure is built
+one level at a time (``schema.build_closure``) and written sorted by descendant;
+edges are written sorted by parent. Indexes are single-column -- DuckDB never
+scans a multi-column one -- and built one at a time; ``attributes(feature_id)``,
+used only by writes, is built on the first write that needs it.
+
 .. _architecture--query-routing:
 
 Query routing
@@ -105,9 +125,16 @@ Query routing
 
 ``FeatureDB`` owns connection lifecycle and query routing. Region queries use the
 R-tree only when the spatial extension and index were successfully created;
-otherwise they use the multi-column B-tree. Multipart envelope candidates are
-rechecked against physical segments. Relationship queries use closure when it
-is valid and a recursive CTE where dynamic traversal is required.
+otherwise they filter on ``seqid``, ``start`` and ``end``, which DuckDB prunes by
+zone map. Multipart envelope candidates are rechecked against physical segments.
+
+A relationship query is two single-table lookups: the relatives' ids -- from
+``edges`` for level 1, from the closure otherwise -- then those features by
+primary key. A recursive CTE takes over where the walk may run past the
+closure's depth. When the anchor is a feature an open iterator holds, the call
+is prefetched: a window of that iterator's features is answered by one lookup of
+the relation pairs and one fetch of the rows -- by ``file_order`` span where the
+rows are dense, by key otherwise -- and every write invalidates it.
 
 The batched APIs execute one set-based query and return Arrow by default;
 Pandas and Polars conversions are optional. A loop of scalar queries is not a

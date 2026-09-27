@@ -83,10 +83,11 @@ starts = torch.from_numpy(exons.column("start").to_numpy())
 ```
 
 `region_batched()` and `parents_batched()` offer the same zero-copy contract for
-spatial and parent workloads. One trade to know: iterating
-`for i in ids: db.children(i)` is **slower** here than legacy's row-by-row
-SQLite path, because DuckDB pays vectorization startup on every call — which is
-why the batched API exists.
+spatial and parent workloads. One trade to know: a loop over a gffbase iterator
+(`for g in db.features_of_type("gene"): db.children(g)`) is prefetched and runs
+close to `gffutils`, but a loop over a list of ids of your own,
+`for i in ids: db.children(i)`, is **slower** — each call is a DuckDB statement
+of its own — which is why the batched API exists.
 
 End-to-end PyTorch and Hugging Face pipelines are in the
 [ML workflows cookbook](https://khchao.com/gffbase/content/cookbook_ml_workflows.html),
@@ -131,14 +132,21 @@ constraints and the measured run-to-run spread are on the
 
 ## What's inside
 
-- **Rust + PyO3 parser** — SIMD line and tab splitting, percent-decoding in and
-  encoding back out, GTF semicolon-in-quotes safe, gzip transparent, failures
-  raised as line-numbered `GFFFormatError`.
+- **Rust + PyO3 parser** — streaming, SIMD line and tab splitting,
+  percent-decoding in and encoding back out, GTF semicolon-in-quotes safe, gzip
+  and one-file tar archives transparent, failures raised as line-numbered
+  `GFFFormatError`.
+- **Rust ingest producer** — ids, duplicates and batching without a Python
+  object per record, straight into DuckDB as Arrow; memory bounded by a budget.
 - **DuckDB columnar storage** — an 11-table schema plus 3 compatibility views,
-  set-based GTF gene/transcript synthesis, recursive-CTE transitive closure, and
-  a per-seqid-banded R-tree built inline during ingest.
-- **Smart routing** — `region()` picks R-tree or B-tree; `children()` picks the
-  closure cache or a dynamic CTE from the corpus's measured hierarchy depth.
+  set-based GTF gene/transcript synthesis, a materialized transitive closure,
+  and a per-seqid-banded R-tree built inline during ingest.
+- **Smart routing** — `region()` picks the R-tree or a zone-map-pruned scan;
+  `children()` and `parents()` look ids up in one table, and inside a loop over
+  a gffbase iterator are prefetched.
+- **Noisy input** — byte-order marks, CR line endings, CDS-only and AUGUSTUS
+  GTF, Liftoff ids, truncated gzip: read as meant, and reported
+  ([noisy files](https://khchao.com/gffbase/content/noisy_files.html)).
 - **Vectorized batched API** — `children_batched`, `parents_batched` and
   `region_batched` return `pyarrow.Table`, `pandas.DataFrame` or
   `polars.DataFrame` straight out of DuckDB's buffer pool.
@@ -157,7 +165,9 @@ Full site: **[khchao.com/gffbase](https://khchao.com/gffbase/)**
 | Page | What's there |
 | --- | --- |
 | [Quickstart](https://khchao.com/gffbase/content/quickstart.html) | A ten-minute walkthrough on a demo annotation |
-| [Migration guide](https://khchao.com/gffbase/content/migration.html) | Drop-in checklist, and the OLAP/OLTP gotcha |
+| [Migration guide](https://khchao.com/gffbase/content/migration.html) | Drop-in checklist, and the one loop pattern to batch |
+| [Noisy files](https://khchao.com/gffbase/content/noisy_files.html) | What gffbase does with each non-standard input |
+| [Tuning](https://khchao.com/gffbase/content/tuning.html) | Threads, the memory budget, ingest stages, when to batch |
 | [Usage gallery](https://khchao.com/gffbase/content/usage_gallery.html) | Every public method, copy-pasteable |
 | [Cookbooks](https://khchao.com/gffbase/content/cookbooks.html) | GENCODE/Ensembl, RefSeq, MANE, ML workflows |
 | [Performance](https://khchao.com/gffbase/content/performance.html) | The numbers, and what they do not claim |

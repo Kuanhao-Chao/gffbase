@@ -7,25 +7,35 @@ GFFBase is a drop-in successor to legacy
 `gffutils <https://github.com/daler/gffutils>`__. For most users, the
 migration is one import change.
 
-.. danger:: READ THIS FIRST — the OLAP/OLTP gotcha
+.. danger:: READ THIS FIRST — loops over your own list of ids
 
-   **There is exactly one common code pattern that gets slower, not
-   faster, when you migrate to gffbase.** It's the per-id Python loop:
+   **Loops over a gffbase iterator are fast; loops over a list of ids you
+   built yourself are not.** Since 0.3.0 a ``children()``, ``parents()`` or
+   ``db[id]`` call on a feature an open iterator holds is prefetched with its
+   neighbours, so the canonical loop runs close to gffutils' speed:
 
    .. code-block:: python
 
-      # ❌ ANTI-PATTERN with gffbase: 50 000 small queries.
-      # Pays DuckDB's vectorization startup × 50 000 + per-row Feature
-      # construction × 1.6 M. Can take many minutes on a full GENCODE v49 run.
+      # ✅ Prefetched: the transcripts come from a gffbase iterator.
+      for gene in db.features_of_type("gene"):
+          for transcript in db.children(gene, level=1):
+              exons = list(db.children(transcript, featuretype="exon"))
+
+   A call on an id from your own list has no stream to prefetch from, so it
+   is one DuckDB query -- about 1.5 ms, where SQLite answers in 0.05 ms:
+
+   .. code-block:: python
+
+      # ❌ 50 000 separate queries: minutes on a whole genome.
       for transcript_id in fifty_thousand_transcript_ids:
           for exon in db.children(transcript_id, featuretype="exon"):
               starts.append(exon.start)
               ends.append(exon.end)
 
-   DuckDB is an **OLAP** engine — designed for big set-based queries.
-   Iterating it row-by-row pays vectorization startup *per call* and
-   never amortizes. SQLite (legacy gffutils) is **OLTP** — its B-tree
-   seek on a cache-warm file is microseconds per call.
+   DuckDB is an **OLAP** engine, built for set-based queries; a single
+   statement costs a fixed ~0.2 ms before it reads a row. SQLite (legacy
+   gffutils) is **OLTP** -- its B-tree seek on a cache-warm file is
+   microseconds.
 
    **The fix — one canonical PyArrow snippet**
 
@@ -50,10 +60,10 @@ migration is one import change.
       import pyarrow.compute as pc
       per_tx_exon_count = pc.value_counts(exons.column("anchor"))
 
-   If your code has a ``for x in ids: db.children(x, …)`` loop and you
-   care about wall time, **convert it now**, before you migrate. It is
-   the only change required for *performance*; §6 lists the behaviour
-   changes that may require one for *correctness*.
+   If your code has a ``for x in ids: db.children(x, …)`` loop over ids that
+   did not come from a gffbase iterator, and you care about wall time,
+   **convert it now**. It is the only change required for *performance*; §6
+   lists the behaviour changes that may require one for *correctness*.
 
 ----
 
@@ -266,39 +276,53 @@ constraints: `Methodology <https://khchao.com/gffbase/content/methodology.html>`
 
 .. list-table::
    :header-rows: 1
-   :widths: 50 25 25
+   :widths: 46 18 18 18
 
-   * - Single-call workload (MANE v1.5, median per call)
+   * - Workload (MANE v1.5, per call)
+     - gffbase 0.3.0
      - gffbase 0.2.1
      - ``gffutils`` 0.14
    * - ``db.region(seqid, start, end)``, 10 kb window
+     - ~1.7 ms
      - ~2 ms
      - ~3.5 ms
-   * - ``db[id]``
-     - ~0.6 ms
-     - ~0.02 ms
-   * - ``db.children(id, level=1)``
+   * - ``for g in db.features_of_type("gene"): db.children(g, level=1)``
+     - ~0.1 ms
+     - ~5 ms
+     - ~0.07 ms
+   * - ``... for t in db.children(g, level=1): db.children(t, featuretype="exon")``
+     - ~0.35 ms
+     - ~10 ms
+     - ~0.29 ms
+   * - ``for e in db.features_of_type("exon"): db.parents(e, featuretype="gene")``
+     - ~0.08 ms
+     - ~5 ms
+     - ~0.05 ms
+   * - ``db.children(id, level=1)`` on an id from your own list
+     - ~1.5 ms
      - ~5 ms
      - ~0.04 ms
-   * - ``db.children(id)`` (all descendants)
-     - ~10 ms
-     - ~0.55 ms
+   * - ``db[id]`` on an id from your own list
+     - ~0.5 ms
+     - ~0.6 ms
+     - ~0.02 ms
    * - ``db.children_batched(ids, format="arrow")``
      - one query for all ids, no Python ``Feature`` objects
+     - same
      - not available
 
-Every single-row call is a DuckDB query, and DuckDB answers it by scanning a
-column with the filter pushed down rather than walking a B-tree, so a
-per-feature Python loop over ``children()`` or ``db[id]`` is one to two orders
-of magnitude slower than it is on SQLite. Spatial queries are the exception.
-Bring the loop into one query -- ``children_batched``, ``region_batched``, or
-SQL through ``db.execute`` -- and the comparison reverses. Faster single-row
-calls are the query-path work planned for 0.3.0.
+Loops over a gffbase iterator are prefetched (rows 2-4) and run close to
+gffutils; a call on an id from your own list is a DuckDB query of its own,
+about ten to thirty times slower than SQLite's point lookup -- bring those
+loops into one query with ``children_batched``, ``region_batched`` or SQL
+through ``db.execute``, and the comparison reverses. Measured with
+``benchmarks/08_loops.py`` (loops, answers checked against gffutils) and
+``benchmarks/07_profile.py`` (single calls); see :doc:`tuning`.
 
 Your existing ``gffutils`` script gets the spatial and whole-table query wins
-the moment you swap the import, and its per-feature loops get slower. To turn
-those loops into the batched-extraction win, see the warning at the top of this
-page.
+the moment you swap the import; its loops over gffbase iterators keep close to
+their speed, and its loops over id lists of its own get slower. To turn those
+into the batched-extraction win, see the warning at the top of this page.
 
 ----
 

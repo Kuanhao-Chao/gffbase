@@ -28,9 +28,11 @@ before a production run.
 What is the one thing that will surprise me?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A **row-by-row loop over many IDs** is slower in gffbase than in gffutils.
-DuckDB pays vectorization startup per call; SQLite, an OLTP engine, does not.
-That is a real trade, not a defect, and it is why the batched API exists.
+A **loop over a list of ids you built yourself** is slower in gffbase than in
+gffutils: each call is a DuckDB query with a fixed cost of a few tenths of a
+millisecond, where SQLite, an OLTP engine, answers in microseconds. Loops over a
+gffbase iterator are prefetched and run close to gffutils. That is a real
+trade, not a defect, and it is why the batched API exists.
 → :doc:`Migration guide <migration>`
 
 .. _faq--why-does-my-ingest-fail-with-duplicateiderror:

@@ -210,6 +210,7 @@ See :doc:`content/installation` for the supported platforms, and
    content/cli
    content/connections
    content/migration
+   content/noisy_files
    content/cookbooks
 
 .. toctree::
@@ -217,6 +218,7 @@ See :doc:`content/installation` for the supported platforms, and
    :caption: Background
 
    content/performance
+   content/tuning
    content/methodology
    content/datasets
    content/architecture

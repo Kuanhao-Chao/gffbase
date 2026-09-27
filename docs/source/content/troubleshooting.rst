@@ -90,26 +90,19 @@ Ingest used a lot of memory
 
 Two different costs get confused here, so take them apart.
 
-**Ingest with a sampled validation pass** peaks at 6.4–10.2 GB on the three
-whole-genome annotations — RefSeq 6.4–6.9, GENCODE GTF 8.5–9.2, GENCODE GFF3
-9.5–10.2, measured at ``validation_sample=10000`` — against 111–194 MB for
-``gffutils``, which only ingests. Nothing here measures ingest with no
-validation at all, so read these as the cost of the whole default-shaped
-operation.
+**Ingest into a file is bounded by default** since 0.3.0: the parser streams
+its input, DuckDB runs under a 512 MB budget raised only for the step that
+needs more, and at most 8 threads are used. Peak RSS is 0.85 GiB for MANE
+and about 2.5 GiB for GENCODE (:doc:`tuning` has the table). If yours is
+much higher, one of these is usually why:
 
-Most of the ingest peak is the parser and per-record work, not DuckDB, so a
-DuckDB cap only trims it. Two settings, measured on MANE v1.5 on a 128-core
-node (3.2 GB peak with the defaults):
+- The database is in memory (``":memory:"``). Its tables cannot be evicted,
+  so it holds everything, and the budget does not apply.
+- ``pragmas={"memory_limit": ...}`` or ``GFFBASE_THREADS`` is set. Your
+  limit replaces the budget, and each thread past eight adds buffers.
 
-- ``create_db(..., pragmas={"memory_limit": "512MB"})`` caps DuckDB's buffer
-  pool and spills beyond it: 2.6 GB. (Before 0.2.1 ``pragmas`` reached only the
-  returned handle, not the ingest.)
-
-- Fewer threads: DuckDB sizes its pool from every core it can see, so on a
-  many-core node ``GFFBASE_THREADS=10`` (or ``pragmas={"threads": 10}``)
-  matters more: 1.9 GB, after which the cap makes no further difference.
-
-Bounding the whole ingest is planned for 0.3.0.
+For comparison, ``gffutils`` -- which only ingests, writing through to SQLite
+on disk -- peaks at 111–194 MB on the published corpora.
 
 **Exhaustive validation** is what makes the published figures large: the numbers
 in the performance tables span 3.4–62.0 GB because those runs call
@@ -119,7 +112,7 @@ the CLI never overrides it. If you asked for exhaustive validation on a
 six-million-feature annotation, budget tens of gigabytes; otherwise you will not
 see these numbers.
 
-To cap DuckDB's threads for a whole script:
+To set DuckDB's threads for a whole script (the default is at most 8):
 
 .. code-block:: bash
 

@@ -3,28 +3,30 @@
 Roadmap
 =======
 
-0.2.1 is released. The items below are follow-up work for later releases, not
+0.3.0 rebuilt ingest around a streaming Rust producer, rewrote relation queries
+around what DuckDB can index, and prefetches loops over a live stream (see the
+:doc:`changelog`). The items below are follow-up work for later releases, not
 promises about any particular one.
 
 .. _roadmap--priority-1-memory-and-trust:
 
-Priority 1: memory and trust
-----------------------------
+Priority 1: speed, memory and trust
+-----------------------------------
 
-- **Chunked native parsing and Arrow streaming.** Replace whole-input native
-  materialization with bounded decompression and record batches. Acceptance:
-  output remains parser-equivalent and peak RSS grows with batch size rather
-  than corpus size.
-
-- **Parallel ingest.** Ingest is essentially serial today: measured across five
-  corpora, raising DuckDB threads from 1 to 10 buys between 1.05x and 1.25x, so
-  the ``threads`` setting cannot make ingest much faster whatever it is set to.
-  The cost is attribute-bound: 157,000 to 168,000 attributes per second on the
-  three corpora dense enough for attributes to dominate, falling to 62,400 on
-  CHESS at 2.6 attributes per feature, where the per-feature floor is what is
-  left to pay. Acceptance: the
-  thread sweep in the benchmark harness shows the ingest scaling with cores, and
+- **Parallel parsing.** Parsing and per-record work is about a third of ingest
+  time now (GENCODE v49 GFF3: 58 of 203 s) and runs on one core; appending to
+  DuckDB is most of the rest. Acceptance: the parse stage scales with cores and
   the correctness signature is unchanged.
+
+- **Scattered point lookups.** A ``children()`` or ``db[id]`` call on an id
+  that no open iterator holds is one DuckDB statement -- 0.5-1.5 ms, against
+  SQLite's few hundredths. Loops over iterators are prefetched and close to
+  gffutils; these calls are not. Acceptance: a measured per-call improvement
+  in ``benchmarks/08_loops.py`` with every answer digest unchanged.
+
+- **Peak memory under 2 GB on every whole-genome corpus.** GENCODE peaks at
+  about 2.5 GiB, in the index stage. Acceptance: peak RSS in the benchmark
+  harness, with no out-of-memory retry path left untested.
 
 - **Persistent source provenance.** Store source checksum, size, parser mode,
   and build identity in database metadata. Acceptance: a database can explain
