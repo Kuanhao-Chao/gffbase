@@ -218,7 +218,25 @@ coordinates loads where the oracle's `if feature:` crashes in `__len__`; with
 linked to its gene (the oracle records a level-2 relation from `gene_id`;
 gffbase stores direct relations only); an id_spec callable that names an
 inferred transcript after its own exon keeps the transcript under a generated
-id instead of merging it away."""
+id instead of merging it away.
+
+Noisy GTF (tests/test_noisy_input.py): a CDS-only file -- no exon rows at all,
+as gene predictors write -- gets transcripts and genes inferred from its CDS
+rows (the oracle infers from exons only, so none); a row with `gene_id` but no
+`transcript_id` hangs directly from its gene (the oracle: level 2); an
+AUGUSTUS gene/transcript row whose column 9 is one bare token is read as that
+row's `gene_id`/`transcript_id` (the oracle: a key with no value); an
+authored transcript with no `gene_id` takes the gene its children name.
+
+Noisy lines (tests/test_noisy_input.py): a UTF-8 byte-order mark is not part
+of the first seqid (the oracle: `\ufeffchr1`); a whitespace-only line is blank
+(the oracle: a feature with seqid `   ` and id `._1`); `.` in column 9 means no
+attributes (the oracle: a key named `.`, written back as `. ""`); in compat
+mode, spaces around a spaced `=` are not part of the key or value (the oracle:
+key `ID `, value ` g1`, so the id is lost). Identifiers: when `create_unique`
+or `merge` renames a duplicate, and when an id is generated, gffbase skips
+names the file already uses literally (Liftoff writes `X_1` for extra copies);
+the oracle raises IntegrityError / "Duplicate ID" instead."""
 
 [[deviation]]
 kind = "symbol"
