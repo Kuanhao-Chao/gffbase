@@ -231,7 +231,10 @@ authored transcript with no `gene_id` takes the gene its children name.
 Noisy lines (tests/test_noisy_input.py): a UTF-8 byte-order mark is not part
 of the first seqid (the oracle: `\ufeffchr1`); a whitespace-only line is blank
 (the oracle: a feature with seqid `   ` and id `._1`); a line holding a NUL
-byte is binary data, reported and skipped (the oracle keeps it as a feature); `.` in column 9 means no
+byte is binary data, reported and skipped (the oracle keeps it as a feature);
+a one-file tar archive -- FlyBase ships `dmel-all-r6.69.gff.gz` as a gzipped
+tar -- is read as the file it holds, and an archive of several files is
+refused (the oracle reads the 512-byte tar header as part of line 1); `.` in column 9 means no
 attributes (the oracle: a key named `.`, written back as `. ""`);
 `Parent=a,` keeps the value list `['a', '']` but makes no edge to an empty
 parent (the oracle records the relation `('', child)`); in compat
