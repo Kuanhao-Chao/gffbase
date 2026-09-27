@@ -147,8 +147,9 @@ class IngestStats:
     #: `mode="strict"`, the only mode that fuses.
     n_multipart: int = 0
     #: Wall seconds per ingest stage, in the order they ran: `setup`,
-    #: `parse` (reading plus per-row Python: transform, ids, batching),
-    #: `append` (Arrow batches into DuckDB), then the set-based passes. Set
+    #: `parse` (reading plus the per-row work -- ids, duplicates, batching --
+    #: done in Rust, or in Python when a `transform` or a callable id spec is
+    #: given), `append` (Arrow batches into DuckDB), then the set-based passes. Set
     #: `GFFBASE_INGEST_TRACE=1` to have each printed to stderr as it ends,
     #: with the process's peak RSS so far.
     stages: dict = None  # type: ignore[assignment]

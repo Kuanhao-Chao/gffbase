@@ -75,6 +75,20 @@ What you can do with GFFBase
       Build, inspect, validate and migrate a database without writing
       Python.
 
+   .. grid-item-card:: 🧹 Read the files real sources publish
+      :link: content/noisy_files
+      :link-type: doc
+
+      Byte-order marks, CDS-only and AUGUSTUS GTF, Liftoff ids, tar archives,
+      truncated gzip: each read as it was meant, and reported.
+
+   .. grid-item-card:: 🎛️ Tune memory and threads
+      :link: content/tuning
+      :link-type: doc
+
+      The defaults and why they were chosen, what ingest costs stage by
+      stage, and when a loop should become one batched query.
+
 ----
 
 Measured performance
@@ -86,8 +100,8 @@ typed in. See :doc:`content/performance` for the full sweep and
 
 **gffbase ingests every corpus faster**, 1.92× to 3.62× against ``gffutils``,
 into a smaller database. Batched extraction, spatial indexing and SQL over the
-whole corpus come on top. ``peak RSS`` is ingest plus
-exhaustive validation, not what the default path costs.
+whole corpus come on top. ``peak RSS`` is ingest plus exhaustive validation,
+not what the default path costs.
 
 .. BEGIN GENERATED: corpus-table
 
