@@ -493,8 +493,15 @@ def _parse_line_into_feature(line: str, line_no: int, profile: str = "ncbi"):
     blob = fields[8]
     extra = fields[9:]
     pairs, obs = parse_attributes(blob, compat_whole_value_quotes=not rejects)
-    start = _coord_or_error(start_s, line_no, "start")
-    end = _coord_or_error(end_s, line_no, "end")
+    try:
+        start = _coord_or_error(start_s, line_no, "start")
+        end = _coord_or_error(end_s, line_no, "end")
+    except Exception as err:
+        # The line is dropped, but what was already found wrong with it --
+        # too few fields, say -- is still worth reporting, and the Rust
+        # engine reports it. Carried on the error for `_stream_features`.
+        err.violations = violations  # type: ignore[attr-defined]
+        raise
     field_errors = _validate(
         line_no=line_no,
         seqid=seqid,
@@ -601,6 +608,8 @@ def _stream_features(
         try:
             feat, violations = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
+            for violation in getattr(e, "violations", ()):
+                _record(violation)
             if _maybe_handle(e):
                 continue
             raise
@@ -654,6 +663,8 @@ def _stream_features(
         try:
             feat, violations = _parse_line_into_feature(line, line_no, profile)
         except _gff_format_error_class() as e:
+            for violation in getattr(e, "violations", ()):
+                _record(violation)
             if _maybe_handle(e):
                 continue
             raise
