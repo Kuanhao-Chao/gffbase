@@ -40,7 +40,7 @@ mod escape;
 mod parser;
 mod validate;
 
-use parser::{FileSource, ParseOptions, RecordIter};
+use parser::{FileSource, OpenError, ParseOptions, RecordIter};
 use validate::{GffError, ValidationProfile};
 
 // Phase 16: descriptive parser errors. Subclassing `PyValueError` keeps
@@ -85,7 +85,21 @@ fn parse_profile(name: &str) -> PyResult<ValidationProfile> {
 /// `IsADirectoryError` -- so the OS error code is passed through rather than
 /// mapped here. These all used to arrive as a bare `OSError`, so the two
 /// engines raised different types for the same mistake.
-fn open_error(path: &str, e: std::io::Error) -> PyErr {
+fn open_error(py: Python<'_>, path: &str, e: OpenError) -> PyErr {
+    let e = match e {
+        OpenError::Io(e) => e,
+        // What the file holds, not the file: a tar archive of several files.
+        OpenError::Format(message) => {
+            return PyValueError::new_err(format!("parser error: {}", message))
+        }
+        // The content, before a single line: a corrupt or truncated gzip.
+        OpenError::Read(message) => {
+            return gff_error_to_py(
+                py,
+                GffError::new(0, validate::ErrorKind::ReadError, message),
+            )
+        }
+    };
     let message = format!("could not open {}: {}", path, e);
     match e.raw_os_error() {
         Some(code) => PyOSError::new_err((code, message)),
@@ -116,7 +130,7 @@ fn parse_file(
         profile: parse_profile(validation)?,
         decode_url_escapes: !ignore_url_escape_characters,
     };
-    let source = FileSource::open(path).map_err(|e| open_error(path, e))?;
+    let source = FileSource::open(path).map_err(|e| open_error(py, path, e))?;
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
     let py_iter = PyRecordIterator { inner: Some(iter) };
@@ -146,7 +160,8 @@ fn parse_bytes(
         profile: parse_profile(validation)?,
         decode_url_escapes: !ignore_url_escape_characters,
     };
-    let source = FileSource::from_bytes(data.to_vec());
+    let source = FileSource::from_bytes(data.to_vec())
+        .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
     let iter = RecordIter::new(source, opts)
         .map_err(|e| PyValueError::new_err(format!("parser error: {}", e)))?;
     let py_iter = PyRecordIterator { inner: Some(iter) };
@@ -158,7 +173,7 @@ fn parse_bytes(
 #[pyfunction]
 #[pyo3(signature = (path, checklines=10))]
 fn detect_dialect(py: Python<'_>, path: &str, checklines: usize) -> PyResult<Py<PyAny>> {
-    let source = FileSource::open(path).map_err(|e| open_error(path, e))?;
+    let source = FileSource::open(path).map_err(|e| open_error(py, path, e))?;
     let opts = ParseOptions {
         checklines,
         force_dialect_check: false,

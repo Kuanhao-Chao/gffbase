@@ -70,7 +70,7 @@ pub struct ParseOptions {
 /// A simple text source: either a Vec<u8> we own or a Read trait object.
 pub enum FileSource {
     Bytes(Vec<u8>),
-    Stream(Box<dyn Read + Send>),
+    Stream(Box<dyn Read + Send + Sync>),
 }
 
 /// The first two bytes of every gzip member (RFC 1952). bgzip output is a
@@ -125,31 +125,42 @@ fn is_tar_header(block: &[u8]) -> bool {
     tar_number(&block[148..156]) == Some(sum)
 }
 
-/// The byte range of the one regular file in a tar archive, or None.
+/// The byte range of the one regular file in a tar archive read from `r`, or
+/// None if `r` is not a tar archive.
 ///
 /// FlyBase publishes `dmel-all-r6.69.gff.gz` as a gzipped *tar* of the GFF:
 /// read as text, the 512-byte header became part of line 1 and the zero
 /// padding a last line. A one-file archive is read as that file; anything
-/// else is refused before a record is parsed. Mirrors `_tar_member` in the
-/// Python fallback, message for message.
-fn tar_member(buf: &[u8]) -> Result<Option<(usize, usize)>, String> {
-    if buf.len() < TAR_BLOCK || !is_tar_header(&buf[..TAR_BLOCK]) {
-        return Ok(None);
-    }
-    let (mut at, mut member, mut pax_size) = (0usize, None, None::<u64>);
-    while at + TAR_BLOCK <= buf.len() && buf[at..at + TAR_BLOCK].iter().any(|&b| b != 0) {
-        let block = &buf[at..at + TAR_BLOCK];
-        if !is_tar_header(block) {
+/// else is refused before a record is parsed. Headers are read and bodies
+/// skipped, so the archive is never held in memory. Mirrors `_tar_member` in
+/// the Python fallback, message for message.
+fn tar_member<R: Read>(mut r: R) -> Result<Option<(u64, u64)>, String> {
+    let io = |e: std::io::Error| e.to_string();
+    let mut block = [0u8; TAR_BLOCK];
+    let (mut at, mut member, mut pax_size) = (0u64, None, None::<u64>);
+    let mut first = true;
+    loop {
+        let n = read_up_to(&mut r, &mut block).map_err(io)?;
+        if n < TAR_BLOCK || block.iter().all(|&b| b == 0) {
+            break;
+        }
+        if !is_tar_header(&block) {
+            if first {
+                return Ok(None);
+            }
             return Err("malformed tar archive: a header block is corrupt".to_string());
         }
+        first = false;
         let mut size = tar_number(&block[124..136])
             .ok_or("malformed tar archive: a header size is not a number")?;
-        let body = at + TAR_BLOCK;
+        let body = at + TAR_BLOCK as u64;
+        let mut consumed = 0u64;
         match block[156] {
             b'x' => {
                 // pax extended header: may carry the real size
-                let end = body.saturating_add(size as usize).min(buf.len());
-                for record in buf[body..end].split(|&b| b == b'\n') {
+                let mut records = Vec::new();
+                consumed = (&mut r).take(size).read_to_end(&mut records).map_err(io)? as u64;
+                for record in records.split(|&b| b == b'\n') {
                     let kv = record.splitn(2, |&b| b == b' ').nth(1).unwrap_or(b"");
                     if let Some(v) = kv.strip_prefix(b"size=") {
                         pax_size = std::str::from_utf8(v).ok().and_then(|v| v.parse().ok());
@@ -165,55 +176,138 @@ fn tar_member(buf: &[u8]) -> Result<Option<(usize, usize)>, String> {
                         "tar archive holds more than one file; extract the one to load".to_string(),
                     );
                 }
-                let end = body.saturating_add(size as usize).min(buf.len());
-                member = Some((body, end));
+                member = Some((body, body.saturating_add(size)));
             }
             _ => {}
         }
-        at = body.saturating_add((size as usize).div_ceil(TAR_BLOCK) * TAR_BLOCK);
+        let padded = size.div_ceil(TAR_BLOCK as u64) * TAR_BLOCK as u64;
+        std::io::copy(
+            &mut (&mut r).take(padded - consumed.min(padded)),
+            &mut std::io::sink(),
+        )
+        .map_err(io)?;
+        at = body.saturating_add(padded);
+    }
+    if first {
+        return Ok(None);
     }
     member
         .map(Some)
         .ok_or_else(|| "tar archive holds no regular file".to_string())
 }
 
-impl FileSource {
-    /// Open `path`, decompressing if it is gzip.
-    ///
-    /// Decided by content, not by name. Keying on a `.gz` extension read
-    /// `.bgz`, `.GZ` and extensionless gzip files as text: the compressed
-    /// bytes then parsed as zero features and ingest built an empty database
-    /// without a word. The magic bytes are chained back in front of the rest
-    /// of the file rather than seeked over, so a pipe works as well as a file.
-    pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let mut f = File::open(path.as_ref())?;
-        let mut magic = [0u8; 2];
-        let n = read_up_to(&mut f, &mut magic)?;
-        let source = Cursor::new(magic[..n].to_vec()).chain(f);
-        if n == GZIP_MAGIC.len() && magic == GZIP_MAGIC {
-            // MultiGzDecoder, not GzDecoder: it reads every member of a
-            // concatenated (bgzip) stream instead of stopping after the first.
-            Ok(FileSource::Stream(Box::new(BufReader::new(
-                MultiGzDecoder::new(BufReader::new(source)),
-            ))))
-        } else {
-            // For plain text we read fully into memory. mmap could be a future
-            // optimization but adds platform complexity; the parser is already
-            // fast enough that the bottleneck moves elsewhere.
-            let mut buf = Vec::new();
-            BufReader::new(source).read_to_end(&mut buf)?;
-            Ok(FileSource::Bytes(buf))
-        }
-    }
+/// Why an input could not be opened: the file itself, or what it holds.
+#[derive(Debug)]
+pub enum OpenError {
+    Io(std::io::Error),
+    Format(String),
+    /// The content could not be decoded (a corrupt or truncated gzip stream).
+    Read(String),
+}
 
-    pub fn from_bytes(b: Vec<u8>) -> Self {
-        FileSource::Bytes(b)
+/// What a failed read of the (decoded) input means, in the words both
+/// engines use.
+fn describe_read_error(e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::UnexpectedEof {
+        "the compressed input ends before its end marker".to_string()
+    } else {
+        format!("the input could not be read: {e}")
     }
 }
 
+/// An error from the file (it has an OS error code) or from its content.
+fn io_or_read(e: std::io::Error) -> OpenError {
+    if e.raw_os_error().is_some() {
+        OpenError::Io(e)
+    } else {
+        OpenError::Read(describe_read_error(&e))
+    }
+}
+
+impl From<std::io::Error> for OpenError {
+    fn from(e: std::io::Error) -> Self {
+        OpenError::Io(e)
+    }
+}
+
+/// `path`'s bytes, gunzipped if the content is gzip.
+///
+/// Decided by content, not by name. Keying on a `.gz` extension read `.bgz`,
+/// `.GZ` and extensionless gzip files as text: the compressed bytes then
+/// parsed as zero features and ingest built an empty database without a
+/// word. The magic bytes are chained back in front of the rest of the file
+/// rather than seeked over, so a pipe works as well as a file.
+fn decoded<P: AsRef<Path>>(path: P) -> std::io::Result<Box<dyn Read + Send + Sync>> {
+    let mut f = File::open(path.as_ref())?;
+    let mut magic = [0u8; 2];
+    let n = read_up_to(&mut f, &mut magic)?;
+    let source = Cursor::new(magic[..n].to_vec()).chain(f);
+    Ok(if n == GZIP_MAGIC.len() && magic == GZIP_MAGIC {
+        // MultiGzDecoder, not GzDecoder: it reads every member of a
+        // concatenated (bgzip) stream instead of stopping after the first.
+        Box::new(MultiGzDecoder::new(BufReader::new(source)))
+    } else {
+        Box::new(BufReader::new(source))
+    })
+}
+
+impl FileSource {
+    /// Open `path` as a stream: gunzipped if it is gzip, and narrowed to the
+    /// one file inside if it is a tar archive. Nothing is read ahead beyond a
+    /// header block, so a whole-genome file is never held in memory; a tar
+    /// archive is read twice, once to check it holds exactly one file.
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, OpenError> {
+        let mut r = decoded(path.as_ref())?;
+        let mut head = vec![0u8; TAR_BLOCK];
+        let n = read_up_to(&mut r, &mut head).map_err(io_or_read)?;
+        head.truncate(n);
+        let is_tar = n == TAR_BLOCK && is_tar_header(&head);
+        let r: Box<dyn Read + Send + Sync> = Box::new(Cursor::new(head).chain(r));
+        if !is_tar {
+            return Ok(FileSource::Stream(r));
+        }
+        let (body, end) = tar_member(r)
+            .map_err(OpenError::Format)?
+            .ok_or_else(|| OpenError::Format("malformed tar archive".to_string()))?;
+        let mut r = decoded(path.as_ref())?;
+        std::io::copy(&mut (&mut r).take(body), &mut std::io::sink())?;
+        Ok(FileSource::Stream(Box::new(r.take(end - body))))
+    }
+
+    /// An in-memory input, narrowed to the one file inside if it is a tar
+    /// archive.
+    pub fn from_bytes(b: Vec<u8>) -> Result<Self, String> {
+        match tar_member(Cursor::new(b.as_slice()))? {
+            None => Ok(FileSource::Bytes(b)),
+            Some((body, end)) => {
+                let end = (end as usize).min(b.len());
+                Ok(FileSource::Bytes(b[(body as usize).min(end)..end].to_vec()))
+            }
+        }
+    }
+}
+
+/// How much input the window reads at a time.
+const CHUNK: usize = 1 << 20;
+
+/// Records from a `FileSource`, parsed a line at a time.
+///
+/// The input is read through a window of about `CHUNK` bytes, refilled as
+/// lines are consumed. It used to be read whole into memory first: 1.9 GB
+/// of RSS for GENCODE before a single record was parsed, 6.7 GB for FlyBase.
 pub struct RecordIter {
-    buf: Vec<u8>, // entire input materialized
+    src: Option<Box<dyn Read + Send + Sync>>,
+    /// The window: `buf[pos..]` is unread input.
+    buf: Vec<u8>,
     pos: usize,
+    eof: bool,
+    /// While set, input from this offset on stays in the window, so the
+    /// dialect peek can rewind to it. Kept current as the window slides.
+    pinned: Option<usize>,
+    /// A read failure, reported again on every later read.
+    read_error: Option<String>,
+    /// Set once a read failure has been returned: nothing follows it.
+    done: bool,
     dialect: Dialect,
     directives: Vec<String>,
     fasta_reached: bool,
@@ -226,32 +320,18 @@ pub struct RecordIter {
 
 impl RecordIter {
     pub fn new(source: FileSource, opts: ParseOptions) -> Result<Self, String> {
-        let buf = match source {
-            FileSource::Bytes(b) => b,
-            FileSource::Stream(mut r) => {
-                let mut v = Vec::new();
-                r.read_to_end(&mut v).map_err(|e| e.to_string())?;
-                v
-            }
-        };
-        // A one-file tar archive is read as the file it holds.
-        let mut buf = buf;
-        let start = match tar_member(&buf)? {
-            Some((body, end)) => {
-                buf.truncate(end);
-                body
-            }
-            None => 0,
-        };
-        // A UTF-8 byte-order mark is not part of the first seqid.
-        let pos = if buf[start..].starts_with(b"\xef\xbb\xbf") {
-            start + 3
-        } else {
-            start
+        let (src, buf, eof) = match source {
+            FileSource::Bytes(b) => (None, b, true),
+            FileSource::Stream(r) => (Some(r), Vec::new(), false),
         };
         let mut iter = RecordIter {
+            src,
             buf,
-            pos,
+            pos: 0,
+            eof,
+            pinned: None,
+            read_error: None,
+            done: false,
             dialect: Dialect::default(),
             directives: Vec::new(),
             fasta_reached: false,
@@ -261,8 +341,61 @@ impl RecordIter {
             decode_url_escapes: opts.decode_url_escapes,
             warnings: Vec::new(),
         };
+        if !iter.eof {
+            iter.fill().map_err(|e| e.message)?;
+        }
+        // A UTF-8 byte-order mark is not part of the first seqid.
+        if iter.buf.starts_with(b"\xef\xbb\xbf") {
+            iter.pos = 3;
+        }
         iter.peek_dialect(&opts);
         Ok(iter)
+    }
+
+    /// Read more input into the window, first dropping what has been
+    /// consumed (all of it, or up to the pin while the dialect peek runs).
+    fn fill(&mut self) -> Result<(), GffError> {
+        let keep_from = self.pinned.map_or(self.pos, |p| p.min(self.pos));
+        if keep_from > 0 {
+            self.buf.drain(..keep_from);
+            self.pos -= keep_from;
+            if let Some(p) = self.pinned.as_mut() {
+                *p -= keep_from;
+            }
+        }
+        let Some(src) = self.src.as_mut() else {
+            self.eof = true;
+            return Ok(());
+        };
+        let old = self.buf.len();
+        self.buf.resize(old + CHUNK, 0);
+        let mut n = 0;
+        while n < CHUNK {
+            match src.read(&mut self.buf[old + n..]) {
+                Ok(0) => break,
+                Ok(k) => n += k,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => {
+                    // Keep what was read before the failure: its complete
+                    // lines are still returned, and the error after them.
+                    self.read_error = Some(describe_read_error(&e));
+                    break;
+                }
+            }
+        }
+        self.buf.truncate(old + n);
+        if n < CHUNK {
+            self.eof = true;
+            self.src = None;
+        }
+        Ok(())
+    }
+
+    /// The pending read failure, as the error that ends iteration.
+    fn read_failure(&self) -> Option<GffError> {
+        self.read_error
+            .as_ref()
+            .map(|m| GffError::new(self.line_no, ErrorKind::ReadError, m.clone()))
     }
 
     /// Errors collected when running with `strict=false`. Empty in
@@ -282,7 +415,7 @@ impl RecordIter {
     /// Peek up to `checklines` features (without consuming them) to compute
     /// the dialect. We snapshot `pos`, walk forward, then reset.
     fn peek_dialect(&mut self, opts: &ParseOptions) {
-        let saved_pos = self.pos;
+        self.pinned = Some(self.pos);
         let saved_line = self.line_no;
         let saved_directives = self.directives.clone();
         let saved_fasta = self.fasta_reached;
@@ -313,7 +446,9 @@ impl RecordIter {
                 // GTF left no samples, the dialect defaulted to GFF3, and the
                 // whole gene/transcript hierarchy was silently never built.
                 // The record is not lost: iteration re-reads it after the
-                // reset below and raises or records it there.
+                // reset below and raises or records it there. A read failure
+                // ends sampling: the input stops there.
+                Some(Err(e)) if e.kind == ErrorKind::ReadError => break,
                 Some(Err(_)) => continue,
                 None => break,
             }
@@ -321,7 +456,7 @@ impl RecordIter {
         self.dialect = dialect::choose(&samples);
 
         // Reset.
-        self.pos = saved_pos;
+        self.pos = self.pinned.take().unwrap_or(0);
         self.line_no = saved_line;
         self.directives = saved_directives;
         self.fasta_reached = saved_fasta;
@@ -359,12 +494,13 @@ impl RecordIter {
         >,
     > {
         loop {
-            if self.fasta_reached || self.pos >= self.buf.len() {
+            if self.fasta_reached {
                 return None;
             }
-            // We materialize the line into an owned Vec to drop the borrow on
-            // self.buf before we touch other &self fields below.
-            let line_owned: Vec<u8> = self.read_line()?.to_vec();
+            let line_owned: Vec<u8> = match self.read_line()? {
+                Ok(line) => line,
+                Err(e) => return Some(Err(e)),
+            };
             let cur_line_no = self.line_no;
             if line_owned.is_empty() {
                 continue;
@@ -533,29 +669,46 @@ impl RecordIter {
         }
     }
 
-    /// Return a slice covering the next line (without the terminating LF).
-    /// Increments `line_no` internally so the caller can keep borrowing the
-    /// returned slice without conflicting with `&mut self`.
-    /// The next physical line. `\n`, `\r\n` and a lone `\r` (classic Mac)
-    /// all end a line, as they do for gffutils and the Python engine.
-    /// Splitting on `\n` alone read a CR-only file as ONE line, so its first
-    /// feature swallowed every other (an ID of `g1\rchr1...`).
-    fn read_line(&mut self) -> Option<&[u8]> {
-        if self.pos >= self.buf.len() {
-            return None;
-        }
-        let start = self.pos;
-        let (end, advance) = match memchr2(b'\n', b'\r', &self.buf[start..]) {
-            Some(i) => {
-                let at = start + i;
+    /// The next physical line, without its terminator; None at the end.
+    /// `\n`, `\r\n` and a lone `\r` (classic Mac) all end a line, as they do
+    /// for gffutils and the Python engine. Splitting on `\n` alone read a
+    /// CR-only file as ONE line, so its first feature swallowed every other
+    /// (an ID of `g1\rchr1...`).
+    fn read_line(&mut self) -> Option<Result<Vec<u8>, GffError>> {
+        loop {
+            if let Some(i) = memchr2(b'\n', b'\r', &self.buf[self.pos..]) {
+                let at = self.pos + i;
+                // A CR at the edge of the window may be half of a CRLF.
+                if self.buf[at] == b'\r' && at + 1 == self.buf.len() && !self.eof {
+                    if let Err(e) = self.fill() {
+                        return Some(Err(e));
+                    }
+                    continue;
+                }
                 let crlf = self.buf[at] == b'\r' && self.buf.get(at + 1) == Some(&b'\n');
-                (at, i + if crlf { 2 } else { 1 })
+                let line = self.buf[self.pos..at].to_vec();
+                self.pos = at + if crlf { 2 } else { 1 };
+                self.line_no += 1;
+                return Some(Ok(line));
             }
-            None => (self.buf.len(), self.buf.len() - start),
-        };
-        self.pos += advance;
-        self.line_no += 1;
-        Some(&self.buf[start..end])
+            if self.eof {
+                // After a read failure the unterminated tail is a fragment,
+                // not a line: the failure is reported instead.
+                if let Some(e) = self.read_failure() {
+                    return Some(Err(e));
+                }
+                if self.pos >= self.buf.len() {
+                    return None;
+                }
+                let line = self.buf[self.pos..].to_vec();
+                self.pos = self.buf.len();
+                self.line_no += 1;
+                return Some(Ok(line));
+            }
+            if let Err(e) = self.fill() {
+                return Some(Err(e));
+            }
+        }
     }
 }
 
@@ -563,9 +716,17 @@ impl Iterator for RecordIter {
     type Item = Result<Record, GffError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
         loop {
             let raw = match self.next_raw_record() {
                 Some(Ok(r)) => r,
+                // The input stops here whatever the strictness: raise it.
+                Some(Err(e)) if e.kind == ErrorKind::ReadError => {
+                    self.done = true;
+                    return Some(Err(e));
+                }
                 Some(Err(e)) => {
                     if self.strict && self.profile.rejects() {
                         return Some(Err(e));
@@ -766,6 +927,109 @@ mod tests {
         let mut data = gz(&TEXT[..16]);
         data.extend(gz(&TEXT[16..]));
         assert_eq!(read_all("multi.bgz", &data), TEXT);
+    }
+
+    fn opts(checklines: usize, force_dialect_check: bool) -> ParseOptions {
+        ParseOptions {
+            checklines,
+            force_dialect_check,
+            force_gff: false,
+            strict: false,
+            profile: ValidationProfile::Gffutils,
+            decode_url_escapes: true,
+        }
+    }
+
+    fn gene(i: usize) -> String {
+        format!("chr1\tt\tgene\t{}\t{}\t.\t+\t.\tID=g{i}", i + 1, i + 2)
+    }
+
+    fn ids(iter: RecordIter) -> Vec<String> {
+        iter.map(|r| r.unwrap().attributes_pairs[0].1.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_crlf_split_by_the_window_edge_is_one_line_end() {
+        // Line 1 ends with `\r` exactly at the end of the first window, so its
+        // `\n` arrives with the next read.
+        let first = gene(0);
+        let pad = "x".repeat(CHUNK - first.len() - "\r".len() - ";Note=".len());
+        let mut text = format!("{first};Note={pad}\r\n");
+        assert_eq!(text.len(), CHUNK + 1);
+        text.push_str(&format!("{}\r\n", gene(1)));
+        let f = TempFile::new("crlf_edge.gff3", text.as_bytes());
+        let iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, false)).unwrap();
+        assert_eq!(ids(iter), ["g0", "g1"]);
+    }
+
+    #[test]
+    fn a_line_longer_than_the_window_is_read_whole() {
+        let long = format!("{};Note={}\n{}\n", gene(0), "y".repeat(3 * CHUNK), gene(1));
+        let f = TempFile::new("long_line.gff3", long.as_bytes());
+        let iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, false)).unwrap();
+        let records: Vec<Record> = iter.map(|r| r.unwrap()).collect();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].attributes_pairs[1].1.len(), 3 * CHUNK);
+    }
+
+    #[test]
+    fn many_windows_keep_every_line_and_its_number() {
+        let n = 3 * CHUNK / 40;
+        let text: String = (0..n).map(|i| gene(i) + "\n").collect();
+        let f = TempFile::new("many.gff3.gz", &gz(text.as_bytes()));
+        // A dialect peek over every line pins the whole input; it must still
+        // rewind to the first record.
+        for force in [false, true] {
+            let iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, force)).unwrap();
+            let got = ids(iter);
+            assert_eq!(got.len(), n, "force_dialect_check={force}");
+            assert_eq!(got[0], "g0");
+            assert_eq!(got[n - 1], format!("g{}", n - 1));
+        }
+    }
+
+    #[test]
+    fn a_truncated_gzip_ends_with_a_read_error() {
+        let text: String = (0..200_000).map(|i| gene(i) + "\n").collect();
+        let z = gz(text.as_bytes());
+        let f = TempFile::new("trunc.gff3.gz", &z[..z.len() / 2]);
+        let mut iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, false)).unwrap();
+        let mut n = 0;
+        let err = loop {
+            match iter.next() {
+                Some(Ok(_)) => n += 1,
+                Some(Err(e)) => break e,
+                None => panic!("a truncated stream ended without an error"),
+            }
+        };
+        assert!(n > 0, "records before the cut are kept");
+        assert_eq!(err.kind, ErrorKind::ReadError);
+        assert!(iter.next().is_none(), "nothing follows a read error");
+    }
+
+    #[test]
+    fn a_tar_archive_on_disk_streams_its_one_file() {
+        let body = format!("{}\n{}\n", gene(0), gene(1));
+        let mut header = [0u8; TAR_BLOCK];
+        header[..6].copy_from_slice(b"a.gff3");
+        header[100..108].copy_from_slice(b"0000644\0");
+        header[124..136].copy_from_slice(format!("{:011o}\0", body.len()).as_bytes());
+        header[156] = b'0';
+        header[257..263].copy_from_slice(b"ustar\0");
+        header[263..265].copy_from_slice(b"00");
+        header[148..156].copy_from_slice(b"        ");
+        let sum: u32 = header.iter().map(|&b| u32::from(b)).sum();
+        header[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        let mut archive = header.to_vec();
+        archive.extend(body.as_bytes());
+        archive.resize(
+            archive.len().div_ceil(TAR_BLOCK) * TAR_BLOCK + 2 * TAR_BLOCK,
+            0,
+        );
+        let f = TempFile::new("a.tar.gz", &gz(&archive));
+        let iter = RecordIter::new(FileSource::open(&f.0).unwrap(), opts(10, false)).unwrap();
+        assert_eq!(ids(iter), ["g0", "g1"]);
     }
 
     #[test]
