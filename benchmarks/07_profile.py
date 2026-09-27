@@ -50,14 +50,15 @@ from benchmarks.corpora import BY_KEY, corpus_path  # noqa: E402
 _OPTIONS = {"merge_strategy": "create_unique"}
 
 
-def _ingest_point(src: Path, dbfn: Path, threads: int, batch: int, timeout: int) -> dict:
+def _ingest_point(src: Path, dbfn: Path, threads: int, batch: int | None, timeout: int) -> dict:
+    batch_kw = "" if batch is None else f", batch_size={batch}"
     script = f"""
 import json, os, time
 from gffbase._options import IngestOptions
 from gffbase.ingest import from_file
 t0 = time.perf_counter()
 con, st = from_file({str(src)!r}, {str(dbfn)!r},
-                    options=IngestOptions(force=True, **{_OPTIONS!r}), batch_size={batch})
+                    options=IngestOptions(force=True, **{_OPTIONS!r}){batch_kw})
 wall = time.perf_counter() - t0
 n = con.execute("SELECT count(*) FROM features").fetchone()[0]
 con.close()
@@ -65,7 +66,7 @@ print(json.dumps({{"wall_seconds": wall, "stages": st.stages, "n_features": n}})
 """
     info = run_subprocess(
         script,
-        label=f"threads={threads} batch={batch}",
+        label=f"threads={threads} batch={batch or 'default'}",
         timeout=timeout,
         env_extra={**benchmark_env(threads), "PYTHONPATH": str(ROOT / "python")},
     )
@@ -84,7 +85,7 @@ def cmd_ingest(args) -> dict:
     for threads in args.threads:
         for batch in args.batch:
             for rep in range(args.repeat):
-                dbfn = work / f"{args.corpus}.t{threads}.b{batch}.duckdb"
+                dbfn = work / f"{args.corpus}.t{threads}.b{batch or 'default'}.duckdb"
                 info = _ingest_point(src, dbfn, threads, batch, args.timeout)
                 info["repeat"] = rep
                 points.append(info)
@@ -92,7 +93,7 @@ def cmd_ingest(args) -> dict:
                 top = sorted(stages.items(), key=lambda kv: -kv[1])[:4]
                 wall = info.get("wall_seconds")
                 print(
-                    f"threads={threads:>3} batch={batch:>7} rep={rep}: "
+                    f"threads={threads:>3} batch={batch or 'default':>7} rep={rep}: "
                     f"{'-' if wall is None else f'{wall:.1f} s'}, "
                     f"peak {info['peak_rss_bytes'] / 2**30:.2f} GiB, "
                     f"file {info['db_bytes'] / 2**30:.2f} GiB; "
@@ -209,7 +210,9 @@ def main() -> None:
     ing = sub.add_parser("ingest")
     ing.add_argument("--corpus", default="mane", choices=sorted(BY_KEY))
     ing.add_argument("--threads", type=int, nargs="+", default=[16])
-    ing.add_argument("--batch", type=int, nargs="+", default=[50_000])
+    ing.add_argument(
+        "--batch", type=int, nargs="+", default=[None], help="default: ingest's own batch size"
+    )
     ing.add_argument("--repeat", type=int, default=1)
     ing.add_argument("--timeout", type=int, default=3600)
     ing.add_argument("--workdir", default=str(OUT / "profile"))
