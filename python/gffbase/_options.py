@@ -318,6 +318,51 @@ class IdSpecResolver:
         return f"{base}_{n}"
 
 
+#: The GFF columns a `:name:` id_spec key may name on the native path --
+#: those whose `str()` the Rust producer reproduces exactly.
+_NATIVE_ID_COLUMNS = frozenset(
+    {"seqid", "chrom", "source", "featuretype", "score", "strand", "frame", "start", "end", "stop"}
+)
+
+
+def native_id_spec(spec):
+    """`spec` in the form the Rust ingest producer takes, or None.
+
+    None means the Python loop must resolve ids: the spec is callable, holds
+    a callable, or names a column whose `str()` the producer does not
+    reproduce. Otherwise `("keys", keys)` or `("by_type", {featuretype:
+    keys})`, each key `("attr", name)` or `("col", name)` -- the same
+    reading `IdSpecResolver` gives the spec.
+    """
+
+    def key(k):
+        if not isinstance(k, str):
+            return None
+        if len(k) > 3 and k[0] == ":" and k[-1] == ":":
+            name = k[1:-1]
+            return ("col", name) if name in _NATIVE_ID_COLUMNS else None
+        return ("attr", k)
+
+    def keys(ks):
+        out = [key(k) for k in ([ks] if isinstance(ks, str) else ks)]
+        return None if any(k is None for k in out) else out
+
+    if isinstance(spec, dict):
+        by_type = {}
+        for featuretype, ks in spec.items():
+            if not isinstance(featuretype, str) or not isinstance(ks, str | list | tuple):
+                return None
+            converted = keys(ks)
+            if converted is None:
+                return None
+            by_type[featuretype] = converted
+        return ("by_type", by_type)
+    if isinstance(spec, str | list | tuple):
+        converted = keys(spec)
+        return None if converted is None else ("keys", converted)
+    return None
+
+
 @dataclass
 class IngestOptions:
     """Every ``create_db`` option, validated once at construction.
