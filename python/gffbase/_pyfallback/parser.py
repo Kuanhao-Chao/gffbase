@@ -98,6 +98,10 @@ def _open(path: str):
     return gzip.open(path, "rb") if is_gzip else open(path, "rb")
 
 
+#: The `reason` `_iter_lines` gives a line holding a NUL byte.
+_NUL_REASON = "NUL byte"
+
+
 def _decode_error(err: UnicodeDecodeError, line_no: int):
     """Turn a raw `UnicodeDecodeError` into the parser's own error type.
 
@@ -106,11 +110,11 @@ def _decode_error(err: UnicodeDecodeError, line_no: int):
     two engines distinguishable, and cost the reader the line number -- the
     only part of the message that helps you find the byte.
     """
-    return _make_error(
-        f"line {line_no}: line is not valid UTF-8",
-        line_no,
-        "InvalidAttribute",
-    )
+    if err.reason == _NUL_REASON:
+        detail = "line contains a NUL byte (binary data, not text)"
+    else:
+        detail = "line is not valid UTF-8"
+    return _make_error(f"line {line_no}: {detail}", line_no, "InvalidAttribute")
 
 
 def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
@@ -121,6 +125,9 @@ def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
     is yielded as its `UnicodeDecodeError` rather than raised: the outer parser
     owns the line counter and the strict/warn policy, and the stream stays
     usable after one bad line.
+
+    A line holding a NUL byte is yielded as a `UnicodeDecodeError` too, with
+    reason `_NUL_REASON`: it is binary data, not text.
 
     Line endings are universal -- `\n`, `\r\n` and a lone `\r` (classic Mac)
     all end a line, as they do for gffutils. Splitting on `\n` alone read a
@@ -141,9 +148,19 @@ def _iter_lines(stream) -> Iterator[str | UnicodeDecodeError]:
             if data.startswith(b"\xef\xbb\xbf"):
                 data = data[3:]
         try:
-            yield data.decode("utf-8", errors="strict")
+            line = data.decode("utf-8", errors="strict")
         except UnicodeDecodeError as err:
             yield err
+            continue
+        # A NUL byte never occurs in text: the line is binary data. Once a lone
+        # CR ends a line, a binary file splits into short runs of control
+        # bytes that ARE valid UTF-8, and compat mode would keep each as a
+        # feature. Reported like a decode failure; the Rust engine agrees.
+        if "\x00" in line:
+            at = data.index(b"\x00")
+            yield UnicodeDecodeError("utf-8", data, at, at + 1, _NUL_REASON)
+            continue
+        yield line
 
 
 def _validate(

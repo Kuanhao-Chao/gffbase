@@ -302,6 +302,17 @@ impl RecordIter {
                     "line is not valid UTF-8".to_string(),
                 )));
             }
+            // A NUL byte never occurs in text, so the line is binary data. It
+            // needs saying: once a lone CR ends a line, a binary file splits
+            // into short runs of control bytes that ARE valid UTF-8, and
+            // compat mode would keep each one as a feature.
+            if memchr::memchr(0, line).is_some() {
+                return Some(Err(GffError::new(
+                    self.line_no,
+                    ErrorKind::InvalidAttribute,
+                    "line contains a NUL byte (binary data, not text)".to_string(),
+                )));
+            }
             // Directive / comment handling.
             if line.starts_with(b"##") {
                 let s = std::str::from_utf8(line).unwrap_or("").to_string();
