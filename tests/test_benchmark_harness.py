@@ -1932,9 +1932,7 @@ def test_full_gate_rejects_unknown_or_ambiguous_runtime_identity(
     payload = _publishable_payload()
     payload["environment"]["platform"] = platform_name
     payload["environment"]["machine"] = machine
-    payload["environment"]["artifact"]["wheel"] = (
-        f"gffbase-0.3.0-cp313-cp313-{wheel_platform}.whl"
-    )
+    payload["environment"]["artifact"]["wheel"] = f"gffbase-0.3.0-cp313-cp313-{wheel_platform}.whl"
     payload["environment"]["gffbase_install"]["native_module"] = native_module
 
     assert benchmark_results_evidence_error(payload) is not None
