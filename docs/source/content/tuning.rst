@@ -13,8 +13,9 @@ Threads
 DuckDB's own default is one thread per core. gffbase uses at most **8** --
 for ingest and for a handle it opens on a file -- because more bought no time
 and cost memory: MANE ingest took 15.8-16.1 s at 8, 32 and 128 threads alike,
-while peak RSS rose from 1.0 GiB to 1.2 and 1.6 GiB, and a loop over genes ran
-faster at 8.
+while peak RSS rose from 1.0 GiB to 1.2 and 1.6 GiB, and every single-call
+query shape (``children``, ``parents``, ``db[id]``, ``region``) ran 10-24%
+faster at 8 threads than at 128.
 
 .. code-block:: bash
 
@@ -101,7 +102,7 @@ Loops, and when to batch
 
 A ``children()``, ``parents()`` or ``db[id]`` call on a feature that an open
 iterator holds is **prefetched**: it is answered, with its neighbours', by
-one query, and the loop runs close to gffutils' speed.
+one query, and the loop runs within 1.4-3.5x of gffutils' speed.
 
 .. code-block:: python
 
@@ -111,7 +112,7 @@ one query, and the loop runs close to gffutils' speed.
            exons = list(db.children(transcript, featuretype="exon"))
 
 A call on an id from your own list is a DuckDB query of its own -- about
-1.5 ms for ``children()`` and 0.5 ms for ``db[id]``, against a few hundredths
+1.3 ms for ``children()`` and 0.5 ms for ``db[id]``, against a few hundredths
 of a millisecond for SQLite. For thousands of ids, ask once:
 
 .. code-block:: python
