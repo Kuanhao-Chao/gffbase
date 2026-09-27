@@ -66,11 +66,25 @@ def test_dispatcher_level_none_with_empty_closure_picks_dynamic(hier_db):
 
 
 def test_dispatcher_overflow_forces_dynamic(hier_db):
-    # Force overflow check to return True
-    saved = hier_db._has_overflow
+    # Force overflow check to return True. The probe only runs when the
+    # closure is as deep as its budget -- shallower, nothing can overflow --
+    # so make it so.
+    saved = hier_db._has_overflow, hier_db._closure_max_depth
     hier_db._has_overflow = lambda *_: True
+    hier_db._closure_max_depth = hier_db._max_depth
     try:
         assert hier_db._dispatch_relation(level=None, target_id="g1", direction="children") is True
+    finally:
+        hier_db._has_overflow, hier_db._closure_max_depth = saved
+
+
+def test_a_shallow_closure_skips_the_overflow_probe(hier_db):
+    """Below its depth budget the closure holds every path whole."""
+    assert hier_db._closure_max_depth < hier_db._max_depth
+    saved = hier_db._has_overflow
+    hier_db._has_overflow = lambda *_: pytest.fail("probed a closure that cannot overflow")
+    try:
+        assert hier_db._dispatch_relation(level=None, target_id="g1", direction="children") is False
     finally:
         hier_db._has_overflow = saved
 

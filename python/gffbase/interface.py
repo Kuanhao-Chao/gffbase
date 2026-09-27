@@ -2013,17 +2013,68 @@ class FeatureDB:
                 direction,
             )
         else:
-            sql, params = self._relation_sql_cached(
-                target_id,
-                level,
-                featuretype,
-                order_by,
-                reverse,
-                limit,
-                completely_within,
-                direction,
+            ids = self._relative_ids(target_id, level, direction)
+            if not ids:
+                return
+            sql, params = self._features_by_ids_sql(
+                ids, featuretype, order_by, reverse, limit, completely_within
             )
         yield from self._yield_features(sql, params)
+
+    def _relative_ids(self, target_id: str, level: int | None, direction: str) -> list[str]:
+        """The ids `level` steps from `target_id`, from one single-table lookup.
+
+        DuckDB uses a single-column index only when that column's equality is
+        the scan's whole filter, and it never uses a multi-column one; the
+        closure join this replaced scanned the whole closure on every call
+        (MANE: 4.7 ms at 8 threads, 10 ms at 1). `level=1` reads `edges`, the
+        cheaper table -- its rows are exactly the closure's depth-1 rows -- and
+        any other level filters the closure's depths here rather than in SQL.
+        """
+        if direction == "children":
+            edge_sql = "SELECT child FROM edges WHERE parent = ?"
+            closure_sql = "SELECT descendant, depth FROM closure WHERE ancestor = ?"
+        else:
+            edge_sql = "SELECT parent FROM edges WHERE child = ?"
+            closure_sql = "SELECT ancestor, depth FROM closure WHERE descendant = ?"
+        if level == 1:
+            rows = self.conn.execute(edge_sql, [target_id]).fetchall()
+            return list(dict.fromkeys(r[0] for r in rows))
+        rows = self.conn.execute(closure_sql, [target_id]).fetchall()
+        return [r[0] for r in rows if level is None or r[1] == level]
+
+    #: Past this many ids a lookup binds one list parameter rather than a
+    #: placeholder per id, so a gene with thousands of descendants does not
+    #: become a statement DuckDB must parse at that length.
+    _ID_LIST_INLINE_MAX = 1024
+
+    def _features_by_ids_sql(self, ids, featuretype, order_by, reverse, limit, completely_within):
+        """Features with these ids, filtered and ordered as a relation query
+        asks, in SQL that keeps the primary-key index lookup.
+
+        An extra predicate on the scan would turn the index lookup into a full
+        scan, so the filters apply to a MATERIALIZED set of the matched rows.
+        """
+        if len(ids) <= self._ID_LIST_INLINE_MAX:
+            match, params = f"id IN ({','.join('?' * len(ids))})", list(ids)
+        else:
+            match, params = "id IN (SELECT UNNEST(?::VARCHAR[]))", [list(ids)]
+        where: list[str] = []
+        feat_where, feat_params = self._featuretype_filter(featuretype)
+        where.extend(feat_where)
+        params.extend(feat_params)
+        lim_where, lim_params = self._limit_filter(limit, completely_within)
+        where.extend(lim_where)
+        params.extend(lim_params)
+        select = self._select_feature_aliased("f")
+        order = self._order_clause_qualified(order_by, reverse, "f")
+        if not where:
+            return f"SELECT {select} FROM features f WHERE f.{match} ORDER BY {order}", params
+        return (
+            f"WITH m AS MATERIALIZED (SELECT * FROM features WHERE {match}) "
+            f"SELECT {select} FROM m f WHERE {' AND '.join(where)} ORDER BY {order}",
+            params,
+        )
 
     def _dispatch_relation(
         self, level: int | None, target_id: str | Sequence[str], direction: str
@@ -2058,6 +2109,11 @@ class FeatureDB:
         # level is None.
         if self._closure_max_depth == 0:
             return True  # closure is empty; dynamic walks edges
+        # A closure shallower than its budget holds every path whole, so
+        # nothing can lie past it -- and the probe below is a join, which
+        # costs more than the lookup it guards.
+        if self._closure_max_depth < self._max_depth:
+            return False
         # Cache covers most of the tree; check for overflow past the boundary.
         return self._has_overflow(target_id, direction)
 
@@ -2092,41 +2148,6 @@ class FeatureDB:
                 )
             """
         return bool(scalar_or(self.conn, sql, False, [*ids, self._max_depth]))
-
-    def _relation_sql_cached(
-        self,
-        target_id,
-        level,
-        featuretype,
-        order_by,
-        reverse,
-        limit,
-        completely_within,
-        direction,
-    ):
-        if direction == "children":
-            join_col, anchor_col = "c.descendant", "c.ancestor"
-        else:
-            join_col, anchor_col = "c.ancestor", "c.descendant"
-        where = [f"{anchor_col} = ?"]
-        params = [target_id]
-        if level is not None:
-            where.append("c.depth = ?")
-            params.append(level)
-        feat_where, feat_params = self._featuretype_filter(featuretype)
-        where.extend(feat_where)
-        params.extend(feat_params)
-        lim_where, lim_params = self._limit_filter(limit, completely_within)
-        where.extend(lim_where)
-        params.extend(lim_params)
-
-        sql = (
-            f"SELECT {self._select_feature_aliased('f')} "
-            f"FROM closure c JOIN features f ON f.id = {join_col} "
-            f"WHERE {' AND '.join(where)} "
-            f"ORDER BY {self._order_clause_qualified(order_by, reverse, 'f')}"
-        )
-        return sql, params
 
     def _relation_sql_dynamic(
         self,
