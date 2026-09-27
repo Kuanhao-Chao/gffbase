@@ -34,9 +34,9 @@ Universal `abi3` wheels: one binary per platform covers CPython 3.10 through
 
 > **0.3.0 is the current release** — ingest 2.4–2.9× faster, in under a third
 > of the memory on whole-genome files; loops over a live stream prefetched; and
-> noisy files read as they were meant. Coming from 0.2.0, upgrade: 0.2.1 fixed defects that silently
-> lost data. Coming from 0.1.0, 0.2 and later fix two SQL injection
-> vulnerabilities ([advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg))
+> noisy files read as they were meant. Coming from 0.2.0, upgrade: 0.2.1 fixed
+> defects that silently lost data. Coming from 0.1.0, 0.2 and later fix two SQL
+> injection vulnerabilities ([advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg))
 > and have breaking changes. All are in the
 > [changelog](https://github.com/Kuanhao-Chao/gffbase/blob/main/CHANGELOG.md).
 
@@ -206,4 +206,4 @@ If GFFBase contributes to your research, please cite it:
 
 The repository also ships a [`CITATION.cff`](https://github.com/Kuanhao-Chao/gffbase/blob/main/CITATION.cff), so
 GitHub's "Cite this repository" button produces an up-to-date reference.
-Per-version DOIs are tracked on the [releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
+Per-version DOIs, when available, are tracked on the [releases page](https://github.com/Kuanhao-Chao/gffbase/releases).
