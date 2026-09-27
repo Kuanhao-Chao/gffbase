@@ -1834,6 +1834,7 @@ def _build_database(
     # Before anything looks a feature up by id: the merge/replace pass below
     # does, row by row.
     budget.run(_add_features_primary_key, con)
+    budget.checkpoint()
     clock.mark("primary_key")
     if report:
         _log.info(
@@ -1870,7 +1871,9 @@ def _build_database(
     # final logical ids and never need rewriting, synthesized rows are never
     # duplicate candidates, and a `split` resolution's renames are reflected in
     # the counters that get persisted below.
-    n_multipart = resolve_multipart(con, options, autoinc, has_spatial)
+    n_multipart = budget.stage(
+        lambda: resolve_multipart(con, options, autoinc, has_spatial), autoinc
+    )
     clock.mark("multipart")
 
     # Before GTF synthesis: the post-synthesis patch below reads this table to
@@ -1901,74 +1904,23 @@ def _build_database(
 
     if fmt == "gtf":
         _log.info("inferring GTF transcripts and genes")
-        # The attributes that group children under a parent. gffutils'
-        # `gtf_transcript_key` / `gtf_gene_key`; they were accepted and
-        # ignored, every statement below naming `transcript_id` / `gene_id`
-        # literally. Bound as parameters, never interpolated.
-        tkey, gkey = options.gtf_transcript_key, options.gtf_gene_key
-        gtf_subfeature = _effective_gtf_subfeature(con, gtf_subfeature, options)
-        _create_gtf_parent_map(con)
-        _prepare_gtf_parent_map(
-            con,
-            parent_type="transcript",
-            attribute=tkey,
-            child_types=(gtf_subfeature,),
-            merge_strategy=options.merge_strategy,
-            autoinc=autoinc,
-            synthesize_missing=not disable_infer_transcripts,
-            group_keys=(gkey, tkey),
+        n_synth_t, n_synth_g, found = budget.stage(
+            lambda: _infer_gtf_parents(
+                con,
+                options,
+                autoinc,
+                gtf_subfeature,
+                disable_infer_transcripts,
+                disable_infer_genes,
+                has_spatial,
+            ),
+            autoinc,
         )
-        if not disable_infer_transcripts:
-            n_synth_t = _synthesize_transcripts(
-                con, gtf_subfeature, tkey, gkey, DERIVED_SOURCE[options.mode]
-            )
-        _prepare_gtf_parent_map(
-            con,
-            parent_type="gene",
-            attribute=gkey,
-            child_types=("transcript", gtf_subfeature),
-            merge_strategy=options.merge_strategy,
-            autoinc=autoinc,
-            synthesize_missing=not disable_infer_genes,
-            group_keys=(gkey, tkey),
-        )
-        if not disable_infer_genes:
-            n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode])
-        con.execute(EDGES_FROM_GTF, [tkey, gkey])
-        con.execute(EDGES_GTF_GENE_WITHOUT_TRANSCRIPT, [gkey, tkey])
-        con.execute(EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN, [tkey, gkey, gkey])
-        extra_warnings.extend(_gtf_missing_transcript_warnings(con, gkey, tkey))
-        # After the edges, deliberately -- see `resolve_synthesized_ids`.
-        resolve_synthesized_ids(con, options, autoinc, fmt)
-        con.execute(GTF_RENDER_SYNTHESIZED_BLOBS)
-        # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
-        # them up in a single targeted UPDATE (touches only synthesized
-        # rows; ~4-9 % of features at GENCODE scale).
-        if has_spatial:
-            con.execute(
-                "UPDATE features "
-                "SET seqid_y = m.seqid_y, "
-                # NULL coordinates yield a NULL envelope, matching the bulk
-                # insert above. This site had no guard at all, so a
-                # synthesized parent with an unset coordinate produced a bbox
-                # the validator's INV-8 would then flag.
-                "    bbox = CASE WHEN features.start IS NULL "
-                '              OR features."end" IS NULL THEN NULL '
-                "         ELSE ST_MakeEnvelope("
-                "             features.start, m.seqid_y, "
-                '             features."end", m.seqid_y + 1) END '
-                "FROM seqid_map m "
-                "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
-            )
-        else:
-            con.execute(
-                "UPDATE features SET seqid_y = m.seqid_y "
-                "FROM seqid_map m "
-                "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
-            )
+        extra_warnings.extend(found)
+        budget.checkpoint()
         clock.mark("gtf_inference")
     else:
-        con.execute(EDGES_FROM_PARENT)
+        budget.run(con.execute, EDGES_FROM_PARENT)
         clock.mark("edges")
 
     # Persist after synthesis: create_unique parent splitting and a custom
@@ -1985,6 +1937,7 @@ def _build_database(
     # Closure via recursive CTE.
     _log.info("building the transitive closure (depth <= %d)", max_depth)
     budget.run(build_closure, con, max_depth)
+    budget.checkpoint()
     clock.mark("closure")
 
     # A cyclic `Parent` graph is malformed GFF3. The walk above no longer
@@ -2009,7 +1962,12 @@ def _build_database(
 
     # Indexes — only after all data is materialized.
     _log.info("building indexes")
-    budget.run(con.execute, POST_LOAD_INDEXES)
+    # One at a time, each followed by a checkpoint: a finished index stays in
+    # memory until it is written out, so built together they had to fit
+    # together (GENCODE failed at 1 GB), while each alone fits in 1 GB.
+    for statement in filter(None, (s.strip() for s in POST_LOAD_INDEXES.split(";"))):
+        budget.run(con.execute, statement)
+        budget.checkpoint()
     clock.mark("indexes")
 
     # Optional R-tree. When spatial is loaded, this is a
@@ -2019,6 +1977,7 @@ def _build_database(
     if has_spatial:
         _log.info("building the R-tree")
         rtree_built = budget.run(_finalize_rtree, con)
+        budget.checkpoint()
         clock.mark("rtree")
 
     # SQLite-compat views (must run after closure has been populated).
@@ -2105,6 +2064,90 @@ def _add_features_primary_key(con) -> None:
         raise DuplicateIDError(f"Duplicate ID {row[0] if row else '?'}") from exc
 
 
+def _infer_gtf_parents(
+    con,
+    options,
+    autoinc,
+    gtf_subfeature,
+    disable_infer_transcripts,
+    disable_infer_genes,
+    has_spatial,
+):
+    """Infer GTF transcripts and genes, link them, and name them.
+
+    One step, so the memory budget can roll it back and run it again whole.
+    Returns (transcripts inferred, genes inferred, warnings).
+    """
+    # The attributes that group children under a parent. gffutils'
+    # `gtf_transcript_key` / `gtf_gene_key`; they were accepted and
+    # ignored, every statement below naming `transcript_id` / `gene_id`
+    # literally. Bound as parameters, never interpolated.
+    tkey, gkey = options.gtf_transcript_key, options.gtf_gene_key
+    fmt = "gtf"
+    n_synth_t = n_synth_g = 0
+    gtf_subfeature = _effective_gtf_subfeature(con, gtf_subfeature, options)
+    _create_gtf_parent_map(con)
+    _prepare_gtf_parent_map(
+        con,
+        parent_type="transcript",
+        attribute=tkey,
+        child_types=(gtf_subfeature,),
+        merge_strategy=options.merge_strategy,
+        autoinc=autoinc,
+        synthesize_missing=not disable_infer_transcripts,
+        group_keys=(gkey, tkey),
+    )
+    if not disable_infer_transcripts:
+        n_synth_t = _synthesize_transcripts(
+            con, gtf_subfeature, tkey, gkey, DERIVED_SOURCE[options.mode]
+        )
+    _prepare_gtf_parent_map(
+        con,
+        parent_type="gene",
+        attribute=gkey,
+        child_types=("transcript", gtf_subfeature),
+        merge_strategy=options.merge_strategy,
+        autoinc=autoinc,
+        synthesize_missing=not disable_infer_genes,
+        group_keys=(gkey, tkey),
+    )
+    if not disable_infer_genes:
+        n_synth_g = _synthesize_genes(con, gtf_subfeature, gkey, DERIVED_SOURCE[options.mode])
+    con.execute(EDGES_FROM_GTF, [tkey, gkey])
+    con.execute(EDGES_GTF_GENE_WITHOUT_TRANSCRIPT, [gkey, tkey])
+    con.execute(EDGES_GTF_TRANSCRIPT_GENE_FROM_CHILDREN, [tkey, gkey, gkey])
+    warnings = _gtf_missing_transcript_warnings(con, gkey, tkey)
+    # After the edges, deliberately -- see `resolve_synthesized_ids`.
+    resolve_synthesized_ids(con, options, autoinc, fmt)
+    con.execute(GTF_RENDER_SYNTHESIZED_BLOBS)
+    # GTF synthesis inserts new rows without seqid_y / bbox set. Patch
+    # them up in a single targeted UPDATE (touches only synthesized
+    # rows; ~4-9 % of features at GENCODE scale).
+    if has_spatial:
+        con.execute(
+            "UPDATE features "
+            "SET seqid_y = m.seqid_y, "
+            # NULL coordinates yield a NULL envelope, matching the bulk
+            # insert above. This site had no guard at all, so a
+            # synthesized parent with an unset coordinate produced a bbox
+            # the validator's INV-8 would then flag.
+            "    bbox = CASE WHEN features.start IS NULL "
+            '              OR features."end" IS NULL THEN NULL '
+            "         ELSE ST_MakeEnvelope("
+            "             features.start, m.seqid_y, "
+            '             features."end", m.seqid_y + 1) END '
+            "FROM seqid_map m "
+            "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
+        )
+    else:
+        con.execute(
+            "UPDATE features SET seqid_y = m.seqid_y "
+            "FROM seqid_map m "
+            "WHERE features.seqid = m.seqid AND features.seqid_y IS NULL"
+        )
+    return n_synth_t, n_synth_g, warnings
+
+
 def _dialect_safe(it) -> dict:
     """The parser's committed dialect, or the GFF3 default if it has none."""
     try:
@@ -2168,24 +2211,90 @@ class _MemoryBudget:
         self.active = dbfn != ":memory:" and not chosen and self.limit < self.ceiling
         if self.active:
             self._set(self.limit)
+            # No automatic checkpoint while the budget holds. One runs when
+            # the write-ahead log passes 16 MiB, at whatever commit that is,
+            # and a checkpoint that runs out of memory is not an error but a
+            # FatalException that invalidates the database (GENCODE GTF, in
+            # the index build). The one checkpoint happens at close, after
+            # `release` has handed back DuckDB's own limit.
+            con.execute("SET checkpoint_threshold = '1TB'")
 
     def _set(self, limit: int) -> None:
         self.con.execute(f"SET memory_limit = '{int(limit)}B'")
 
+    def _grow(self, exc) -> None:
+        if not self.active or self.limit >= self.ceiling:
+            raise exc
+        self.limit = min(self.limit * 2, self.ceiling)
+        self._set(self.limit)
+        _log.info("raising DuckDB's memory limit to %.1f GiB", self.limit / 2**30)
+
+    @staticmethod
+    def _out_of_memory(exc: BaseException) -> bool:
+        """DuckDB reports running out as an OutOfMemoryException -- or, when
+        it happens while committing, as a TransactionException saying so."""
+        if isinstance(exc, duckdb.OutOfMemoryException):
+            return True
+        text = str(exc)
+        return isinstance(exc, duckdb.TransactionException) and (
+            "could not allocate" in text or "Out of Memory" in text
+        )
+
     def run(self, fn, *args):
+        """`fn(*args)`, retried with more memory if it runs out. Only for
+        steps that leave nothing behind when they fail."""
         while True:
             try:
                 return fn(*args)
-            except duckdb.OutOfMemoryException:
-                if not self.active or self.limit >= self.ceiling:
+            except (duckdb.OutOfMemoryException, duckdb.TransactionException) as exc:
+                if not self._out_of_memory(exc):
                     raise
-                self.limit = min(self.limit * 2, self.ceiling)
-                self._set(self.limit)
-                _log.info("raising DuckDB's memory limit to %.1f GiB", self.limit / 2**30)
+                self._grow(exc)
+
+    def stage(self, fn, state: dict):
+        """`fn()` -- several statements, and changes to `state` -- as one
+        step retried with more memory if it runs out: in a transaction that
+        is rolled back, with `state` restored, before the retry."""
+        if not self.active:
+            return fn()
+        while True:
+            snapshot = dict(state)
+            self.con.execute("BEGIN TRANSACTION")
+            try:
+                result = fn()
+                self.con.execute("COMMIT")
+                return result
+            except (duckdb.OutOfMemoryException, duckdb.TransactionException) as exc:
+                if not self._out_of_memory(exc):
+                    with contextlib.suppress(duckdb.Error):
+                        self.con.execute("ROLLBACK")
+                    raise
+                with contextlib.suppress(duckdb.Error):
+                    self.con.execute("ROLLBACK")
+                state.clear()
+                state.update(snapshot)
+                self._grow(exc)
+            except BaseException:
+                with contextlib.suppress(duckdb.Error):
+                    self.con.execute("ROLLBACK")
+                raise
+
+    def checkpoint(self) -> None:
+        """Write what has accumulated to the file now, at a step boundary,
+        with all the memory DuckDB would have had -- so the steps after it
+        start from a flushed database, and no checkpoint ever runs short."""
+        if not self.active:
+            return
+        self._set(self.ceiling)
+        try:
+            self.con.execute("CHECKPOINT")
+        finally:
+            self._set(self.limit)
 
     def release(self) -> None:
         if self.active:
             self.con.execute("RESET memory_limit")
+            self.con.execute("RESET checkpoint_threshold")
 
 
 #: Ingest is mostly serial -- parsing and per-row work -- so DuckDB threads

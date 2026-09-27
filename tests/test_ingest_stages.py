@@ -187,3 +187,71 @@ def test_duckdb_size_settings_are_read(text, expected):
     from gffbase.ingest import _setting_bytes
 
     assert _setting_bytes(text) == expected
+
+
+GTF_TWO = (
+    'chr1\tt\texon\t1\t50\t.\t+\t.\tgene_id "G"; transcript_id "T1";\n'
+    'chr1\tt\texon\t80\t100\t.\t+\t.\tgene_id "G"; transcript_id "T2";\n'
+    'chr1\tt\texon\t200\t300\t.\t+\t.\tgene_id "H"; transcript_id "T3";\n'
+)
+
+
+def _dump(con):
+    tables = ("features", "attributes", "edges", "closure", "autoincrements")
+    return {
+        t: sorted(map(repr, con.execute(f"SELECT * EXCLUDE (bbox) FROM {t}").fetchall()))
+        if t == "features"
+        else sorted(map(repr, con.execute(f"SELECT * FROM {t}").fetchall()))
+        for t in tables
+    }
+
+
+def test_gtf_inference_that_runs_out_is_rolled_back_and_rerun(tmp_path, monkeypatch, caplog):
+    """A multi-statement step cannot just be called again: it is rolled back,
+    its counters restored, and rerun with more memory -- to the same result."""
+    import logging
+
+    import duckdb
+    from gffbase import ingest
+
+    path = tmp_path / "a.gtf"
+    path.write_text(GTF_TWO)
+    clean, _ = from_file(str(path), str(tmp_path / "clean.duckdb"))
+    expected = _dump(clean)
+
+    real = ingest._synthesize_genes
+    calls = []
+
+    def once_out_of_memory(*args, **kwargs):
+        calls.append(1)
+        n = real(*args, **kwargs)
+        if len(calls) == 1:  # after its writes, so the rollback has work to do
+            raise duckdb.OutOfMemoryException("out of memory")
+        return n
+
+    monkeypatch.setattr(ingest, "_synthesize_genes", once_out_of_memory)
+    with caplog.at_level(logging.INFO, logger="gffbase.ingest"):
+        con, _ = from_file(str(path), str(tmp_path / "retried.duckdb"))
+    assert len(calls) == 2
+    assert "raising DuckDB's memory limit" in caplog.text
+    assert _dump(con) == expected
+
+
+def test_no_automatic_checkpoint_while_the_budget_holds(tmp_path, monkeypatch):
+    """A checkpoint that runs out of memory is a FatalException, which no
+    retry can recover from; the one checkpoint happens at close."""
+    from gffbase import ingest
+
+    seen = []
+    real = ingest._add_features_primary_key
+
+    def spy(con):
+        seen.append(con.execute("SELECT current_setting('checkpoint_threshold')").fetchone()[0])
+        return real(con)
+
+    monkeypatch.setattr(ingest, "_add_features_primary_key", spy)
+    path = tmp_path / "a.gff3"
+    path.write_text(GFF3)
+    con, _ = from_file(str(path), str(tmp_path / "a.duckdb"))
+    assert "GiB" in seen[0] and float(seen[0].split()[0]) > 900
+    assert con.execute("SELECT current_setting('checkpoint_threshold')").fetchone()[0] == "16.0 MiB"
