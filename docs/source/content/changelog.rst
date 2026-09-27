@@ -24,11 +24,14 @@ read as they were meant. Every change to what a query returns is declared in
 Performance
 ~~~~~~~~~~~
 
-- **Ingest is 2.5-3x faster and needs about a quarter of the memory.**
-  GENCODE v49 GFF3: 572 s and 9.7 GiB peak -> 203 s and 2.6 GiB; RefSeq
-  GRCh38.p14: 355 s -> 122 s; MANE: 38 s and 1.5 GiB -> 16 s and 0.85 GiB;
-  database files are about half the size. Measured stage by stage
-  (``IngestStats.stages``); the changes below each moved one stage.
+- **Ingest is 2.4-2.9x faster than 0.2.1 and, on whole-genome files, needs
+  under a third of the memory.** Ingest only, same machine, same eight cores:
+  GENCODE v49 GFF3 537 s and 9.7 GiB peak -> 192 s and 2.8 GiB; RefSeq
+  GRCh38.p14 347 s and 6.9 GiB -> 119 s and 2.0 GiB; MANE 36 s and 1.7 GiB
+  -> 15 s and 1.0 GiB. Database files are about half the size, and against
+  gffutils 0.14 ingest is now 1.9-3.6x faster on all five benchmark corpora.
+  Measured stage by stage (``IngestStats.stages``); the changes below each
+  moved one stage.
 - **The Rust parser streams its input** through a ~1 MiB window instead of
   reading the whole decompressed file first (1.9 GB for GENCODE before the
   first record, 6.7 GB for FlyBase).
@@ -52,7 +55,7 @@ Performance
 - **Loops over a live stream are prefetched.** A ``children()``, ``parents()`` or
   ``db[id]`` call on a feature an open iterator holds is answered, with its
   neighbours', by one query; nested loops too. The canonical gffutils loops
-  run 6-15x faster than per call, and within 1.2-2.5x of gffutils 0.14
+  run 4-21x faster than calling per id, and 1.4-3.5x behind gffutils 0.14
   (``benchmarks/08_loops.py``). Scattered single calls remain slower than
   SQLite's point lookups -- see the performance page.
 - ``merge`` / ``replace`` **duplicates are resolved in bulk:** MANE under

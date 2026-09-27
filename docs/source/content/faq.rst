@@ -31,7 +31,7 @@ What is the one thing that will surprise me?
 A **loop over a list of ids you built yourself** is slower in gffbase than in
 gffutils: each call is a DuckDB query with a fixed cost of a few tenths of a
 millisecond, where SQLite, an OLTP engine, answers in microseconds. Loops over a
-gffbase iterator are prefetched and run close to gffutils. That is a real
+gffbase iterator are prefetched and run within 1.4-3.5x of gffutils. That is a real
 trade, not a defect, and it is why the batched API exists.
 → :doc:`Migration guide <migration>`
 

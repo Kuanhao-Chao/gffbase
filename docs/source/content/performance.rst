@@ -249,8 +249,8 @@ The rest of the ledger is qualitative, and stays that way:
      - faster; memory bounded by a DuckDB budget
      - streams to SQLite in a few hundred MB
    * - **Loop over a gffbase iterator** (``children``, ``parents``, ``db[id]``)
-     - prefetched: close, see below
-     - close
+     - prefetched: 0.08-0.45 ms, see below
+     - 0.05-0.27 ms
    * - **Single call on an id from your own list**
      - **slower**: one DuckDB statement, 0.5-1.5 ms
      - a B-tree seek, a few hundredths of a ms
@@ -272,7 +272,9 @@ Loops against ``gffutils``
 
 ``benchmarks/08_loops.py`` times the loops people write, in both libraries on
 the same input, and prints a ratio only where every answer agrees (a digest of
-each call's result). Milliseconds per call, 0.3.0 at the default 8 threads:
+each call's result). Milliseconds per call, the installed 0.3.0 wheel at the
+default 8 threads, over the first 5,000 genes (25,000 exons) of each file -- a
+prefetch window starts small and grows, so a longer walk costs less per call:
 
 .. list-table::
    :header-rows: 1
@@ -284,30 +286,30 @@ each call's result). Milliseconds per call, 0.3.0 at the default 8 threads:
      - GENCODE GTF, gffbase
      - GENCODE GTF, ``gffutils``
    * - ``for g in features_of_type("gene"): children(g, level=1)``
-     - 0.10
-     - 0.07
+     - 0.15
+     - 0.06
      - 0.45
-     - 0.30
+     - 0.13
    * - ``... for t in children(g, level=1): children(t, featuretype="exon")``
-     - 0.34
-     - 0.29
-     - 0.37
+     - 0.39
+     - 0.27
      - 0.38
+     - 0.26
    * - ``for e in features_of_type("exon"): parents(e, featuretype="gene")``
      - 0.08
      - 0.05
-     - 0.13
+     - 0.12
      - 0.05
    * - ``children(id, level=1)``, ids from a random sample
      - 1.3
      - 0.05
-     - --
-     - --
+     - 1.8
+     - 0.14
    * - ``db[id]``, ids from a random sample
      - 0.5
+     - 0.03
+     - 0.5
      - 0.04
-     - --
-     - --
 
 The first three are loops over a gffbase iterator, where each call is answered
 from a prefetch; the last two have no iterator to prefetch from, and each call

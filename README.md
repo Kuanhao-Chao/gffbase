@@ -32,9 +32,9 @@ Universal `abi3` wheels: one binary per platform covers CPython 3.10 through
 3.14, and no Rust toolchain is needed. Source and development builds are in the
 [installation guide](https://khchao.com/gffbase/content/installation.html).
 
-> **0.3.0 is the current release** — ingest 2.5–3× faster in about a quarter
-> of the memory, loops over a live stream prefetched, and noisy files read as
-> they were meant. Coming from 0.2.0, upgrade: 0.2.1 fixed defects that silently
+> **0.3.0 is the current release** — ingest 2.4–2.9× faster, in under a third
+> of the memory on whole-genome files; loops over a live stream prefetched; and
+> noisy files read as they were meant. Coming from 0.2.0, upgrade: 0.2.1 fixed defects that silently
 > lost data. Coming from 0.1.0, 0.2 and later fix two SQL injection
 > vulnerabilities ([advisory](https://github.com/Kuanhao-Chao/gffbase/security/advisories/GHSA-5f5g-g3v5-prrg))
 > and have breaking changes. All are in the
@@ -87,7 +87,7 @@ starts = torch.from_numpy(exons.column("start").to_numpy())
 `region_batched()` and `parents_batched()` offer the same zero-copy contract for
 spatial and parent workloads. One trade to know: a loop over a gffbase iterator
 (`for g in db.features_of_type("gene"): db.children(g)`) is prefetched and runs
-close to `gffutils`, but a loop over a list of ids of your own,
+within 1.4–3.5× of `gffutils`, but a loop over a list of ids of your own,
 `for i in ids: db.children(i)`, is **slower** — each call is a DuckDB statement
 of its own — which is why the batched API exists.
 
