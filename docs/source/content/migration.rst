@@ -12,7 +12,7 @@ migration is one import change.
    **Loops over a gffbase iterator are fast; loops over a list of ids you
    built yourself are not.** Since 0.3.0 a ``children()``, ``parents()`` or
    ``db[id]`` call on a feature an open iterator holds is prefetched with its
-   neighbours, so the canonical loop runs close to gffutils' speed:
+   neighbours, so the canonical loop runs within 1.4–3.5× of gffutils' speed:
 
    .. code-block:: python
 
@@ -280,36 +280,36 @@ constraints: `Methodology <https://khchao.com/gffbase/content/methodology.html>`
      - gffbase 0.2.1
      - ``gffutils`` 0.14
    * - ``db.region(seqid, start, end)``, 10 kb window
-     - ~1.7 ms
+     - ~1.5 ms
      - ~2 ms
      - ~3.5 ms
    * - ``for g in db.features_of_type("gene"): db.children(g, level=1)``
-     - ~0.1 ms
+     - ~0.15 ms
      - ~5 ms
-     - ~0.07 ms
+     - ~0.06 ms
    * - ``... for t in db.children(g, level=1): db.children(t, featuretype="exon")``
-     - ~0.35 ms
+     - ~0.39 ms
      - ~10 ms
-     - ~0.29 ms
+     - ~0.27 ms
    * - ``for e in db.features_of_type("exon"): db.parents(e, featuretype="gene")``
      - ~0.08 ms
      - ~5 ms
      - ~0.05 ms
    * - ``db.children(id, level=1)`` on an id from your own list
-     - ~1.5 ms
+     - ~1.3 ms
      - ~5 ms
-     - ~0.04 ms
+     - ~0.05 ms
    * - ``db[id]`` on an id from your own list
      - ~0.5 ms
      - ~0.6 ms
-     - ~0.02 ms
+     - ~0.03 ms
    * - ``db.children_batched(ids, format="arrow")``
      - one query for all ids, no Python ``Feature`` objects
      - same
      - not available
 
-Loops over a gffbase iterator are prefetched (rows 2-4) and run close to
-gffutils; a call on an id from your own list is a DuckDB query of its own,
+Loops over a gffbase iterator are prefetched (rows 2-4) and run within
+1.4–3.5× of gffutils; a call on an id from your own list is a DuckDB query of its own,
 about ten to thirty times slower than SQLite's point lookup -- bring those
 loops into one query with ``children_batched``, ``region_batched`` or SQL
 through ``db.execute``, and the comparison reverses. Measured with
@@ -317,8 +317,8 @@ through ``db.execute``, and the comparison reverses. Measured with
 ``benchmarks/07_profile.py`` (single calls); see :doc:`tuning`.
 
 Your existing ``gffutils`` script gets the spatial and whole-table query wins
-the moment you swap the import; its loops over gffbase iterators keep close to
-their speed, and its loops over id lists of its own get slower. To turn those
+the moment you swap the import; its loops over gffbase iterators stay within a
+few times their speed, and its loops over id lists of its own get slower. To turn those
 into the batched-extraction win, see the warning at the top of this page.
 
 ----

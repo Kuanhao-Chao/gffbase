@@ -163,11 +163,12 @@ Install
 
 .. note::
 
-   This site documents gffbase 0.3.0, released 2026-09-27: ingest 2.5-3x faster
-   in about a quarter of the memory, prefetched loops, and noisy files read as
-   they were meant (see the :doc:`changelog <content/changelog>`). Upgrading
-   from 0.2.0 fixes defects that silently lost data; upgrading from 0.1.0 also
-   fixes two SQL injection vulnerabilities; see the
+   This site documents gffbase 0.3.0, released 2026-09-27: ingest 2.4-2.9x
+   faster, in under a third of the memory on whole-genome files; prefetched
+   loops; and noisy files read as they were meant (see the
+   :doc:`changelog <content/changelog>`). Upgrading from 0.2.0 fixes defects
+   that silently lost data; upgrading from 0.1.0 also fixes two SQL injection
+   vulnerabilities; see the
    :doc:`security advisory <content/advisory_sql_injection>`.
 
 Quick start
