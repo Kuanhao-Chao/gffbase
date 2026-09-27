@@ -311,3 +311,38 @@ def test_duplicate_ids_merge_unions_attributes_when_rows_agree(tmp_path):
     assert ("Note", "first") in attrs
     assert ("Note", "second") in attrs
     assert ("Extra", "yes") in attrs
+
+
+def test_features_id_is_the_primary_key_after_ingest(hier_path):
+    """The key is added after the bulk load, not maintained during it."""
+    import duckdb
+
+    con, stats = ingest.from_file(hier_path)
+    kinds = {
+        r[0]
+        for r in con.execute(
+            "SELECT constraint_type FROM duckdb_constraints() WHERE table_name = 'features'"
+        ).fetchall()
+    }
+    assert "PRIMARY KEY" in kinds
+    assert "primary_key" in stats.stages
+    fid = con.execute("SELECT id FROM features LIMIT 1").fetchone()[0]
+    with pytest.raises(duckdb.ConstraintException):
+        con.execute("INSERT INTO features (id, seqid, featuretype) VALUES (?, 'x', 'y')", [fid])
+
+
+def test_a_duplicate_that_escaped_resolution_is_a_duplicate_id_error():
+    """If the resolver ever let two rows share an id, adding the key says so
+    in gffbase's terms, naming the earliest duplicate."""
+    import duckdb
+    from gffbase.exceptions import DuplicateIDError
+    from gffbase.schema import DDL
+
+    con = duckdb.connect()
+    con.execute(DDL)
+    con.executemany(
+        "INSERT INTO features (id, seqid, featuretype, file_order) VALUES (?, 'c', 't', ?)",
+        [("b", 1), ("a", 2), ("b", 3), ("a", 4)],
+    )
+    with pytest.raises(DuplicateIDError, match="Duplicate ID b"):
+        ingest._add_features_primary_key(con)
