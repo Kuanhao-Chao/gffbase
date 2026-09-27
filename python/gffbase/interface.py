@@ -31,6 +31,7 @@ Two routing decisions are made dynamically:
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -40,14 +41,14 @@ from typing import Any, Union
 
 import duckdb
 
-from gffbase._dbutil import apply_settings, in_transaction, scalar, scalar_or
+from gffbase._dbutil import apply_settings, default_threads, in_transaction, scalar, scalar_or
 from gffbase.exceptions import (
     ClosedDatabaseError,
     FeatureNotFoundError,
     ReadOnlyError,
     SchemaVersionError,
 )
-from gffbase.feature import Feature, db_row_projection, feature_from_row
+from gffbase.feature import _DB_ROW_FIELDS, Feature, db_row_projection, feature_from_row
 from gffbase.modes import (
     DERIVED_SOURCE,
     MODE_COMPAT,
@@ -283,6 +284,83 @@ def _warn_if_sqlite_only(text_factory, default_encoding) -> None:
         )
 
 
+#: Where `file_order` and `featuretype` sit in a feature row.
+_FILE_ORDER = _DB_ROW_FIELDS.index("file_order")
+_FEATURETYPE = _DB_ROW_FIELDS.index("featuretype")
+
+
+class _Chunk:
+    """The ids a live feature stream holds in memory.
+
+    The next relation call is likely to be about one of them -- the canonical
+    loop is `for gene in db.features_of_type("gene"): db.children(gene)` --
+    so a call on one is answered, with its neighbours', by one query.
+    """
+
+    __slots__ = ("ids", "orders", "pos", "windows")
+
+    def __init__(self, ids: list[str], orders: list | None = None):
+        self.ids = ids
+        #: Each id's `file_order`, when the chunk came from feature rows.
+        self.orders = orders
+        self.pos = {fid: n for n, fid in enumerate(ids)}
+        self.windows: dict = {}
+
+    def span(self, start: int, stop: int) -> tuple[int, int] | None:
+        """The file_order span from `ids[start]` up to, not including, the
+        id after `ids[stop - 1]` -- where a GFF puts the descendants of that
+        run of features -- or None when the run is not in file order.
+
+        At the end of the chunk there is no next id; the last one is given
+        half again the average spacing of the others. A guess is safe here:
+        whatever the span misses is looked up by id.
+        """
+        orders = self.orders
+        if orders is None:
+            return None
+        run = orders[start : stop + 1]
+        if any(o is None for o in run) or any(a >= b for a, b in zip(run, run[1:], strict=False)):
+            return None
+        if stop < len(orders):
+            return run[0], run[-1] - 1
+        if len(run) < 2:
+            return None
+        spacing = (run[-1] - run[0]) / (len(run) - 1)
+        return run[0], run[-1] + int(spacing * 1.5)
+
+
+class _Window:
+    """Prefetched answers for a run of a chunk's ids, for one call shape.
+
+    `child` holds every feature the window answered with, in order, as a
+    chunk of its own: the loop nested inside this one asks about them, and
+    its window can then run on past a single anchor's answer.
+    """
+
+    __slots__ = ("epoch", "size", "rows", "hits", "child")
+
+    def __init__(self, epoch: int, size: int, rows: dict, child: _Chunk | None):
+        self.epoch, self.size, self.rows, self.hits = epoch, size, rows, 0
+        self.child = child
+
+
+def _mutates(method):
+    """Mark a method that writes: prefetched answers made before it are
+    stale, and none is made while it runs."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        self._epoch += 1
+        self._writing += 1
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self._writing -= 1
+            self._epoch += 1
+
+    return wrapper
+
+
 class FeatureDB:
     """Drop-in successor to ``gffutils.FeatureDB``."""
 
@@ -312,6 +390,11 @@ class FeatureDB:
         self._stream_cursors: set[duckdb.DuckDBPyConnection] = set()
         self._idle_cursors: list[duckdb.DuckDBPyConnection] = []
         self._read_only = bool(read_only)
+        # Automatic prefetch: id -> the live chunk holding it; a write counter.
+        self._live: dict[str, _Chunk] = {}
+        self._window_size: dict[tuple, int] = {}
+        self._epoch = 0
+        self._writing = 0
 
         if upgrade not in ("auto", "never", "error"):
             raise ValueError(f"upgrade must be 'auto', 'never' or 'error'; got {upgrade!r}")
@@ -392,6 +475,9 @@ class FeatureDB:
                 )
             self.conn = duckdb.connect(self.dbfn, read_only=self._read_only)
             self._owns_conn = True if _own_conn is None else bool(_own_conn)
+            # A connection this handle opened gets gffbase's thread default,
+            # as an ingest's does; one the caller passed in keeps theirs.
+            self.conn.execute(f"PRAGMA threads = {default_threads()}")
             if not existed:
                 # Undo the file DuckDB just made, so a mistyped path does not
                 # litter the working directory with empty databases.
@@ -819,6 +905,12 @@ class FeatureDB:
     def __getitem__(self, key) -> Feature:
         self._require_open("query")
         target_id = _require_feature_id(key)
+        if self._prefetch_allowed():
+            rows = self._from_window(
+                target_id, ("getitem",), lambda ids, _span: self._prefetch_by_id(ids)
+            )
+            if rows:
+                return self._build_feature(rows[0])
         # Project `n_segments` only where a multipart feature can exist, so a
         # v1 shim database -- which has no such column -- still answers, and so
         # the overwhelmingly common single-segment lookup costs no extra query.
@@ -1999,6 +2091,33 @@ class FeatureDB:
         # queries the database to decide which path to take, so it reaches the
         # connection before any row is yielded.
         self._require_open("query")
+        if (
+            order_by is None
+            and not reverse
+            and limit is None
+            and not completely_within
+            and self._prefetch_allowed()
+            and (
+                (level is not None and 1 <= level <= self._max_depth)
+                # level=None stays exact only when nothing can lie past the closure.
+                or (level is None and 0 < self._closure_max_depth < self._max_depth)
+            )
+        ):
+            ft = (
+                tuple(sorted(set(featuretype)))
+                if isinstance(featuretype, list | tuple | set)
+                else featuretype
+            )
+            rows = self._from_window(
+                target_id,
+                (direction, level, ft),
+                lambda anchors, span: self._prefetch_relatives(
+                    anchors, direction, level, featuretype, span
+                ),
+            )
+            if rows is not None:
+                yield from self._yield_rows(rows)
+                return
         # Smart cache-vs-dynamic dispatcher.
         use_dynamic = self._dispatch_relation(level, target_id, direction)
         if use_dynamic:
@@ -2043,22 +2162,22 @@ class FeatureDB:
         rows = self.conn.execute(closure_sql, [target_id]).fetchall()
         return [r[0] for r in rows if level is None or r[1] == level]
 
-    #: Past this many ids a lookup binds one list parameter rather than a
-    #: placeholder per id, so a gene with thousands of descendants does not
-    #: become a statement DuckDB must parse at that length.
-    _ID_LIST_INLINE_MAX = 1024
+    #: Ids per statement when prefetching. Each is an index lookup however
+    #: many there are, but a statement's cost grows with its length.
+    _ID_GROUP = 1024
 
     def _features_by_ids_sql(self, ids, featuretype, order_by, reverse, limit, completely_within):
         """Features with these ids, filtered and ordered as a relation query
         asks, in SQL that keeps the primary-key index lookup.
 
-        An extra predicate on the scan would turn the index lookup into a full
-        scan, so the filters apply to a MATERIALIZED set of the matched rows.
+        A placeholder per id: a literal `IN` list is an index lookup at every
+        size tried (4,096 on GENCODE), while one list parameter,
+        `IN (SELECT UNNEST(?))`, became a full scan of all six million
+        features even for 64 ids. An extra predicate on the scan would turn
+        the lookup into a full scan too, so the filters apply to a
+        MATERIALIZED set of the matched rows.
         """
-        if len(ids) <= self._ID_LIST_INLINE_MAX:
-            match, params = f"id IN ({','.join('?' * len(ids))})", list(ids)
-        else:
-            match, params = "id IN (SELECT UNNEST(?::VARCHAR[]))", [list(ids)]
+        match, params = f"id IN ({','.join('?' * len(ids))})", list(ids)
         where: list[str] = []
         feat_where, feat_params = self._featuretype_filter(featuretype)
         where.extend(feat_where)
@@ -2251,6 +2370,7 @@ class FeatureDB:
     # Mutation
     # ------------------------------------------------------------------
 
+    @_mutates
     def delete(
         self, features: FeatureLike | Iterable[FeatureLike], make_backup: bool = True, **kwargs
     ) -> FeatureDB:
@@ -2346,6 +2466,7 @@ class FeatureDB:
             self.conn.execute("DELETE FROM meta WHERE key = ?", [key])
             self.conn.execute("INSERT INTO meta (key, value) VALUES (?, ?)", [key, value])
 
+    @_mutates
     def update(self, data, make_backup: bool = True, **kwargs) -> FeatureDB:
         """Add features to an existing database, as `create_db` would have.
 
@@ -2541,6 +2662,7 @@ class FeatureDB:
             [(parent, child)], level=level, parent_func=parent_func, child_func=child_func
         )
 
+    @_mutates
     def add_relations(self, pairs, level: int = 1, parent_func=None, child_func=None) -> FeatureDB:
         """`add_relation` for many pairs, with ONE closure rebuild.
 
@@ -2588,6 +2710,7 @@ class FeatureDB:
         self._refresh_depth_meta()
         return self
 
+    @_mutates
     def _insert(self, feature: Feature) -> FeatureDB:
         """Write one NEW feature into the database.
 
@@ -3290,6 +3413,7 @@ class FeatureDB:
         )
         yield from self._yield_features(sql, params)
 
+    @_mutates
     def execute(self, query: str):
         """Execute arbitrary SQL. Returns DuckDB's relation cursor.
         SQLite-style queries against ``features_compat`` and ``relations_compat``
@@ -3303,6 +3427,7 @@ class FeatureDB:
         self._require_open("execute")
         return self.conn.execute(query.rstrip(";"))
 
+    @_mutates
     def analyze(self) -> None:
         """Refresh DuckDB's planner statistics for this database.
 
@@ -3371,6 +3496,203 @@ class FeatureDB:
             self._seg_cursor = self.conn.cursor()
         return self._seg_cursor
 
+    # ------------------------------------------------------------------
+    # Automatic prefetch
+    # ------------------------------------------------------------------
+
+    #: Whether relation calls and `db[id]` may be answered from a prefetch.
+    #: Tests turn it off to compare; nothing else should.
+    _PREFETCH = True
+    #: Anchors in the first window, and the most in any.
+    _WINDOW_FIRST = 32
+    _WINDOW_MAX = 1024
+
+    def _enter_chunk(
+        self, ids: list[str], previous: _Chunk | None, orders: list | None = None
+    ) -> _Chunk:
+        """Record a stream's newly fetched chunk as live, retiring its last."""
+        self._leave_chunk(previous)
+        chunk = _Chunk(ids, orders)
+        live = self._live
+        for fid in ids:
+            live[fid] = chunk
+        return chunk
+
+    def _leave_chunk(self, chunk: _Chunk | None) -> None:
+        if chunk is None:
+            return
+        live = self._live
+        for fid in chunk.ids:
+            if live.get(fid) is chunk:
+                del live[fid]
+        for window in chunk.windows.values():
+            self._leave_chunk(window.child)
+        chunk.windows.clear()
+
+    def _yield_rows(self, rows) -> Iterator[Feature]:
+        """Features from prefetched rows. (They are already live: the window
+        that answered registered all of its answers.)"""
+        for row in rows:
+            self._require_stream_open()
+            yield self._build_feature(row)
+
+    def _prefetch_allowed(self) -> bool:
+        return self._PREFETCH and not self._writing and not self._n_multipart and not self._v1_shim
+
+    def _from_window(self, target_id: str, key: tuple, fetch) -> list | None:
+        """`target_id`'s answer from a prefetched window, fetching one if
+        needed; None when the id is in no live chunk.
+
+        A window covers the anchors from `target_id` on in its chunk. Windows
+        grow while they are used and shrink when they are not, so a sparse
+        loop -- one call per thousand genes -- does not pay for neighbours it
+        never asks about.
+        """
+        chunk = self._live.get(target_id)
+        if chunk is None:
+            return None
+        window = chunk.windows.get(key)
+        if window is None or window.epoch != self._epoch or target_id not in window.rows:
+            if window is None or window.epoch != self._epoch:
+                # A new chunk starts where the last one of this shape left
+                # off: the chunk inside a nested loop is replaced every time
+                # the outer window moves, and restarting at the first size
+                # kept its windows small for good.
+                size = self._window_size.get(key, self._WINDOW_FIRST)
+            elif window.hits * 4 < window.size:
+                size = max(8, window.size // 4)
+            else:
+                size = min(self._WINDOW_MAX, window.size * 2)
+            self._window_size[key] = size
+            start = chunk.pos[target_id]
+            stop = min(start + size, len(chunk.ids))
+            rows = fetch(chunk.ids[start:stop], chunk.span(start, stop))
+            if window is not None:
+                self._leave_chunk(window.child)
+            if key[0] == "getitem":
+                child = None
+            else:
+                answered = [row for anchor_rows in rows.values() for row in anchor_rows]
+                child = self._enter_chunk(
+                    [r[0] for r in answered], None, [r[_FILE_ORDER] for r in answered]
+                )
+            window = _Window(self._epoch, size, rows, child)
+            chunk.windows[key] = window
+        window.hits += 1
+        return window.rows[target_id]
+
+    #: The share of a file_order span that must be wanted rows before the
+    #: span is scanned rather than its rows looked up one by one.
+    _SPAN_DENSITY = 0.2
+
+    def _prefetch_relatives(self, anchors, direction, level, featuretype, span=None) -> dict:
+        """anchor -> its relation rows, for many anchors in few queries, in
+        exactly the order and multiplicity the per-call path returns."""
+        if direction == "children":
+            edge_cols, closure_cols = ("parent", "child"), ("ancestor", "descendant")
+        else:
+            edge_cols, closure_cols = ("child", "parent"), ("descendant", "ancestor")
+        ph = ",".join("?" * len(anchors))
+        if level == 1:
+            pairs = self.conn.execute(
+                f"SELECT {edge_cols[0]}, {edge_cols[1]} FROM edges WHERE {edge_cols[0]} IN ({ph})",
+                list(anchors),
+            ).fetchall()
+        else:
+            pairs = [
+                (a, r)
+                for a, r, depth in self.conn.execute(
+                    f"SELECT {closure_cols[0]}, {closure_cols[1]}, depth FROM closure "
+                    f"WHERE {closure_cols[0]} IN ({ph})",
+                    list(anchors),
+                ).fetchall()
+                if level is None or depth == level
+            ]
+        owners: dict[str, list[str]] = {}
+        for anchor, rel in dict.fromkeys(pairs):
+            owners.setdefault(rel, []).append(anchor)
+        out: dict[str, list] = {a: [] for a in anchors}
+        if direction == "children" and span is not None and owners:
+            rows = self._rows_by_span(owners, span, featuretype)
+        else:
+            rows = self._rows_by_ids(list(owners), featuretype)
+        for row in rows:
+            for anchor in owners[row[0]]:
+                out[anchor].append(row)
+        return out
+
+    def _rows_by_span(self, wanted: dict, span: tuple[int, int], featuretype) -> list:
+        """The rows of `wanted` ids, reading the file_order `span` in one pass
+        when they fill enough of it.
+
+        A row fetched by id is a random read of every column -- 50 us on
+        GENCODE, most of it the attribute blob -- while a scan of a file_order
+        range reads rows in stored order at a few us each: a window of 1,024
+        transcripts' exons, 19,670 rows, took 1,018 ms by id and 68 ms by
+        span. Ids the span does not hold are looked up by id.
+        """
+        lo, hi = span
+        if len(wanted) < self._SPAN_DENSITY * (hi - lo + 1):
+            return self._rows_by_ids(list(wanted), featuretype)
+        sql = (
+            f"SELECT {self._select_feature_aliased('f')} FROM features f "
+            "WHERE f.file_order BETWEEN ? AND ?"
+        )
+        rows = [r for r in self.conn.execute(sql, [lo, hi]).fetchall() if r[0] in wanted]
+        # The featuretype applies after the id match, not in the scan: a
+        # wanted row of another type is in the span, not missing from it, and
+        # asking for it by id again cost more than the scan (GENCODE: 11,692
+        # CDS and UTR rows re-read for a window of exons).
+        found = {r[0] for r in rows}
+        missing = [fid for fid in wanted if fid not in found]
+        if featuretype is not None:
+            types = {featuretype} if isinstance(featuretype, str) else set(featuretype)
+            rows = [r for r in rows if r[_FEATURETYPE] in types]
+        if missing:
+            rows.extend(self._rows_by_ids(missing, featuretype))
+        rows.sort(key=lambda r: (r[_FILE_ORDER] is None, r[_FILE_ORDER], r[0]))
+        return rows
+
+    def _rows_by_ids(self, ids: list[str], featuretype=None) -> list:
+        """Feature rows for these ids -- only those of `featuretype`, if
+        given -- in the order the per-call path returns them.
+
+        In groups of `_ID_GROUP`, each an index lookup. With a featuretype,
+        a narrow first pass picks the ids that match, so the attribute blob
+        -- the costly column to fetch by row -- is read only for rows that
+        are returned (a transcript's exons, not its CDS and UTRs too).
+        """
+        rows: list = []
+        for start in range(0, len(ids), self._ID_GROUP):
+            group = ids[start : start + self._ID_GROUP]
+            if featuretype is not None:
+                where, params = self._featuretype_filter(featuretype, qualifier="m")
+                group = [
+                    r[0]
+                    for r in self.conn.execute(
+                        "WITH m AS MATERIALIZED (SELECT id, featuretype FROM features "
+                        f"WHERE id IN ({','.join('?' * len(group))})) "
+                        f"SELECT id FROM m WHERE {' AND '.join(where)}",
+                        group + params,
+                    ).fetchall()
+                ]
+                if not group:
+                    continue
+            sql, params = self._features_by_ids_sql(group, None, None, False, None, False)
+            rows.extend(self.conn.execute(sql, params).fetchall())
+        if len(ids) > self._ID_GROUP:
+            # Each group came back ordered; order their union the same way
+            # (`ORDER BY file_order, id`, NULLs last).
+            rows.sort(key=lambda r: (r[_FILE_ORDER] is None, r[_FILE_ORDER], r[0]))
+        return rows
+
+    def _prefetch_by_id(self, ids) -> dict:
+        """id -> [its row], for `db[id]` over a window of a live chunk."""
+        out: dict[str, list] = {fid: [] for fid in ids}
+        for row in self._rows_by_ids(list(ids)):
+            out[row[0]].append(row)
+        return out
+
     def _prefetch_segments(self, ids: list[str]) -> dict[str, list]:
         """Segment rows for a whole chunk of features, keyed by feature id.
 
@@ -3433,6 +3755,7 @@ class FeatureDB:
         self._require_open("query")
         cur = self._idle_cursors.pop() if self._idle_cursors else self.conn.cursor()
         self._stream_cursors.add(cur)
+        chunk = None
         try:
             cur.execute(sql, params)
             # `_n_multipart` is read once at open. At zero -- every GTF corpus,
@@ -3444,12 +3767,16 @@ class FeatureDB:
                 rows = cur.fetchmany(self._CHUNK)
                 if not rows:
                     return
+                chunk = self._enter_chunk(
+                    [r[0] for r in rows], chunk, [r[_FILE_ORDER] for r in rows]
+                )
                 segments = self._prefetch_segments([r[0] for r in rows]) if multipart else {}
                 for row in rows:
                     # A chunk already in memory must not outlive close() either.
                     self._require_stream_open()
                     yield self._build_feature(row, segments.get(row[0]))
         finally:
+            self._leave_chunk(chunk)
             self._stream_cursors.discard(cur)
             if not self._closed and len(self._idle_cursors) < self._MAX_IDLE_CURSORS:
                 # A pending result set, if the loop stopped early, is simply
