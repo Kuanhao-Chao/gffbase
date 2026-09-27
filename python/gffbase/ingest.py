@@ -1262,86 +1262,172 @@ def _resolve_deferred_duplicates(con, deferred, options, autoinc, builder, seqid
     """Apply `merge` / `replace` to rows held back during the bulk load.
 
     Both strategies need to see the row already in the database, so they
-    cannot be decided while streaming. Duplicates are a small fraction of any
-    real corpus, so resolving them row-by-row here is cheap; the bulk path
-    stays set-based.
+    cannot be decided while streaming. They are decided here in file order,
+    exactly as a row-by-row pass decides them, but against copies of the rows
+    involved -- read in one query each -- and the outcome is written back in
+    bulk. Row by row, every duplicate cost at least one scan (the attributes
+    table has no index yet, and a rename's `id = ? OR raw_id = ?` probe cannot
+    use the key), and every renamed row was its own INSERT: hours on a
+    split-CDS corpus. `tests/test_resolve_deferred.py` keeps that pass as the
+    oracle.
 
     Returns the (original_id, new_id) pairs to record in `duplicates`.
     """
-    new_duplicates: list[tuple[str, str]] = []
-    strategy = options.merge_strategy
+    if not deferred:
+        return []
+    ids = list(dict.fromkeys(fid for fid, _feat, _order in deferred))
+
+    if options.merge_strategy == "replace":
+        # Last one wins: the incumbent and every earlier replacement go.
+        last = {fid: (feat, file_order) for fid, feat, file_order in deferred}
+        con.execute(
+            "DELETE FROM attributes WHERE feature_id IN (SELECT UNNEST(?::VARCHAR[]))", [ids]
+        )
+        con.execute("DELETE FROM features WHERE id IN (SELECT UNNEST(?::VARCHAR[]))", [ids])
+        for fid, (feat, file_order) in last.items():
+            builder.append(fid, feat, file_order)
+            if len(builder) >= DEFAULT_BATCH_SIZE:
+                builder.flush_into(con)
+        builder.flush_into(con)
+        return []
+
+    # merge
     compare = [f for f in _MERGE_COMPARE_FIELDS if f not in options.force_merge_fields]
+    fields: dict[str, dict] = {
+        row[0]: dict(zip(_MERGE_COMPARE_FIELDS, row[1:], strict=True))
+        for row in con.execute(
+            f"SELECT id, {', '.join(_quote(f) for f in _MERGE_COMPARE_FIELDS)} "
+            "FROM features WHERE id IN (SELECT UNNEST(?::VARCHAR[]))",
+            [ids],
+        ).fetchall()
+    }
+    attrs: dict[str, list[tuple[str, str]]] = {}
+    for fid, key, value in con.execute(
+        "SELECT feature_id, key, value FROM attributes "
+        "WHERE feature_id IN (SELECT UNNEST(?::VARCHAR[])) ORDER BY rowid",
+        [ids],
+    ).fetchall():
+        attrs.setdefault(fid, []).append((key, value))
+    present = {fid: set(rows) for fid, rows in attrs.items()}
 
+    new_attribute_rows: list[tuple] = []
+    field_updates: dict[str, dict[str, str]] = {}
+    merged: dict[str, None] = {}  # ids folded into, in first-merge order
+    renames: list[tuple] = []
     for fid, feat, file_order in deferred:
-        if strategy == "replace":
-            # Last one wins: drop the incumbent and insert this row under the
-            # same id.
-            con.execute("DELETE FROM attributes WHERE feature_id = ?", [fid])
-            con.execute("DELETE FROM features WHERE id = ?", [fid])
-            _insert_single(con, builder, seqid_to_y, fid, feat, file_order)
-            continue
-
-        # strategy == "merge"
-        row = con.execute(
-            f"SELECT {', '.join(_quote(f) for f in _MERGE_COMPARE_FIELDS)} "
-            "FROM features WHERE id = ?",
-            [fid],
-        ).fetchone()
-        existing = dict(zip(_MERGE_COMPARE_FIELDS, row, strict=True)) if row else {}
-
+        existing = fields.get(fid, {})
         same = bool(existing) and all(
             _as_text(existing[f]) == _as_text(getattr(feat, f)) for f in compare
         )
         if not same:
             # gffutils falls back to create_unique when the other columns
             # differ, and records the rename in `duplicates`.
-            new_id = _free_autoincrement(con, fid, autoinc)
-            _insert_single(con, builder, seqid_to_y, new_id, feat, file_order)
-            new_duplicates.append((fid, new_id))
+            renames.append((fid, feat, file_order))
             continue
-
         # Same everywhere else: fold this row's attributes into the incumbent.
+        seen = present.setdefault(fid, set())
         for key, value, idx in feat.attributes_pairs:
-            already = scalar(
-                con,
-                "SELECT COUNT(*) FROM attributes WHERE feature_id = ? AND key = ? AND value = ?",
-                [fid, key, value],
-            )
-            if not already:
-                con.execute(
-                    "INSERT INTO attributes (feature_id, key, value, idx) VALUES (?, ?, ?, ?)",
-                    [fid, key, value, idx],
-                )
+            if (key, value) not in seen:
+                seen.add((key, value))
+                attrs.setdefault(fid, []).append((key, value))
+                new_attribute_rows.append((fid, key, value, idx))
         # `force_merge_fields` collapse to a sorted comma-joined string.
         for fld in options.force_merge_fields:
-            merged = sorted({_as_text(existing[fld]), _as_text(getattr(feat, fld))})
-            con.execute(
-                f"UPDATE features SET {_quote(fld)} = ? WHERE id = ?",
-                [",".join(merged), fid],
-            )
-        # The normalized rows are now the truth for this feature; bring the
-        # raw blob back in line with them.
-        _regenerate_attributes_blob(con, fid, fmt)
+            value = ",".join(sorted({_as_text(existing[fld]), _as_text(getattr(feat, fld))}))
+            existing[fld] = value
+            field_updates.setdefault(fid, {})[fld] = value
+        merged[fid] = None
+
+    new_duplicates = _rename_deferred(con, renames, autoinc, builder)
+
+    if new_attribute_rows:
+        _insert_rows(con, "attributes", ("feature_id", "key", "value", "idx"), new_attribute_rows)
+    for fid, updates in field_updates.items():
+        for fld, value in updates.items():
+            con.execute(f"UPDATE features SET {_quote(fld)} = ? WHERE id = ?", [value, fid])
+    # The normalized rows are now the truth for each merged feature; bring the
+    # raw blob back in line with them.
+    blobs = [
+        (fid, blob)
+        for fid in merged
+        if (blob := _render_attributes_blob(attrs.get(fid, []), fmt)) is not None
+    ]
+    if blobs:
+        con.register(
+            "__staging_blobs",
+            pa.table({"id": [b[0] for b in blobs], "blob": [b[1] for b in blobs]}),
+        )
+        con.execute(
+            "UPDATE features SET attributes_blob = s.blob FROM __staging_blobs s "
+            "WHERE features.id = s.id"
+        )
+        con.unregister("__staging_blobs")
     return new_duplicates
 
 
-def _regenerate_attributes_blob(con, feature_id: str, fmt: str) -> None:
-    """Rebuild `features.attributes_blob` from the normalized attribute rows.
+#: Candidate ids checked in the one bulk query, per renamed base, beyond the
+#: number of renames it needs. Past this a rename asks the database itself.
+_RENAME_HEADROOM = 16
+
+
+def _rename_deferred(con, renames, autoinc, builder) -> list[tuple[str, str]]:
+    """Store each `merge` duplicate that differs from its incumbent under the
+    next free `<id>_<n>`, as `_free_autoincrement` would name it one by one:
+    free means no feature's `id` or `raw_id` is already it."""
+    if not renames:
+        return []
+    need: dict[str, int] = {}
+    for fid, _feat, _order in renames:
+        need[fid] = need.get(fid, 0) + 1
+    candidates = [
+        f"{base}_{autoinc.get(base, 0) + i}"
+        for base, n in need.items()
+        for i in range(1, n + _RENAME_HEADROOM + 1)
+    ]
+    checked = set(candidates)
+    taken = {
+        row[0]
+        for row in con.execute(
+            "SELECT id FROM features WHERE id IN (SELECT UNNEST(?::VARCHAR[])) "
+            "UNION SELECT raw_id FROM features WHERE raw_id IN (SELECT UNNEST(?::VARCHAR[]))",
+            [candidates, candidates],
+        ).fetchall()
+    }
+    pairs = []
+    for fid, feat, file_order in renames:
+        while True:
+            candidate = IdSpecResolver._autoincrement(fid, autoinc)
+            if candidate in taken:
+                continue
+            if candidate not in checked and scalar(
+                con,
+                "SELECT COUNT(*) FROM features WHERE id = ? OR raw_id = ?",
+                [candidate, candidate],
+            ):
+                continue
+            break
+        taken.add(candidate)
+        builder.append(candidate, feat, file_order)
+        if len(builder) >= DEFAULT_BATCH_SIZE:
+            builder.flush_into(con)
+        pairs.append((fid, candidate))
+    builder.flush_into(con)
+    return pairs
+
+
+def _render_attributes_blob(rows, fmt: str) -> bytes | None:
+    """Column 9 for a feature's normalized (key, value) rows, in row order;
+    None when it has none.
 
     A merged feature is the one case where the raw column-9 bytes stop being
     the truth: `merge_strategy="merge"` folds the incoming row's attributes
     into the existing feature's `attributes` rows, but the blob still holds
     only what the first line said. Since `Feature.attributes` reads the blob
     (that is the whole point of the byte-faithful fast path), the merge was
-    invisible to every caller -- the table had both values and the feature
-    reported one.
+    invisible to every caller until the blob was rebuilt from the rows.
     """
-    rows = con.execute(
-        "SELECT key, value FROM attributes WHERE feature_id = ? ORDER BY rowid",
-        [feature_id],
-    ).fetchall()
     if not rows:
-        return
+        return None
 
     # Preserve first-seen key order and collapse repeats into one multi-valued
     # entry, which is how both engines' parsers present them.
@@ -1362,10 +1448,7 @@ def _regenerate_attributes_blob(con, feature_id: str, fmt: str) -> None:
         blob = ";".join(
             f"{k}={','.join(encode_value(v) for v in values)}" for k, values in grouped.items()
         )
-    con.execute(
-        "UPDATE features SET attributes_blob = ? WHERE id = ?",
-        [blob.encode("utf-8"), feature_id],
-    )
+    return blob.encode("utf-8")
 
 
 def _quote(field: str) -> str:
@@ -1375,12 +1458,6 @@ def _quote(field: str) -> str:
 
 def _as_text(value) -> str:
     return "" if value is None else str(value)
-
-
-def _insert_single(con, builder, seqid_to_y, fid, feat, file_order):
-    """Insert one feature through the same Arrow path as the bulk load."""
-    builder.append(fid, feat, file_order)
-    builder.flush_into(con)
 
 
 # ---------------------------------------------------------------------------
